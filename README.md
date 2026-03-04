@@ -232,9 +232,14 @@ anvikshiki_ecosystem/
 │   └── predicate_extraction_theory.md    # Pragmatics-based extraction theory
 │
 ├── theory/
-│   ├── thesis_v2.md              # Current thesis: Datalog + five-layer grounding
-│   ├── thesis2_v1.md             # Thesis revision
-│   └── BUILD_GUIDE.md            # Implementation manual (DSPy 3.1.x)
+│   ├── thesis2_v1.md             # Current thesis: ASPIC+ over provenance semirings
+│   ├── BUILD_GUIDE.md            # Implementation manual (DSPy 3.1.x)
+│   ├── ecosystem_evolution.md    # Full project evolution log (meta-prompt → engine)
+│   └── history/                  # All historical versions
+│       ├── thesis/               # thesis_v1 → v2 → v2_patch → v3
+│       ├── build_guides/         # BUILD_GUIDE_v2 → v3 → v4
+│       ├── meta_prompts/         # meta_prompt_v3.2 → v3.25 → v3.26 + meta^2
+│       └── discussions/          # Architecture decision discussions
 │
 ├── pyproject.toml
 ├── .gitignore
