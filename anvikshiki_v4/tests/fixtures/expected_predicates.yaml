@@ -1,0 +1,105 @@
+# Gold standard predicates for Chapter 2: Unit Economics
+# Used by test_predicate_extraction.py for precision/recall evaluation.
+
+chapter_id: ch02
+
+# Predicates that should be extracted from guide_ch2_excerpt.md
+expected_predicates:
+  # Section 2.1: LTV-CAC
+  - name: ltv_exceeds_cac
+    description: "Lifetime value exceeds customer acquisition cost"
+    claim_type: metric
+    section: "2.1"
+
+  - name: high_arpu
+    description: "Average revenue per user is above threshold"
+    claim_type: metric
+    section: "2.1"
+
+  - name: high_retention_rate
+    description: "Customer retention rate is high (low churn)"
+    claim_type: metric
+    section: "2.1"
+
+  # Section 2.2: Contribution Margin
+  - name: positive_contribution_margin
+    description: "Revenue minus all variable costs is positive"
+    claim_type: metric
+    section: "2.2"
+
+  - name: gross_margin_not_contribution_margin
+    description: "Confusing gross margin with contribution margin (a common error)"
+    claim_type: negation
+    section: "2.2"
+
+  # Section 2.3: Payback Period
+  - name: payback_within_runway
+    description: "CAC payback period is shorter than available funding runway"
+    claim_type: conditional
+    section: "2.3"
+
+  - name: short_payback_period
+    description: "CAC payback under 12 months (healthy threshold)"
+    claim_type: metric
+    section: "2.3"
+
+  # Section 2.4: Economies of Scale
+  - name: economies_of_scale_real
+    description: "Per-unit costs genuinely decline with volume"
+    claim_type: causal
+    section: "2.4"
+
+  - name: imagined_economies_of_scale
+    description: "False belief that costs will decline when they actually scale linearly"
+    claim_type: negation
+    section: "2.4"
+
+  - name: network_effects_present
+    description: "Value increases without proportional cost increase"
+    claim_type: causal
+    section: "2.4"
+
+  # Section 2.5: Death Spiral
+  - name: negative_unit_economics
+    description: "Unit economics are negative (each customer destroys value)"
+    claim_type: negation
+    section: "2.5"
+
+  - name: unit_economics_death_spiral
+    description: "Negative unit economics + growth pressure creates vicious cycle"
+    claim_type: causal
+    section: "2.5"
+
+  # Section 2.6: Maturity Mismatch
+  - name: maturity_mismatch
+    description: "Business model assumes long-term relationships but market is short-cycle"
+    claim_type: scope
+    section: "2.6"
+
+  - name: cohort_ltv_declining
+    description: "Cohort analysis shows declining LTV curves over time"
+    claim_type: metric
+    section: "2.6"
+
+# Existing predicates that should be related (not re-extracted)
+existing_related:
+  - positive_unit_economics  # From V01
+  - value_creation           # V01 consequent
+
+# Expected vyapti relationships (Stage D should construct these)
+expected_vyaptis:
+  - antecedents: [ltv_exceeds_cac, positive_contribution_margin]
+    consequent: positive_unit_economics
+    relation: composes
+
+  - antecedents: [payback_within_runway]
+    consequent: positive_unit_economics
+    relation: composes
+
+  - antecedents: [negative_unit_economics]
+    consequent: unit_economics_death_spiral
+    relation: causal
+
+  - antecedents: [maturity_mismatch]
+    consequent: negative_unit_economics
+    relation: causal

@@ -1,0 +1,58 @@
+# data/sample_architecture.yaml — v4 expanded version
+# Includes conflicting vyāptis and scope exclusions for argumentation testing
+domain_type: EMPIRICAL
+pramanas: ["pratyaksa", "anumana", "sabda"]
+vyaptis:
+  V01:
+    id: V01
+    name: "Concentrated Ownership Enables Long Horizons"
+    statement: "If ownership is concentrated, the firm can take long-horizon decisions"
+    causal_status: empirical
+    scope_conditions: ["private_firm"]
+    scope_exclusions: ["public_firm", "regulated_utility"]
+    confidence: {existence: 0.85, formulation: 0.9, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_chandler_1990", "src_jensen_1993"]
+    antecedents: ["concentrated_ownership"]
+    consequent: "long_horizon_possible"
+  V02:
+    id: V02
+    name: "Long Horizons Enable Capability Building"
+    statement: "Long-horizon firms can invest in capability building"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["capital_constrained"]
+    confidence: {existence: 0.8, formulation: 0.85, evidence: "observational"}
+    epistemic_status: hypothesis
+    sources: ["src_teece_1997"]
+    antecedents: ["long_horizon_possible"]
+    consequent: "capability_building_possible"
+  V03:
+    id: V03
+    name: "Concentrated Ownership Creates Agency Risk"
+    statement: "Concentrated ownership can entrench bad management"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["strong_board"]
+    confidence: {existence: 0.75, formulation: 0.8, evidence: "observational"}
+    epistemic_status: established
+    sources: ["src_morck_2005"]
+    antecedents: ["concentrated_ownership"]
+    consequent: "not_good_governance"
+hetvabhasas:
+  H01:
+    id: H01
+    name: "Survivorship Bias"
+    description: "Drawing conclusions from survivors only"
+    detection_signature: "success_stories_only"
+    correction_pattern: "Include failed examples"
+    common_contexts: ["strategy", "entrepreneurship"]
+threshold_concepts: []
+dependency_graph: {}
+chapter_fingerprints: {}
+reference_bank:
+  src_chandler_1990: {title: "Scale and Scope", author: "Chandler", year: 1990}
+  src_jensen_1993: {title: "The Modern Industrial Revolution", author: "Jensen", year: 1993}
+  src_teece_1997: {title: "Dynamic Capabilities", author: "Teece et al.", year: 1997}
+  src_morck_2005: {title: "Corporate Governance and Family Control", author: "Morck et al.", year: 2005}

@@ -1,0 +1,38 @@
+[project]
+name = "anvikshiki-ecosystem"
+version = "0.4.0"
+description = "Neurosymbolic reasoning engine — ASPIC+ argumentation over lattice Datalog with five-layer grounding defense"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Mrityunjay Bhardwaj" },
+]
+dependencies = [
+    "dspy>=3.1.0",
+    "networkx>=3.2",
+    "numpy>=1.26",
+    "scipy>=1.12",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+egglog = ["egglog>=11.0"]
+instructor = ["instructor>=1.5"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["anvikshiki_v4"]
+
+[tool.pytest.ini_options]
+testpaths = ["anvikshiki_v4/tests"]
+markers = [
+    "integration: requires LLM API (deselect with '-m not integration')",
+]

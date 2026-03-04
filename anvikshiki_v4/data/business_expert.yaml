@@ -1,0 +1,505 @@
+# data/business_expert.yaml — Business Strategy & Executive Decision-Making
+# Extracted from guides/v325_new/business_expert/ Stage 2+3 output
+# Domain: TYPE 4 (Practical/Craft) with secondary Type 3 (Empirical/Probabilistic)
+#
+# Notable features for engine testing:
+#   - Chains: V01→V08 (value→long-term), V04→V05 (growth→signal decay)
+#   - Rebutting conflict: V11 (not_value_creation) vs V01 (value_creation)
+#   - Scope exclusions on V01, V02, V04, V08, V09 for undercutting attacks
+#   - Mixed epistemic statuses: established, hypothesis, contested
+
+domain_type: CRAFT
+pramanas: ["pratyaksa", "anumana", "sabda", "upamana"]
+
+vyaptis:
+  V01:
+    id: V01
+    name: "The Value Equation"
+    statement: "A business survives if and only if it creates more economic value than it consumes, as measured by unit economics of its core transaction"
+    causal_status: empirical
+    scope_conditions: ["commercial_enterprise"]
+    scope_exclusions: ["subsidized_entity", "network_effect_building_phase"]
+    confidence: {existence: 0.95, formulation: 0.9, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_hbs_unit_economics", "src_ries_2011"]
+    antecedents: ["positive_unit_economics"]
+    consequent: "value_creation"
+
+  V02:
+    id: V02
+    name: "The Constraint Cascade"
+    statement: "Performance is determined by the binding constraint; optimizing non-binding constraints produces zero marginal improvement"
+    causal_status: empirical
+    scope_conditions: ["serial_dependency_system"]
+    scope_exclusions: ["highly_parallel_system"]
+    confidence: {existence: 0.9, formulation: 0.85, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_goldratt_1984", "src_goldratt_1994"]
+    antecedents: ["binding_constraint_identified"]
+    consequent: "resource_allocation_effective"
+
+  V03:
+    id: V03
+    name: "The Information Asymmetry Premium"
+    statement: "The party with superior information captures disproportionate value; information asymmetry determines market structure and pricing power"
+    causal_status: structural
+    scope_conditions: ["heterogeneous_quality_market"]
+    scope_exclusions: ["perfectly_commoditized_market", "regulated_disclosure_market"]
+    confidence: {existence: 0.95, formulation: 0.9, evidence: "theoretical"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_shapiro_varian_1998", "src_porter_1985"]
+    antecedents: ["superior_information"]
+    consequent: "pricing_power"
+
+  V04:
+    id: V04
+    name: "The Organizational Entropy Principle"
+    statement: "Organizations accumulate coordination overhead and information loss as they grow, accelerating at thresholds of ~8, 50, 150, 500 people"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["active_structural_intervention"]
+    confidence: {existence: 0.85, formulation: 0.75, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: moderate
+    decay_condition: "AI/remote tools may shift traditional thresholds"
+    sources: ["src_dunbar_2010", "src_conway_1968", "src_skelton_pais_2019"]
+    antecedents: ["organizational_growth"]
+    consequent: "coordination_overhead"
+
+  V05:
+    id: V05
+    name: "The Market Signal Decay Law"
+    statement: "The further a decision-maker is from the customer, the more distorted the market signal becomes through aggregation, filtering, and reporting incentives"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["small_team_direct_contact"]
+    confidence: {existence: 0.9, formulation: 0.85, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_blank_2005", "src_christensen_2016"]
+    antecedents: ["coordination_overhead"]
+    consequent: "distorted_market_signal"
+
+  V06:
+    id: V06
+    name: "The Optionality-Commitment Tradeoff"
+    statement: "Every strategic commitment simultaneously creates capability and destroys optionality; judgment quality is the accuracy of this tradeoff"
+    causal_status: structural
+    scope_conditions: []
+    scope_exclusions: ["abundant_resources_relative_to_opportunity"]
+    confidence: {existence: 0.95, formulation: 0.85, evidence: "theoretical"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_thorndike_2012"]
+    antecedents: ["strategic_commitment"]
+    consequent: "capability_gain"
+
+  V07:
+    id: V07
+    name: "The Incentive-Behavior Isomorphism"
+    statement: "Actual behavior converges to what is actually incentivized regardless of stated values; culture is the emergent property of incentive structures"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["strong_intrinsic_motivation_org"]
+    confidence: {existence: 0.9, formulation: 0.9, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_kerr_1975", "src_jensen_meckling_1976"]
+    antecedents: ["incentive_alignment"]
+    consequent: "organizational_effectiveness"
+
+  V08:
+    id: V08
+    name: "The Capital Allocation Identity"
+    statement: "Over long periods, company value is determined almost entirely by how its CEO allocates capital"
+    causal_status: empirical
+    scope_conditions: ["significant_free_cash_flow"]
+    scope_exclusions: ["limited_allocation_discretion", "regulated_industry"]
+    confidence: {existence: 0.85, formulation: 0.8, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_thorndike_2012", "src_buffett_letters", "src_mauboussin_2012"]
+    antecedents: ["value_creation", "resource_allocation_effective"]
+    consequent: "long_term_value"
+
+  V09:
+    id: V09
+    name: "The Disruption Asymmetry"
+    statement: "Incumbents systematically underinvest in low-margin markets because rational resource allocation within existing incentives directs investment to high-margin customers"
+    causal_status: empirical
+    scope_conditions: ["sustaining_innovation_trajectory"]
+    scope_exclusions: ["attentive_incumbent", "scale_barrier_to_entry"]
+    confidence: {existence: 0.75, formulation: 0.7, evidence: "observational"}
+    epistemic_status: contested
+    decay_risk: moderate
+    decay_condition: "Ongoing empirical debate on disruption theory predictive power"
+    sources: ["src_christensen_1997", "src_king_baatartogtokh_2015", "src_lepore_2014"]
+    antecedents: ["incumbent_rational_allocation", "low_margin_market_entrant"]
+    consequent: "disruption_vulnerability"
+
+  V10:
+    id: V10
+    name: "The Judgment Calibration Principle"
+    statement: "Executive judgment quality is determined less by information quantity and more by calibration accuracy — knowing what you know vs what you don't"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["decisions_under_near_certainty"]
+    confidence: {existence: 0.85, formulation: 0.8, evidence: "experimental"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_tetlock_2015", "src_kahneman_2011", "src_tetlock_2005"]
+    antecedents: ["calibration_accuracy"]
+    consequent: "decision_quality"
+
+  # Conflict vyāpti: Growth with organizational entropy destroys value
+  # Creates rebutting attack against V01's "value_creation" conclusion
+  V11:
+    id: V11
+    name: "The Growth Trap"
+    statement: "When organizational growth creates coordination overhead that outpaces value creation, the enterprise destroys value even with sound unit economics"
+    causal_status: empirical
+    scope_conditions: []
+    scope_exclusions: ["active_structural_intervention", "small_team_direct_contact"]
+    confidence: {existence: 0.7, formulation: 0.65, evidence: "observational"}
+    epistemic_status: hypothesis
+    decay_risk: low
+    sources: ["src_dunbar_2010", "src_skelton_pais_2019"]
+    antecedents: ["organizational_growth", "coordination_overhead"]
+    consequent: "not_value_creation"
+
+hetvabhasas:
+  H01:
+    id: H01
+    name: "The Revenue Vanity Trap"
+    description: "Inferring business health from revenue growth alone, ignoring unit economics, cash flow, and margin structure"
+    detection_signature: "revenue_growth_cited_without_unit_economics"
+    correction_pattern: "Require unit economic analysis alongside any revenue growth claim"
+    common_contexts: ["startup_evaluation", "investor_pitches", "media_coverage"]
+
+  H02:
+    id: H02
+    name: "The Framework Reification Error"
+    description: "Treating strategic frameworks as causal models of reality rather than lossy heuristic compressions"
+    detection_signature: "single_framework_treated_as_complete_model"
+    correction_pattern: "Identify the null space of the framework — what it cannot see"
+    common_contexts: ["competitive_analysis", "strategic_planning", "consulting"]
+
+  H03:
+    id: H03
+    name: "The Survivorship Inference"
+    description: "Studying successful companies to extract principles without examining companies that followed the same principles and failed"
+    detection_signature: "success_stories_only"
+    correction_pattern: "Include failed examples with the same characteristics; check base rates"
+    common_contexts: ["strategy", "entrepreneurship", "management_books"]
+
+  H04:
+    id: H04
+    name: "The Correlation-Strategy Confusion"
+    description: "Observing shared features of successful companies and inferring the feature causes success without establishing causal mechanism"
+    detection_signature: "correlational_claim_presented_as_causal"
+    correction_pattern: "Check causal direction, common causes, and intervene-and-observe evidence"
+    common_contexts: ["organizational_behavior", "culture_studies", "best_practices"]
+
+  H05:
+    id: H05
+    name: "The Scalability Presumption"
+    description: "Assuming what worked at scale N will work at scale 10N, ignoring phase transitions and constraint type shifts"
+    detection_signature: "linear_extrapolation_across_scale_thresholds"
+    correction_pattern: "Model the phase transition; identify what changes qualitatively at each threshold"
+    common_contexts: ["startup_scaling", "market_sizing", "growth_planning"]
+
+  H06:
+    id: H06
+    name: "The Sunk Cost Anchor"
+    description: "Continuing to invest in a failing strategy because of prior investment rather than evaluating marginal returns"
+    detection_signature: "prior_investment_cited_as_reason_to_continue"
+    correction_pattern: "Evaluate only the marginal return of the next dollar; prior spend is irrelevant"
+    common_contexts: ["capital_allocation", "project_management", "strategic_pivots"]
+
+  H07:
+    id: H07
+    name: "The Moat Mirage"
+    description: "Claiming competitive advantage from absence of competitors or temporary technology lead rather than structural barriers"
+    detection_signature: "no_competitors_equated_with_competitive_advantage"
+    correction_pattern: "Identify structural barriers (network effects, switching costs, scale economies); a head start is not a moat"
+    common_contexts: ["startup_pitches", "competitive_analysis", "investor_evaluation"]
+
+  H08:
+    id: H08
+    name: "The Metric Goodhart"
+    description: "Optimizing for a measurable proxy and treating improvement in the proxy as improvement in the underlying goal"
+    detection_signature: "metric_improvement_without_goal_verification"
+    correction_pattern: "Verify that metric improvement correlates with goal achievement; watch for gaming behavior"
+    common_contexts: ["incentive_design", "kpi_setting", "performance_management"]
+
+threshold_concepts:
+  - name: "Unit Economics as the Atomic Test of Value"
+    reorganizes: ["growth_evaluation", "business_success_definition", "revenue_interpretation"]
+    prerequisites: ["basic_arithmetic", "financial_statement_reading"]
+    troublesome_aspects: ["own startup may be value-destroying", "media celebrates revenue not value"]
+
+  - name: "Culture as Emergent Property Not Input"
+    reorganizes: ["organizational_management", "leadership_understanding", "culture_building"]
+    prerequisites: ["incentive_structures", "organizational_design_basics"]
+    troublesome_aspects: ["loss of perceived direct control", "values statements feel powerful"]
+
+  - name: "Judgment as Calibrated Bayesian Process"
+    reorganizes: ["executive_judgment_understanding", "decision_making_framework", "expertise_evaluation"]
+    prerequisites: ["bayesian_reasoning", "all_prior_business_concepts"]
+    troublesome_aspects: ["judgment seems too learnable", "reduces rich judgment to mechanics"]
+
+dependency_graph:
+  # Vyāpti chains (consequent of one feeds antecedent of another)
+  V01: ["V08"]            # value_creation → long_term_value
+  V02: ["V08"]            # resource_allocation_effective → long_term_value
+  V04: ["V05", "V11"]     # coordination_overhead → signal decay AND growth trap
+  # Concept-level dependencies (chapter ordering)
+  C01: ["C02"]
+  C02: ["C03", "C04", "C05", "C06"]
+  C03: ["C04", "C05", "C07"]
+  C05: ["C06", "C09"]
+  C06: ["C09"]
+  C07: ["C08"]
+  C09: ["C10"]
+
+chapter_fingerprints:
+  ch01:
+    chapter_id: ch01
+    title: "Financial Statements as a Language"
+    key_terms: ["balance_sheet", "income_statement", "cash_flow", "double_entry"]
+    anchoring_concepts: ["financial_statements_as_language"]
+    vyaptis_introduced: []
+    hetvabhasas_active: ["H04"]
+    prerequisites: []
+    forward_dependencies: ["ch02", "ch04"]
+    epistemic_statuses: {}
+    difficulty_tier: "foundational"
+
+  ch02:
+    chapter_id: ch02
+    title: "Unit Economics & the Core Transaction"
+    key_terms: ["ltv", "cac", "unit_economics", "contribution_margin", "payback_period"]
+    anchoring_concepts: ["unit_economics_as_atomic_test"]
+    vyaptis_introduced: ["V01"]
+    hetvabhasas_active: ["H01"]
+    prerequisites: ["ch01"]
+    forward_dependencies: ["ch03", "ch05", "ch06"]
+    epistemic_statuses: {"V01": "established"}
+    difficulty_tier: "foundational"
+
+  ch03:
+    chapter_id: ch03
+    title: "Constraint Structure & Resource Allocation"
+    key_terms: ["binding_constraint", "bottleneck", "throughput", "theory_of_constraints"]
+    anchoring_concepts: ["constraint_cascade"]
+    vyaptis_introduced: ["V02"]
+    hetvabhasas_active: []
+    prerequisites: ["ch02"]
+    forward_dependencies: ["ch04", "ch05", "ch07"]
+    epistemic_statuses: {"V02": "established"}
+    difficulty_tier: "foundational"
+
+  ch04:
+    chapter_id: ch04
+    title: "Capital Allocation & Financial Strategy"
+    key_terms: ["roic", "wacc", "capital_allocation", "free_cash_flow"]
+    anchoring_concepts: ["capital_allocation_as_ceo_job"]
+    vyaptis_introduced: ["V08"]
+    hetvabhasas_active: ["H06"]
+    prerequisites: ["ch01", "ch02", "ch03"]
+    forward_dependencies: ["ch10"]
+    epistemic_statuses: {"V08": "established"}
+    difficulty_tier: "foundational"
+
+  ch05:
+    chapter_id: ch05
+    title: "Competitive Position & Moat"
+    key_terms: ["moat", "network_effects", "switching_costs", "barriers_to_entry"]
+    anchoring_concepts: ["structural_barriers_to_competition"]
+    vyaptis_introduced: ["V03"]
+    hetvabhasas_active: ["H02", "H07"]
+    prerequisites: ["ch02", "ch03"]
+    forward_dependencies: ["ch06", "ch09"]
+    epistemic_statuses: {"V03": "established"}
+    difficulty_tier: "intermediate"
+
+  ch06:
+    chapter_id: ch06
+    title: "Business Model Design & Innovation"
+    key_terms: ["business_model", "disruption", "value_capture", "innovation"]
+    anchoring_concepts: ["business_model_as_value_architecture"]
+    vyaptis_introduced: ["V09"]
+    hetvabhasas_active: ["H03"]
+    prerequisites: ["ch02", "ch05"]
+    forward_dependencies: ["ch09"]
+    epistemic_statuses: {"V09": "contested"}
+    difficulty_tier: "intermediate"
+
+  ch07:
+    chapter_id: ch07
+    title: "Organizational Design & Scaling"
+    key_terms: ["phase_transitions", "dunbar_number", "conway_law", "scaling_thresholds"]
+    anchoring_concepts: ["organizations_as_constraint_systems"]
+    vyaptis_introduced: ["V04", "V11"]
+    hetvabhasas_active: ["H05"]
+    prerequisites: ["ch03"]
+    forward_dependencies: ["ch08"]
+    epistemic_statuses: {"V04": "established", "V11": "hypothesis"}
+    difficulty_tier: "intermediate"
+
+  ch08:
+    chapter_id: ch08
+    title: "Incentive Design & Culture"
+    key_terms: ["incentive_alignment", "agency_theory", "goodhart_law", "culture_as_emergent"]
+    anchoring_concepts: ["culture_as_emergent_property"]
+    vyaptis_introduced: ["V07"]
+    hetvabhasas_active: ["H08"]
+    prerequisites: ["ch07"]
+    forward_dependencies: ["ch10"]
+    epistemic_statuses: {"V07": "established"}
+    difficulty_tier: "intermediate"
+
+  ch09:
+    chapter_id: ch09
+    title: "Market & Customer Reasoning"
+    key_terms: ["signal_decay", "customer_development", "jobs_to_be_done", "chasm"]
+    anchoring_concepts: ["market_as_dynamic_system"]
+    vyaptis_introduced: ["V05"]
+    hetvabhasas_active: []
+    prerequisites: ["ch05", "ch06"]
+    forward_dependencies: ["ch10"]
+    epistemic_statuses: {"V05": "established"}
+    difficulty_tier: "advanced"
+
+  ch10:
+    chapter_id: ch10
+    title: "Executive Judgment & Decision Synthesis"
+    key_terms: ["calibration", "bayesian_updating", "decision_quality", "synthesis"]
+    anchoring_concepts: ["judgment_as_calibrated_bayesian_process"]
+    vyaptis_introduced: ["V06", "V10"]
+    hetvabhasas_active: []
+    prerequisites: ["ch04", "ch08", "ch09"]
+    forward_dependencies: []
+    epistemic_statuses: {"V06": "established", "V10": "established"}
+    difficulty_tier: "advanced"
+
+reference_bank:
+  src_hbs_unit_economics:
+    title: "What Are Unit Economics?"
+    author: "Harvard Business School Online"
+    year: 2023
+  src_ries_2011:
+    title: "The Lean Startup"
+    author: "Ries"
+    year: 2011
+  src_goldratt_1984:
+    title: "The Goal"
+    author: "Goldratt"
+    year: 1984
+  src_goldratt_1994:
+    title: "It's Not Luck"
+    author: "Goldratt"
+    year: 1994
+  src_shapiro_varian_1998:
+    title: "Information Rules"
+    author: "Shapiro & Varian"
+    year: 1998
+  src_porter_1985:
+    title: "Competitive Advantage"
+    author: "Porter"
+    year: 1985
+  src_dunbar_2010:
+    title: "How Many Friends Does One Person Need?"
+    author: "Dunbar"
+    year: 2010
+  src_conway_1968:
+    title: "How Do Committees Invent?"
+    author: "Conway"
+    year: 1968
+  src_skelton_pais_2019:
+    title: "Team Topologies"
+    author: "Skelton & Pais"
+    year: 2019
+  src_blank_2005:
+    title: "The Four Steps to the Epiphany"
+    author: "Blank"
+    year: 2005
+  src_christensen_2016:
+    title: "Know Your Customers' Jobs to Be Done"
+    author: "Christensen et al."
+    year: 2016
+  src_thorndike_2012:
+    title: "The Outsiders"
+    author: "Thorndike"
+    year: 2012
+  src_buffett_letters:
+    title: "Berkshire Hathaway Annual Letters"
+    author: "Buffett"
+    year: 2024
+  src_mauboussin_2012:
+    title: "The Success Equation"
+    author: "Mauboussin"
+    year: 2012
+  src_kerr_1975:
+    title: "On the Folly of Rewarding A, While Hoping for B"
+    author: "Kerr"
+    year: 1975
+  src_jensen_meckling_1976:
+    title: "Theory of the Firm"
+    author: "Jensen & Meckling"
+    year: 1976
+  src_christensen_1997:
+    title: "The Innovator's Dilemma"
+    author: "Christensen"
+    year: 1997
+  src_king_baatartogtokh_2015:
+    title: "How Useful Is the Theory of Disruptive Innovation?"
+    author: "King & Baatartogtokh"
+    year: 2015
+  src_lepore_2014:
+    title: "The Disruption Machine"
+    author: "Lepore"
+    year: 2014
+  src_tetlock_2015:
+    title: "Superforecasting"
+    author: "Tetlock & Gardner"
+    year: 2015
+  src_kahneman_2011:
+    title: "Thinking, Fast and Slow"
+    author: "Kahneman"
+    year: 2011
+  src_tetlock_2005:
+    title: "Expert Political Judgment"
+    author: "Tetlock"
+    year: 2005
+  src_klein_1998:
+    title: "Sources of Power"
+    author: "Klein"
+    year: 1998
+  src_graham_dodd_1934:
+    title: "Security Analysis"
+    author: "Graham & Dodd"
+    year: 1934
+  src_penman_2012:
+    title: "Financial Statement Analysis and Security Valuation"
+    author: "Penman"
+    year: 2012
+  src_greenwald_kahn_2005:
+    title: "Competition Demystified"
+    author: "Greenwald & Kahn"
+    year: 2005
+  src_osterwalder_pigneur_2010:
+    title: "Business Model Generation"
+    author: "Osterwalder & Pigneur"
+    year: 2010
+  src_moore_1991:
+    title: "Crossing the Chasm"
+    author: "Moore"
+    year: 1991
+  src_schein_2010:
+    title: "Organizational Culture and Leadership"
+    author: "Schein"
+    year: 2010
