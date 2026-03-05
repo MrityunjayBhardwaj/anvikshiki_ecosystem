@@ -1,0 +1,242 @@
+
+========================================================================
+  SETUP: Configure DSPy with Gemini 2.5 Pro
+========================================================================
+
+  LM: gemini-2.5-pro
+  Adapter: JSONAdapter
+
+========================================================================
+  PHASE 0: Load & Augment KnowledgeStore
+========================================================================
+
+Base KB: 11 vyaptis
+Augmented KB: 14 vyaptis, 25 predicates
+
+========================================================================
+  BUILD: Coverage Analyzer + T3a Retriever + T3b Pipeline
+========================================================================
+
+  Coverage vocabulary: 25 predicates
+  T3a Retriever: 8 chunks, fallback=True
+  T3b AugmentationPipeline: ready
+  Ontology snippet: 3536 chars, 14 rules
+
+========================================================================
+  SCENARIO 1: FULL Coverage — In-Domain Query (LLM Grounding)
+========================================================================
+
+
+────────────────────────────────────────────────────────────
+  Stage 0: LLM Grounding (Gemini 2.5 Pro)
+────────────────────────────────────────────────────────────
+
+  Query: Does a company with strong LTV-CAC ratio and positive contribution margin have viable unit economics?
+  Time: 11.7s
+  Predicates: ['ltv_exceeds_cac(company)', 'positive_contribution_margin(company)']
+  Relevant vyaptis: ['V12', 'V01']
+  Reasoning: The user is asking about the conditions that lead to 'viable unit economics'. I will represent the generic 'company' as the entity 'company'. The query provides two conditions: 'strong LTV-CAC ratio',...
+  Confidence: 0.75
+
+────────────────────────────────────────────────────────────
+  Stage 1: Semantic Coverage Analysis
+────────────────────────────────────────────────────────────
+
+  Coverage ratio: 1.00
+  Decision: FULL
+  Matched: ['ltv_exceeds_cac(company)', 'positive_contribution_margin(company)']
+  Unmatched: []
+  Match details: {'ltv_exceeds_cac(company)': 'exact', 'positive_contribution_margin(company)': 'exact'}
+  Relevant vyaptis: ['V12']
+
+────────────────────────────────────────────────────────────
+  Stage 2: Routing
+────────────────────────────────────────────────────────────
+
+  Decision: FULL → proceed with augmented KB
+
+────────────────────────────────────────────────────────────
+  Stage 3: T2 Compilation
+────────────────────────────────────────────────────────────
+
+  Query facts: ['ltv_exceeds_cac', 'positive_contribution_margin']
+  Time: 0.0003s
+  Arguments: 4, Attacks: 0
+    A0000: ltv_exceeds_cac [premise] (b=0.750, depth=0)
+    A0001: positive_contribution_margin [premise] (b=0.750, depth=0)
+    A0002: positive_unit_economics via V12 (b=0.321, depth=0)
+    A0003: value_creation via V01 (b=0.304, depth=0)
+
+────────────────────────────────────────────────────────────
+  Stage 4: T3a Retrieval (cross-linked)
+────────────────────────────────────────────────────────────
+
+  Activated sections: {'V12': ['ch02']}
+  Retrieved 3 chunks:
+    [ch02_s001] ### 2.1 The LTV-CAC Relationship
+The most fundamental equati...
+    [ch02_s002] ### 2.2 The Death Spiral
+When unit economics are negative — ...
+    [ch04_s001] ### 4.1 Information Asymmetry
+The party with superior inform...
+
+────────────────────────────────────────────────────────────
+  Stage 5: Contestation (vada)
+────────────────────────────────────────────────────────────
+
+  Extension: 4 IN, 0 OUT, 0 UNDECIDED
+
+────────────────────────────────────────────────────────────
+  Stage 6: Epistemic Status
+────────────────────────────────────────────────────────────
+
+    ltv_exceeds_cac: hypothesis (b=0.750, u=0.250)
+    positive_contribution_margin: hypothesis (b=0.750, u=0.250)
+    positive_unit_economics: provisional (b=0.321, u=0.583)
+    value_creation: open (b=0.304, u=0.601)
+
+────────────────────────────────────────────────────────────
+  Stages 7-9: Provenance / Uncertainty / Violations
+────────────────────────────────────────────────────────────
+
+    ltv_exceeds_cac: total_conf=0.750, pramana=PRATYAKSA
+    positive_contribution_margin: total_conf=0.750, pramana=PRATYAKSA
+    positive_unit_economics: total_conf=0.219, pramana=ANUMANA
+    value_creation: total_conf=0.207, pramana=ANUMANA
+  Violations: 0
+
+────────────────────────────────────────────────────────────
+  Stage 10: LLM Synthesis (Gemini 2.5 Pro)
+────────────────────────────────────────────────────────────
+
+  Time: 9.6s
+
+  RESPONSE:
+  It is provisionally concluded that a company with a strong LTV-to-CAC ratio and a positive contribution margin has viable unit economics. When a customer's lifetime value (LTV) exceeds the cost to acquire that customer (CAC) and the contribution margin is positive, the fundamental conditions for viable unit economics are met (Source 2.1).
+
+  Sources cited: ['2.1']
+
+========================================================================
+  SCENARIO 2: DECLINE — T3b Augmentation (LLM Calls)
+========================================================================
+
+
+────────────────────────────────────────────────────────────
+  Stage 0: LLM Grounding
+────────────────────────────────────────────────────────────
+
+  Query: How does Tesla's vertical integration strategy affect its competitive position in the EV market?
+  Time: 16.4s
+  Predicates: ['strategic_commitment(tesla)', 'capability_gain(tesla)', 'superior_information(tesla)', 'pricing_power(tesla)', 'positive_unit_economics(tesla)', 'value_creation(tesla)']
+  Reasoning: The user's query asks about the effect of Tesla's vertical integration strategy on its competitive position. First, I'll model the entity 'Tesla' as 'tesla'. Second, the concept of a 'vertical integra...
+
+────────────────────────────────────────────────────────────
+  Stage 1: Semantic Coverage Analysis
+────────────────────────────────────────────────────────────
+
+  Coverage ratio: 1.00
+  Decision: FULL
+  Matched: ['strategic_commitment(tesla)', 'capability_gain(tesla)', 'superior_information(tesla)', 'pricing_power(tesla)', 'positive_unit_economics(tesla)', 'value_creation(tesla)']
+  Unmatched: []
+
+────────────────────────────────────────────────────────────
+  Stage 2: Routing → DECLINE → T3b Augmentation Pipeline
+────────────────────────────────────────────────────────────
+
+  Coverage FULL → no augmentation needed
+
+────────────────────────────────────────────────────────────
+  Stage 3: T2 Compilation
+────────────────────────────────────────────────────────────
+
+  Query facts: ['strategic_commitment', 'capability_gain', 'superior_information', 'pricing_power', 'positive_unit_economics', 'value_creation']
+  Arguments: 9, Attacks: 0
+    A0000: strategic_commitment [premise] (b=0.650)
+    A0001: capability_gain [premise] (b=0.650)
+    A0002: superior_information [premise] (b=0.650)
+    A0003: pricing_power [premise] (b=0.650)
+    A0004: positive_unit_economics [premise] (b=0.650)
+    A0005: value_creation [premise] (b=0.650)
+    A0006: value_creation via V01 (b=0.618)
+    A0007: pricing_power via V03 (b=0.618)
+    A0008: capability_gain via V06 (b=0.618)
+
+────────────────────────────────────────────────────────────
+  Stage 5: Contestation
+────────────────────────────────────────────────────────────
+
+    A0000: strategic_commitment → in
+    A0001: capability_gain → in
+    A0002: superior_information → in
+    A0003: pricing_power → in
+    A0004: positive_unit_economics → in
+    A0005: value_creation → in
+    A0006: value_creation → in
+    A0007: pricing_power → in
+    A0008: capability_gain → in
+
+────────────────────────────────────────────────────────────
+  Stage 6-10: Epistemic → Synthesis
+────────────────────────────────────────────────────────────
+
+    capability_gain: hypothesis (b=0.776)
+    positive_unit_economics: provisional (b=0.650)
+    pricing_power: hypothesis (b=0.776)
+    strategic_commitment: provisional (b=0.650)
+    superior_information: provisional (b=0.650)
+    value_creation: hypothesis (b=0.776)
+
+  Synthesis time: 15.6s
+  RESPONSE:
+  Tesla's vertical integration strategy appears to bolster its competitive position in the EV market in several key ways, though these conclusions are largely hypothetical or provisional.
+
+The strategy is hypothesized to be a significant driver of value creation, which, when combined with effective capital allocation, can enhance long-term company value (Source: 6.1 Capital Allocation). It also likely gives Tesla greater pricing power by providing more control over its costs and supply chain.
+
+From an operational standpoint, this approach seems to contribute to positive unit economics, where the lifetime value of a customer exceeds the cost to acquire them (Source: 2.1 The LTV-CAC Relationship). It is also believed to help Tesla develop unique internal capabilities and gain superior information flow throughout its design and manufacturing processes. Finally, this deep integration represents a strong strategic commitment that is difficult for competitors to replicate easily.
+  Sources: ['2.1 The LTV-CAC Relationship', '6.1 Capital Allocation']
+
+========================================================================
+  SCENARIO 3: Out-of-Domain — T3b Decline
+========================================================================
+
+
+────────────────────────────────────────────────────────────
+  Stage 0: LLM Grounding
+────────────────────────────────────────────────────────────
+
+  Query: What is the best recipe for chocolate soufflé?
+  Time: 6.7s
+  Predicates: []
+  Reasoning: The user's query is about a 'chocolate soufflé recipe', which falls under the 'CRAFT' domain. The provided ontology consists of predicates related to business, finance, and organizational principles, ...
+
+────────────────────────────────────────────────────────────
+  Stage 1: Coverage Analysis
+────────────────────────────────────────────────────────────
+
+  Coverage: 0.00
+  Decision: DECLINE
+
+────────────────────────────────────────────────────────────
+  Stage 2: T3b Augmentation → Domain Check
+────────────────────────────────────────────────────────────
+
+  Time: 8.4s
+  Augmented: False
+  Framework score: 0.00
+  Reason: Framework applicability too low (0.00 < 0.4)
+
+  DECLINE RESPONSE:
+  'This query falls outside my domain's reasoning framework.'
+  'Framework applicability too low (0.00 < 0.4)'
+
+========================================================================
+  PIPELINE SUMMARY
+========================================================================
+
+  Total wall time: 68.3s
+  LM: gemini-2.5-pro
+  KB: 14 vyaptis (11 base + 3 fine-grained)
+
+  Scenario 1 (FULL): LLM grounding + T2 chain + synthesis
+  Scenario 2 (DECLINE + in-domain): LLM grounding + T3b augmentation + T2 + synthesis
+  Scenario 3 (DECLINE + out-of-domain): LLM grounding + T3b domain check → decline

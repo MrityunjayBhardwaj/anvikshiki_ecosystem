@@ -1,7 +1,13 @@
 # anvikshiki_v4/engine_v4.py
 """
 The Ānvīkṣikī Engine v4 — Argumentation over Provenance Semirings.
+
+Supports two entry points:
+  forward()               — original path (no coverage routing)
+  forward_with_coverage() — coverage-based routing (FULL/PARTIAL/DECLINE)
 """
+
+from typing import Optional
 
 import dspy
 from .schema import KnowledgeStore
@@ -9,6 +15,9 @@ from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
 from .uncertainty import compute_uncertainty_v4
 from .contestation import ContestationManager
+from .coverage import CoverageResult, SemanticCoverageAnalyzer
+from .kb_augmentation import AugmentationPipeline, AugmentationResult
+from .t3a_retriever import T3aRetriever
 
 
 # ── DSPy Signatures ──
@@ -84,12 +93,22 @@ class AnvikshikiEngineV4(dspy.Module):
         knowledge_store: KnowledgeStore,
         grounding_pipeline,  # GroundingPipeline from grounding.py
         contestation_mode: str = "vada",
+        coverage_analyzer: Optional[SemanticCoverageAnalyzer] = None,
+        augmentation_pipeline: Optional[AugmentationPipeline] = None,
+        t3a_retriever: Optional[T3aRetriever] = None,
+        t2b_source_sections: Optional[dict[str, list[str]]] = None,
     ):
         super().__init__()
         self.ks = knowledge_store
         self.grounding = grounding_pipeline
         self.contestation_mode = contestation_mode
         self.contestation_mgr = ContestationManager()
+
+        # Coverage-based routing components (optional)
+        self.coverage_analyzer = coverage_analyzer
+        self.augmentation_pipeline = augmentation_pipeline
+        self.t3a_retriever = t3a_retriever
+        self.t2b_source_sections = t2b_source_sections or {}
 
         self.synthesizer = dspy.Refine(
             module=dspy.ChainOfThought(SynthesizeResponse),
@@ -245,6 +264,233 @@ class AnvikshikiEngineV4(dspy.Module):
                 1 for lbl in labels.values() if lbl == Label.IN
             ),
             contestation=contestation_analysis,
+        )
+
+    def forward_with_coverage(
+        self,
+        query: str,
+        interpreted_intent: str = "",
+    ) -> dspy.Prediction:
+        """
+        Coverage-based routing entry point.
+
+        Flow:
+          1. Ground query → predicates
+          2. Coverage check (base + fine-grained KB)
+          3. Route:
+             FULL/PARTIAL → compile_t2(KB, facts) + T3a retrieval → synthesis
+             DECLINE + in-domain → T3b augmentation → merge → compile_t2 + T3a → synthesis
+             DECLINE + out-of-domain → decline response
+          4. T3a retrieval runs in parallel with T2 inference
+        """
+        # STEP 1: Ground query
+        grounding = self.grounding(query)
+        if grounding.clarification_needed:
+            return dspy.Prediction(
+                response=f"Clarification needed: {grounding.warnings}",
+                sources=[], uncertainty={}, provenance={},
+                violations=[], grounding_confidence=grounding.confidence,
+                extension_size=0, coverage=None, augmentation=None,
+            )
+
+        # STEP 2: Coverage analysis
+        coverage = None
+        if self.coverage_analyzer:
+            coverage = self.coverage_analyzer.analyze(grounding.predicates)
+        else:
+            # No coverage analyzer → treat as FULL coverage (legacy path)
+            coverage = CoverageResult(
+                coverage_ratio=1.0,
+                matched_predicates=grounding.predicates,
+                decision="FULL",
+            )
+
+        # STEP 3: Route based on coverage
+        active_ks = self.ks
+        augmentation = None
+
+        if coverage.decision == "DECLINE" and self.augmentation_pipeline:
+            # T3b: generate augmentation predicates
+            aug_result = self.augmentation_pipeline(
+                query=query,
+                interpreted_intent=interpreted_intent or query,
+                coverage_result=coverage,
+            )
+            augmentation = {
+                "augmented": aug_result.augmented,
+                "reason": aug_result.reason,
+                "framework_score": aug_result.framework_score,
+                "new_vyapti_count": len(aug_result.new_vyaptis),
+                "warnings": aug_result.validation_warnings,
+            }
+
+            if aug_result.augmented and aug_result.merged_kb:
+                active_ks = aug_result.merged_kb
+            elif not aug_result.augmented:
+                # Out-of-domain: decline
+                return dspy.Prediction(
+                    response=(
+                        f"This query falls outside my domain's reasoning framework. "
+                        f"{aug_result.reason}"
+                    ),
+                    sources=[], uncertainty={}, provenance={},
+                    violations=[], grounding_confidence=grounding.confidence,
+                    extension_size=0, coverage=coverage.model_dump(),
+                    augmentation=augmentation,
+                )
+
+        # STEP 4: Build argumentation framework with active KB
+        grounding_sources = getattr(grounding, 'sources', []) or []
+        query_facts = [
+            {"predicate": p, "confidence": grounding.confidence,
+             "sources": grounding_sources}
+            for p in grounding.predicates
+        ]
+        af = compile_t2(active_ks, query_facts)
+
+        # STEP 5: T3a retrieval (parallel with T2 — no dependency)
+        retrieved_chunks: list[str] = []
+        if self.t3a_retriever:
+            # Cross-link: boost sections whose predicates were activated
+            activated_sections: dict[str, list[str]] = {}
+            for vid in coverage.relevant_vyaptis:
+                if vid in self.t2b_source_sections:
+                    activated_sections[vid] = self.t2b_source_sections[vid]
+
+            if activated_sections:
+                t3a_chunks = self.t3a_retriever.retrieve_for_predicates(
+                    activated_sections, query, k=5
+                )
+            else:
+                t3a_chunks = self.t3a_retriever.retrieve(query, k=5)
+
+            retrieved_chunks = [c.text for c in t3a_chunks]
+
+        # STEP 6: Compute extension + contestation (same as forward())
+        contestation_analysis = None
+        if self.contestation_mode == "jalpa":
+            jalpa_result = self.contestation_mgr.jalpa(af, timeout_seconds=30.0)
+            labels = (jalpa_result.preferred_extensions[0]
+                      if jalpa_result.preferred_extensions
+                      else af.compute_grounded())
+            contestation_analysis = {
+                "mode": "jalpa",
+                "num_preferred": len(jalpa_result.preferred_extensions),
+                "defensible_positions": jalpa_result.defensible_positions,
+                "counter_arguments": jalpa_result.counter_arguments,
+            }
+        elif self.contestation_mode == "vitanda":
+            vitanda_result = self.contestation_mgr.vitanda(
+                af, timeout_seconds=60.0)
+            labels = (vitanda_result.stable_extensions[0]
+                      if vitanda_result.stable_extensions
+                      else af.compute_grounded())
+            contestation_analysis = {
+                "mode": "vitanda",
+                "num_stable": len(vitanda_result.stable_extensions),
+                "vulnerabilities": {
+                    c: len(atks) for c, atks
+                    in vitanda_result.vulnerability_inventory.items()
+                },
+                "undefended": vitanda_result.undefended,
+            }
+        else:
+            vada_result = self.contestation_mgr.vada(af)
+            labels = af.labels
+            contestation_analysis = {
+                "mode": "vada",
+                "open_questions": vada_result.open_questions,
+                "suggested_evidence": vada_result.suggested_evidence,
+            }
+
+        # STEP 7: Derive epistemic status, provenance, uncertainty
+        conclusions = set(
+            a.conclusion for a in af.arguments.values()
+            if not a.conclusion.startswith("_")
+        )
+        results = {}
+        for conc in conclusions:
+            status, tag, args = af.get_epistemic_status(conc)
+            if status is not None:
+                results[conc] = {
+                    "status": status, "tag": tag, "arguments": args,
+                }
+
+        provenance = {}
+        for conc, info in results.items():
+            provenance[conc] = {
+                "sources": sorted(info["tag"].source_ids),
+                "pramana": info["tag"].pramana_type.name,
+                "derivation_depth": info["tag"].derivation_depth,
+                "trust": info["tag"].trust_score,
+                "decay": info["tag"].decay_factor,
+            }
+
+        uncertainty = {}
+        for conc, info in results.items():
+            uncertainty[conc] = compute_uncertainty_v4(
+                info["tag"], grounding.confidence,
+                conc, info["status"],
+            )
+
+        violations = []
+        for atk in af.attacks:
+            if labels.get(atk.attacker) == Label.IN:
+                target_arg = af.arguments.get(atk.target)
+                if target_arg and not target_arg.conclusion.startswith("_"):
+                    violations.append({
+                        "hetvabhasa": atk.hetvabhasa,
+                        "type": atk.attack_type,
+                        "attacker": atk.attacker,
+                        "target": atk.target,
+                        "target_conclusion": target_arg.conclusion,
+                    })
+
+        # STEP 8: Synthesize
+        accepted_str = "\n".join(
+            f"- {conc}: {info['status'].value} "
+            f"(belief={info['tag'].belief:.2f}, "
+            f"sources={sorted(info['tag'].source_ids)})"
+            for conc, info in results.items()
+            if info["status"] in (
+                EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
+                EpistemicStatus.PROVISIONAL,
+            )
+        ) or "No accepted conclusions."
+
+        defeated_str = "\n".join(
+            f"- {v['target_conclusion']}: defeated by {v['hetvabhasa']} "
+            f"({v['type']})"
+            for v in violations
+        ) or "No defeated conclusions."
+
+        uq_str = "\n".join(
+            f"- {conc}: confidence={uq['total_confidence']:.2f}, "
+            f"epistemic={uq['epistemic']['status']}"
+            for conc, uq in uncertainty.items()
+        )
+
+        response = self.synthesizer(
+            query=query,
+            accepted_arguments=accepted_str,
+            defeated_arguments=defeated_str,
+            uncertainty_report=uq_str,
+            retrieved_prose="\n\n".join(retrieved_chunks[:5]),
+        )
+
+        return dspy.Prediction(
+            response=response.response,
+            sources=response.sources_cited,
+            uncertainty=uncertainty,
+            provenance=provenance,
+            violations=violations,
+            grounding_confidence=grounding.confidence,
+            extension_size=sum(
+                1 for lbl in labels.values() if lbl == Label.IN
+            ),
+            contestation=contestation_analysis,
+            coverage=coverage.model_dump(),
+            augmentation=augmentation,
         )
 
 
