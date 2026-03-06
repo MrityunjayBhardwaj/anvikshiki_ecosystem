@@ -16,6 +16,10 @@ import json
 import os
 import sys
 import time
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -31,7 +35,7 @@ from anvikshiki_v4.schema_v4 import Label
 from anvikshiki_v4.contestation import ContestationManager
 from anvikshiki_v4.uncertainty import compute_uncertainty_v4
 from anvikshiki_v4.grounding import (
-    OntologySnippetBuilder, GroundingResult, GroundQuery,
+    OntologySnippetBuilder, GroundingResult, GroundingPipeline, GroundingMode,
 )
 from anvikshiki_v4.kb_augmentation import AugmentationPipeline
 from anvikshiki_v4.engine_v4 import SynthesizeResponse
@@ -97,17 +101,33 @@ def main():
     #  SETUP
     # ═══════════════════════════════════════════════════════════
 
-    api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("DEEPINFRA_API_KEY") or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("ERROR: Set GOOGLE_API_KEY or GEMINI_API_KEY environment variable")
+        print("ERROR: Set DEEPINFRA_API_KEY (or GOOGLE_API_KEY) environment variable")
         sys.exit(1)
 
-    out.banner("SETUP: Configure DSPy with Gemini 2.5 Pro")
-    lm = dspy.LM("gemini/gemini-2.5-pro", api_key=api_key, max_tokens=4096)
+    # Select model based on which key is available
+    if os.environ.get("DEEPINFRA_API_KEY"):
+        from anvikshiki_v4.reasoning_lm import ReasoningLM
+        model_id = "openai/zai-org/GLM-5"
+        model_label = "GLM-5 (DeepInfra)"
+        lm = ReasoningLM(
+            model_id,
+            api_key=api_key,
+            api_base="https://api.deepinfra.com/v1/openai",
+            max_tokens=4096,
+            temperature=0.7,
+        )
+    else:
+        model_id = "gemini/gemini-2.5-pro"
+        model_label = "Gemini 2.5 Pro"
+        lm = dspy.LM(model_id, api_key=api_key, max_tokens=4096)
+
+    out.banner(f"SETUP: Configure DSPy with {model_label}")
     dspy.configure(lm=lm, adapter=dspy.JSONAdapter())
 
     out.input_box("DSPy Configuration", (
-        f"LM model:  gemini/gemini-2.5-pro\n"
+        f"LM model:  {model_id}\n"
         f"Adapter:   JSONAdapter (structured output)\n"
         f"max_tokens: 4096\n"
         f"API key:   {api_key[:10]}...{api_key[-4:]}"
@@ -243,11 +263,12 @@ def main():
     #  BUILD COMPONENTS
     # ═══════════════════════════════════════════════════════════
 
-    out.banner("BUILD: Coverage Analyzer + T3a Retriever + T3b Pipeline")
+    out.banner("BUILD: Coverage Analyzer + T3a Retriever + T3b + Grounding Pipeline")
 
     coverage_analyzer = SemanticCoverageAnalyzer(augmented_ks, synonym_table)
     t3a_retriever = T3aRetriever(chunks=chunks) if chunks else T3aRetriever(chunks=[])
     augmentation_pipeline = AugmentationPipeline(augmented_ks)
+    grounding_pipeline = GroundingPipeline(augmented_ks)
     snippet_builder = OntologySnippetBuilder()
     ontology_snippet = snippet_builder.build(augmented_ks)
     cm = ContestationManager()
@@ -257,6 +278,7 @@ def main():
         f"T3a Retriever: {len(chunks)} chunks (from real guide text), "
         f"fallback={t3a_retriever._retriever is None}\n"
         f"T3b AugmentationPipeline: ready\n"
+        f"GroundingPipeline: 3 modes — MINIMAL (1 call), PARTIAL (N=3), FULL (N=5+RT+solver)\n"
         f"Ontology snippet: {len(ontology_snippet)} chars, "
         f"{ontology_snippet.count('RULE ')} rules"
     ))
@@ -272,76 +294,42 @@ def main():
 
     query_1 = "Does a company with strong LTV-CAC ratio and positive contribution margin have viable unit economics?"
 
-    # ── Stage 0: LLM Grounding ──
-    out.section("Stage 0: LLM Grounding (Gemini 2.5 Pro)")
+    # ── Stage 0: Grounding Pipeline (MINIMAL mode) ──
+    out.section("Stage 0: Grounding Pipeline — MINIMAL mode ({model_label})")
 
-    out.input_box("GroundQuery DSPy Signature", (
-        f"Signature: GroundQuery(dspy.Signature)\n"
-        f"  Docstring: 'Translate a natural language query into\n"
-        f"    structured predicates. Use ONLY predicates from the\n"
-        f"    provided ontology snippet. Think step by step about\n"
-        f"    which entities and relationships the query mentions.'\n"
-        f"\n"
-        f"  InputFields:\n"
-        f"    query:           str  (User's NL question)\n"
-        f"    ontology_snippet: str  (Valid predicates and rules)\n"
-        f"    domain_type:     str  (Domain classification)\n"
-        f"\n"
-        f"  OutputFields:\n"
-        f"    reasoning:        str  (Step-by-step predicate matching)\n"
-        f"    predicates:       list[str]  (Structured predicates)\n"
-        f"    relevant_vyaptis: list[str]  (IDs of relevant vyaptis)"
+    out.input_box("GroundingPipeline — MINIMAL mode (1 LLM call)", (
+        f"Layer 1: Ontology-constrained prompt ({ontology_snippet.count('RULE ')} rules)\n"
+        f"Layer 2: Grammar-constrained decoding (transparent)\n"
+        f"Single GroundQuery call, temperature=0 (deterministic)\n"
+        f"No ensemble, no round-trip, no solver feedback\n"
+        f"Confidence: 1.0 (no consensus to measure)"
     ))
 
-    out.input_box("Grounding Call Inputs (Scenario 1)", (
+    out.input_box("Grounding Pipeline Input (Scenario 1 — MINIMAL)", (
         f"query:\n"
         f"  \"{query_1}\"\n"
         f"\n"
-        f"ontology_snippet: (see full snippet above, {len(ontology_snippet)} chars)\n"
-        f"  First 5 rules:\n"
-        + "\n".join(f"  {line}" for line in ontology_snippet.split('\n')[:20])
-        + f"\n  ...\n"
-        f"\n"
+        f"mode: MINIMAL (1 call, temperature=0)\n"
+        f"knowledge_store: {len(augmented_ks.vyaptis)} vyaptis\n"
+        f"ontology_snippet: {len(ontology_snippet)} chars, "
+        f"{ontology_snippet.count('RULE ')} rules\n"
         f"domain_type: \"{augmented_ks.domain_type.value}\""
     ))
 
-    grounder = dspy.ChainOfThought(GroundQuery)
-
     t_ground = time.time()
-    try:
-        g1 = grounder(
-            query=query_1,
-            ontology_snippet=ontology_snippet,
-            domain_type=augmented_ks.domain_type.value,
-        )
-        grounding_1 = GroundingResult(
-            predicates=g1.predicates if g1.predicates else [],
-            confidence=0.75,
-            warnings=["single-call grounding"],
-        )
-    except Exception as e:
-        out.print(f"  Grounding failed: {e}")
-        g1 = None
-        grounding_1 = GroundingResult(
-            predicates=["positive_unit_economics", "ltv_exceeds_cac", "positive_contribution_margin"],
-            confidence=0.70,
-            warnings=["manual fallback"],
-        )
+    grounding_1 = grounding_pipeline.forward(query_1, mode=GroundingMode.MINIMAL)
     t_ground_done = time.time()
 
     out.output_box("Grounding Result (Scenario 1)", (
         f"Time: {t_ground_done - t_ground:.1f}s\n"
         f"\n"
-        f"reasoning:\n"
-        f"  {getattr(g1, 'reasoning', 'N/A') if g1 else 'N/A'}\n"
-        f"\n"
-        f"predicates:\n"
+        f"predicates (consensus + disputed):\n"
         f"  {json.dumps(grounding_1.predicates, indent=2)}\n"
         f"\n"
-        f"relevant_vyaptis:\n"
-        f"  {json.dumps(getattr(g1, 'relevant_vyaptis', []) if g1 else [], indent=2)}\n"
-        f"\n"
-        f"confidence: {grounding_1.confidence}\n"
+        f"confidence: {grounding_1.confidence:.2f} (ensemble consensus)\n"
+        f"disputed: {json.dumps(grounding_1.disputed, indent=2)}\n"
+        f"refinement_rounds: {grounding_1.refinement_rounds}\n"
+        f"clarification_needed: {grounding_1.clarification_needed}\n"
         f"warnings: {grounding_1.warnings}"
     ))
 
@@ -605,7 +593,7 @@ def main():
     ))
 
     # ── Stage 10: LLM Synthesis ──
-    out.section("Stage 10: LLM Synthesis (Gemini 2.5 Pro)")
+    out.section("Stage 10: LLM Synthesis ({model_label})")
 
     accepted_str = "\n".join(
         f"- {conc}: {info['status'].value} (belief={info['tag'].belief:.2f})"
@@ -691,50 +679,33 @@ def main():
 
     query_2 = "How does Tesla's vertical integration strategy affect its competitive position in the EV market?"
 
-    # ── Stage 0: LLM Grounding ──
-    out.section("Stage 0: LLM Grounding (Gemini 2.5 Pro)")
+    # ── Stage 0: Grounding Pipeline (PARTIAL mode) ──
+    out.section("Stage 0: Grounding Pipeline — PARTIAL mode ({model_label})")
 
-    out.input_box("Grounding Call Inputs (Scenario 2)", (
+    out.input_box("Grounding Pipeline Input (Scenario 2 — PARTIAL)", (
         f"query:\n"
         f"  \"{query_2}\"\n"
         f"\n"
-        f"ontology_snippet: (same as Scenario 1, {len(ontology_snippet)} chars)\n"
-        f"domain_type: \"{augmented_ks.domain_type.value}\""
+        f"mode: PARTIAL (N=3 ensemble, round-trip if conf < 0.9, no solver)\n"
+        f"knowledge_store: {len(augmented_ks.vyaptis)} vyaptis\n"
+        f"ontology_snippet: (same as Scenario 1, {len(ontology_snippet)} chars)"
     ))
 
     t_g2 = time.time()
-    g2 = None
-    try:
-        g2 = grounder(
-            query=query_2,
-            ontology_snippet=ontology_snippet,
-            domain_type=augmented_ks.domain_type.value,
-        )
-        grounding_2 = GroundingResult(
-            predicates=g2.predicates if g2.predicates else [],
-            confidence=0.65,
-        )
-    except Exception as e:
-        out.print(f"  Grounding failed: {e}")
-        grounding_2 = GroundingResult(
-            predicates=["vertical_integration", "ev_market_position", "manufacturing_efficiency"],
-            confidence=0.60,
-        )
+    grounding_2 = grounding_pipeline.forward(query_2, mode=GroundingMode.PARTIAL)
     t_g2_done = time.time()
 
     out.output_box("Grounding Result (Scenario 2)", (
         f"Time: {t_g2_done - t_g2:.1f}s\n"
         f"\n"
-        f"reasoning:\n"
-        f"  {getattr(g2, 'reasoning', 'N/A') if g2 else 'N/A'}\n"
-        f"\n"
-        f"predicates:\n"
+        f"predicates (consensus + disputed):\n"
         f"  {json.dumps(grounding_2.predicates, indent=2)}\n"
         f"\n"
-        f"relevant_vyaptis:\n"
-        f"  {json.dumps(getattr(g2, 'relevant_vyaptis', []) if g2 else [], indent=2)}\n"
-        f"\n"
-        f"confidence: {grounding_2.confidence}"
+        f"confidence: {grounding_2.confidence:.2f} (ensemble consensus)\n"
+        f"disputed: {json.dumps(grounding_2.disputed, indent=2)}\n"
+        f"refinement_rounds: {grounding_2.refinement_rounds}\n"
+        f"clarification_needed: {grounding_2.clarification_needed}\n"
+        f"warnings: {grounding_2.warnings}"
     ))
 
     # ── Stage 1: Coverage Analysis ──
@@ -991,49 +962,32 @@ def main():
 
     query_3 = "What is the best recipe for chocolate soufflé?"
 
-    out.section("Stage 0: LLM Grounding (Gemini 2.5 Pro)")
+    out.section("Stage 0: Grounding Pipeline — FULL mode ({model_label})")
 
-    out.input_box("Grounding Call Inputs (Scenario 3)", (
+    out.input_box("Grounding Pipeline Input (Scenario 3 — FULL)", (
         f"query:\n"
         f"  \"{query_3}\"\n"
         f"\n"
-        f"ontology_snippet: (same as Scenarios 1-2, {len(ontology_snippet)} chars)\n"
-        f"domain_type: \"{augmented_ks.domain_type.value}\""
+        f"mode: FULL (N=5 ensemble + round-trip + solver feedback)\n"
+        f"knowledge_store: {len(augmented_ks.vyaptis)} vyaptis\n"
+        f"ontology_snippet: (same as Scenarios 1-2, {len(ontology_snippet)} chars)"
     ))
 
     t_g3 = time.time()
-    g3 = None
-    try:
-        g3 = grounder(
-            query=query_3,
-            ontology_snippet=ontology_snippet,
-            domain_type=augmented_ks.domain_type.value,
-        )
-        grounding_3 = GroundingResult(
-            predicates=g3.predicates if g3.predicates else [],
-            confidence=0.3,
-        )
-    except Exception as e:
-        out.print(f"  Grounding failed: {e}")
-        grounding_3 = GroundingResult(
-            predicates=["chocolate_preparation", "baking_technique"],
-            confidence=0.2,
-        )
+    grounding_3 = grounding_pipeline.forward(query_3, mode=GroundingMode.FULL)
     t_g3_done = time.time()
 
     out.output_box("Grounding Result (Scenario 3)", (
         f"Time: {t_g3_done - t_g3:.1f}s\n"
         f"\n"
-        f"reasoning:\n"
-        f"  {getattr(g3, 'reasoning', 'N/A') if g3 else 'N/A'}\n"
-        f"\n"
-        f"predicates:\n"
+        f"predicates (consensus + disputed):\n"
         f"  {json.dumps(grounding_3.predicates, indent=2)}\n"
         f"\n"
-        f"relevant_vyaptis:\n"
-        f"  {json.dumps(getattr(g3, 'relevant_vyaptis', []) if g3 else [], indent=2)}\n"
-        f"\n"
-        f"confidence: {grounding_3.confidence}"
+        f"confidence: {grounding_3.confidence:.2f} (ensemble consensus)\n"
+        f"disputed: {json.dumps(grounding_3.disputed, indent=2)}\n"
+        f"refinement_rounds: {grounding_3.refinement_rounds}\n"
+        f"clarification_needed: {grounding_3.clarification_needed}\n"
+        f"warnings: {grounding_3.warnings}"
     ))
 
     out.section("Stage 1: Coverage Analysis")
@@ -1111,7 +1065,7 @@ def main():
     total = time.time() - t0
 
     out.print(f"  Total wall time: {total:.1f}s")
-    out.print(f"  LM: gemini-2.5-pro")
+    out.print(f"  LM: {model_label} ({model_id})")
     out.print(f"  KB: {len(augmented_ks.vyaptis)} vyaptis ({base_count} base + {fine_count} fine-grained)")
     out.print(f"  Predicate vocabulary: {len(aug_preds)} predicates")
 
@@ -1119,28 +1073,42 @@ def main():
     out.print(f"    Query: \"{query_1}\"")
     out.print(f"    Coverage: {coverage_1.coverage_ratio:.2f} → {coverage_1.decision}")
     out.print(f"    Arguments: {len(af_1.arguments)}, Attacks: {len(af_1.attacks)}")
-    out.print(f"    LLM calls: grounding (1) + synthesis (1) = 2")
+    out.print(f"    Grounding: confidence={grounding_1.confidence:.2f}, "
+              f"disputed={len(grounding_1.disputed)}, "
+              f"refinement_rounds={grounding_1.refinement_rounds}")
+    out.print(f"    LLM calls: grounding MINIMAL (1 call) + synthesis (1)")
 
     out.print(f"\n  Scenario 2 (in-domain, coverage {coverage_2.decision}):")
     out.print(f"    Query: \"{query_2}\"")
     out.print(f"    Coverage: {coverage_2.coverage_ratio:.2f} → {coverage_2.decision}")
+    out.print(f"    Grounding: mode=PARTIAL, confidence={grounding_2.confidence:.2f}, "
+              f"disputed={len(grounding_2.disputed)}, "
+              f"refinement_rounds={grounding_2.refinement_rounds}")
     if aug_result_2:
         out.print(f"    T3b: score={aug_result_2.framework_score:.2f}, "
                   f"augmented={aug_result_2.augmented}, "
                   f"new_vyaptis={len(aug_result_2.new_vyaptis)}")
     out.print(f"    Arguments: {len(af_2.arguments)}, Attacks: {len(af_2.attacks)}")
-    out.print(f"    LLM calls: grounding (1) + T3b (0-2) + synthesis (1)")
+    out.print(f"    LLM calls: grounding PARTIAL (N=3 + RT) + T3b (0-2) + synthesis (1)")
 
     out.print(f"\n  Scenario 3 (out-of-domain):")
     out.print(f"    Query: \"{query_3}\"")
     out.print(f"    Coverage: {coverage_3.coverage_ratio:.2f} → {coverage_3.decision}")
-    out.print(f"    LLM calls: grounding (1) + T3b domain check (1) = 2")
+    out.print(f"    Grounding: mode=FULL, confidence={grounding_3.confidence:.2f}, "
+              f"disputed={len(grounding_3.disputed)}, "
+              f"clarification_needed={grounding_3.clarification_needed}")
+    out.print(f"    LLM calls: grounding FULL (N=5 + RT + solver) + T3b domain check (1)")
 
     # Stage reference table
     out.print(f"\n  Stage Reference:")
     out.print(f"  {'Stage':<8} {'Name':<30} {'LLM?':<6} {'Processing'}")
     out.print(f"  {'─'*8} {'─'*30} {'─'*6} {'─'*30}")
-    out.print(f"  {'0':<8} {'LLM Grounding':<30} {'Yes':<6} ChainOfThought(GroundQuery)")
+    out.print(f"  {'0':<8} {'Grounding Pipeline':<30} {'Yes':<6} 3 modes: MINIMAL / PARTIAL / FULL")
+    out.print(f"  {'0a':<8} {'  L1: Ontology Constraint':<30} {'No':<6}  All modes")
+    out.print(f"  {'0b':<8} {'  L2: Grammar Constraint':<30} {'No':<6}  All modes (transparent)")
+    out.print(f"  {'0c':<8} {'  L3: Ensemble':<30} {'Yes':<6} MINIMAL=1, PARTIAL=N=3, FULL=N=5")
+    out.print(f"  {'0d':<8} {'  L4: Round-trip Verify':<30} {'Yes':<6} PARTIAL + FULL (if conf < 0.9)")
+    out.print(f"  {'0e':<8} {'  L5: Solver Feedback':<30} {'Yes':<6} FULL only (up to 3 rounds)")
     out.print(f"  {'1':<8} {'Coverage Analysis':<30} {'No':<6}  3-layer match (exact/syn/token)")
     out.print(f"  {'2':<8} {'Coverage Routing':<30} {'No':<6}  FULL/PARTIAL/DECLINE threshold")
     out.print(f"  {'2b':<8} {'T3b Augmentation':<30} {'Yes':<6} ScoreApplicability + Generate")

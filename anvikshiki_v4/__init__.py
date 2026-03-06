@@ -14,6 +14,8 @@ from .t3a_retriever import T3aRetriever
 from .engine_factory import initialize_engine, load_guide_dir, CompileArtifacts
 from .uncertainty import compute_uncertainty_v4
 from .contestation import ContestationManager
+from .grounding import GroundingMode
+from .reasoning_lm import ReasoningLM
 
 __all__ = [
     "ProvenanceTag", "PramanaType", "RuleType", "EpistemicStatus",
@@ -28,4 +30,6 @@ __all__ = [
     "initialize_engine", "load_guide_dir", "CompileArtifacts",
     "compute_uncertainty_v4",
     "ContestationManager",
+    "GroundingMode",
+    "ReasoningLM",
 ]
