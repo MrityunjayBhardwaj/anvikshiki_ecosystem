@@ -34,11 +34,14 @@ def test_oplus_commutativity():
     assert abs(ab.uncertainty - ba.uncertainty) < 1e-10
 
 
-def test_tensor_identity():
+def test_tensor_left_identity():
+    """Trust discounting: one() is a LEFT identity — tensor(one(), a) == a."""
     a = ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
                       trust_score=0.8, decay_factor=0.9, derivation_depth=2)
-    result = ProvenanceTag.tensor(a, ProvenanceTag.one())
+    result = ProvenanceTag.tensor(ProvenanceTag.one(), a)
     assert abs(result.belief - a.belief) < 1e-10
+    assert abs(result.disbelief - a.disbelief) < 1e-10
+    assert abs(result.uncertainty - a.uncertainty) < 1e-10
     assert abs(result.trust_score - a.trust_score) < 1e-10
     assert result.derivation_depth == a.derivation_depth
 
@@ -66,9 +69,10 @@ def test_tensor_attenuates():
     b = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
                       trust_score=0.85, decay_factor=0.95, derivation_depth=1)
     result = ProvenanceTag.tensor(a, b)
-    assert result.belief == pytest.approx(0.81, rel=0.01)  # ~0.81 after normalization
+    # Trust discounting: b = a.b * b.b = 0.9 * 0.9 = 0.81
+    assert result.belief == pytest.approx(0.81, rel=0.01)
     assert result.belief < min(a.belief, b.belief)  # Attenuation property
-    assert result.trust_score == 0.8   # min
+    assert result.trust_score == 0.8   # min (lattice)
     assert result.derivation_depth == 2
 
 

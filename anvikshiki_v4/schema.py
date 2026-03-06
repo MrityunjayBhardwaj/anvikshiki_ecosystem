@@ -173,6 +173,14 @@ class KnowledgeStore(BaseModel):
     chapter_fingerprints: dict[str, ChapterFingerprint] = Field(default_factory=dict)
     reference_bank: dict[str, dict] = Field(default_factory=dict)
 
+    # Domain-aware contrariness pairs (fixes audit III-02)
+    # Each pair is [pred_a, pred_b] meaning they are domain-contradictory
+    # e.g. ["value_creation", "value_destruction"]
+    contrariness_pairs: list[list[str]] = Field(
+        default_factory=list,
+        description="Domain-specific contradictory predicate pairs beyond syntactic not_ negation",
+    )
+
     # T2b compile-time extensions (populated by compile_t2b)
     fine_grained_vyapti_ids: list[str] = Field(
         default_factory=list,

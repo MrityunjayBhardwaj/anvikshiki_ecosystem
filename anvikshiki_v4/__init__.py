@@ -6,7 +6,7 @@ from .schema_v4 import (
 )
 from .schema import AugmentationOrigin, AugmentationMetadata
 from .argumentation import ArgumentationFramework
-from .t2_compiler_v4 import compile_t2, load_knowledge_store
+from .t2_compiler_v4 import compile_t2, precompile_kb, load_knowledge_store
 from .t2b_compiler import compile_t2b, T2bResult
 from .coverage import SemanticCoverageAnalyzer, CoverageResult
 from .kb_augmentation import AugmentationPipeline, AugmentationResult
@@ -22,7 +22,7 @@ __all__ = [
     "Label", "Argument", "Attack",
     "AugmentationOrigin", "AugmentationMetadata",
     "ArgumentationFramework",
-    "compile_t2", "load_knowledge_store",
+    "compile_t2", "precompile_kb", "load_knowledge_store",
     "compile_t2b", "T2bResult",
     "SemanticCoverageAnalyzer", "CoverageResult",
     "AugmentationPipeline", "AugmentationResult",

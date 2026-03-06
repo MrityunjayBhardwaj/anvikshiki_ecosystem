@@ -344,11 +344,11 @@ class TestCycleDetectionInForwardChaining:
             if len(af.arguments) == prev:
                 break
 
-        # Should terminate quickly: A0(p), derived(q via V1), derived(p via V2)
-        # V1 with A0 fires once, V2 with derived-q fires once, then
-        # V1 with derived-p fires once (different sub-arg), etc.
-        # But each unique (rule, sub-args) fires only once.
-        assert len(af.arguments) <= 6  # Bounded, not 100+
+        # With all-arguments construction, cyclic rules create more
+        # arguments (each new conclusion becomes a candidate for the
+        # other rule), but still bounded by iterations × combos_per_rule.
+        # Key property: it terminates, not that count is minimal.
+        assert len(af.arguments) <= 50  # Bounded, not unbounded
 
 
 # ══════════════════════════════════════════════════════════════

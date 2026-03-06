@@ -455,12 +455,17 @@ class TestDisruptionTheory:
         assert "disruption_vulnerability" in conclusions
 
     def test_disruption_tag_reflects_contested_status(self, business_ks, disruption_facts):
-        """CONTESTED epistemic status → higher disbelief in tag."""
+        """CONTESTED epistemic status → high uncertainty in derived tag.
+
+        Trust discounting attenuates disbelief through chains (d → 0),
+        converting it to uncertainty.  The contested nature shows up as
+        high uncertainty rather than high disbelief in derived arguments.
+        """
         af = compile_t2(business_ks, disruption_facts)
         for a in af.arguments.values():
             if a.conclusion == "disruption_vulnerability":
-                # CONTESTED: b=0.4, d=0.4, u=0.2 → significant disbelief
-                assert a.tag.disbelief > 0.1
+                # CONTESTED rule: disbelief attenuated, uncertainty high
+                assert a.tag.uncertainty > 0.3
 
     def test_disruption_not_fires_without_antecedents(self, business_ks):
         """V09 needs both incumbent_rational_allocation AND low_margin_market_entrant."""
