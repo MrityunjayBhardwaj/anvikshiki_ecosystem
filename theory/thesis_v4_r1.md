@@ -1,19 +1,19 @@
 # The Ānvīkṣikī Engine (v4)
 
-## From Nyāya Epistemology to Neurosymbolic Argumentation: A Unified Architecture via Structured Argumentation over Provenance Semirings
+## From Nyāya Epistemology to Neurosymbolic Argumentation: A Minimal Complete Architecture via Structured Argumentation with Subjective Logic Annotation
 
 ---
 
 **Abstract.** This thesis presents a revised architecture for the Ānvīkṣikī Engine — a neurosymbolic reasoning system that compiles structured domain knowledge into an executable inference engine with principled epistemic qualification. The prior architecture (v3, this thesis's predecessor) achieved its goals through a composite of six independent formalisms — a Heyting lattice for epistemic status, a cellular sheaf for consistency checking, hand-specified trust tables for source authority, keyword-based hetvābhāsa detection, identity restriction maps, and hand-tuned uncertainty thresholds — producing a system that works but does not cohere. We term this the *Frankenstein problem*: each concern is solved by the best tool from a different intellectual tradition, and the resulting architecture has no single organizing principle.
 
-This thesis proposes a unified alternative: **structured argumentation (ASPIC+) over provenance semiring tags**, with Nyāya epistemology as the design ontology. We show that: (1) Nyāya concepts map naturally to argumentation concepts — vyāptis to defeasible rules, hetvābhāsas to defeat relations, pramāṇa hierarchy to argument preferences, epistemic status to extension membership; (2) provenance semirings (Green et al., PODS 2007) handle all quantitative aspects — evidence accumulation, trust propagation, temporal decay — through a single algebraic structure; (3) the sheaf layer, Heyting lattice, trust table, and separate fallacy detection module all become unnecessary, as their functions emerge from the argumentation semantics itself; (4) Datalog can compute grounded argumentation semantics in polynomial time (Diller et al., KR 2025), preserving the tractability guarantees of the prior architecture. Furthermore, we show that the resulting architecture is **natively contestable** in the sense of the emerging Contestable AI literature (Leofante, Toni et al., KR 2024; Moreira et al. 2025) — satisfying all formal requirements for contestability through its argumentation structure, without requiring any additional post-hoc explanation mechanism.
+This thesis proposes a minimal complete alternative: **structured argumentation (ASPIC+) with Subjective Logic annotation**, using Nyāya epistemology as the design ontology. We show that: (1) Nyāya concepts map naturally to argumentation concepts — vyāptis to defeasible rules, hetvābhāsas to defeat relations, pramāṇa hierarchy to argument preferences, epistemic status to extension membership; (2) Subjective Logic opinions (Jøsang 2016) combined with a product lattice for metadata handle quantitative aspects — evidence accumulation, trust propagation, temporal decay — as a principled composite of two well-defined algebraic structures; (3) the sheaf layer, Heyting lattice, trust table, and separate fallacy detection module all become unnecessary, as their functions are subsumed by the argumentation semantics; (4) Datalog can compute grounded argumentation semantics in polynomial time (Diller et al., KR 2025), preserving the tractability guarantees of the prior architecture. Furthermore, we show that the resulting architecture is **natively contestable** in the sense of the emerging Contestable AI literature (Leofante, Toni et al., KR 2024; Moreira et al. 2025) — satisfying all formal requirements for contestability through its argumentation structure, without requiring any additional post-hoc explanation mechanism.
 
 We first establish why Nyāya epistemology — not Bayesian probability, not Dempster-Shafer theory, not reliabilism — is the correct philosophical framework for this class of problems, through a structured debate across five candidate epistemologies. We then conduct a systematic audit of the v3 architecture's hand-specified decisions, identifying 16 arbitrary choices across three severity tiers. We survey related work in neurosymbolic reasoning, computational argumentation, provenance-aware Datalog, and Contestable AI, identifying the specific shortcomings of each. We develop the mathematical foundations of provenance semirings and structured argumentation independently before showing how they compose. We present the unified architecture with an implementation sketch and complexity analysis. Finally, we compare the proposed system against both a simpler LLM+ASPIC+ baseline (ArgLLMs) and the requirements of the Contestable AI framework, demonstrating that the architecture is simultaneously the strongest existing instantiation of contestable AI principles for domain reasoning.
 
 **Key contributions:**
 1. A formal mapping between Nyāya epistemological categories and ASPIC+ argumentation primitives, filling a gap identified in the comparative philosophy literature
-2. A unified neurosymbolic architecture where epistemic status *emerges* from argumentation semantics rather than being hand-assigned to lattice elements
-3. Elimination of 6 independent formalisms in favor of 2 that naturally compose (argumentation structure + semiring annotation)
+2. A minimal complete neurosymbolic architecture where epistemic status derives from argumentation semantics (extension membership) rather than being hand-assigned to lattice elements, with quantitative annotation via Subjective Logic
+3. Elimination of 6 independent formalisms in favor of 2 that compose (argumentation structure + SL annotation with product lattice metadata), with a three-level property framework (formal guarantees, architectural principles, impossibility constraints) justifying the design
 4. Preservation of all 7 desiderata from v3 (infer, constrain, qualify, decompose uncertainty, ground to sources, respect scope, decay gracefully) with stronger theoretical foundations
 5. Native contestability — the architecture satisfies all 8 Contestable AI properties (Moreira et al. 2025) and all 4 requirements of the computational argumentation approach to contestability (Leofante et al., KR 2024), through its argumentation structure rather than post-hoc mechanisms
 6. Three formally distinct contestation protocols derived from Nyāya debate theory (vāda/jalpa/vitaṇḍā), mapping to grounded/preferred/stable semantics — a vocabulary for different *modes* of contestation that no existing Contestable AI system provides
@@ -50,7 +50,7 @@ We first establish why Nyāya epistemology — not Bayesian probability, not Dem
 6. Mathematical Foundations
    - 6.1 Provenance Semirings
    - 6.2 Structured Argumentation (ASPIC+)
-   - 6.3 Gradual Semantics and Semiring-Valued Strength
+   - 6.3 Gradual Semantics and Annotation-Valued Strength
    - 6.4 Computing Argumentation via Datalog
 7. The Unified Architecture
    - 7.1 Design Principle: Nyāya Ontology → Argumentation Calculus
@@ -177,7 +177,7 @@ Crucially, a vyāpti is NOT merely a logical conditional. It is a *metaphysical*
 | 4 | **Asiddha** | Unestablished — the reason itself is not proven | Undermining defeat (attacks the premise) |
 | 5 | **Bādhita** | Sublated — overridden by a higher pramāṇa | Preference-based defeat (cross-modal override) |
 
-This five-way classification is *richer* than Pollock's two-way (rebutting/undercutting) and richer than ASPIC+'s three-way (undermining/undercutting/rebutting). The *bādhita* category — defeat from a different epistemic channel — has no exact Western analogue, though it resembles what Caird (1877) called "trumping defeat." Guhe (2022) draws explicit connections between the Navya-Nyāya doctrine of *upādhi* (defeating conditions) and Pollock's theory of defeasible reasoning.
+Three of these five types map exactly to ASPIC+'s three attack types: asiddha = undermining, viruddha = rebutting, savyabhicāra ≈ undercutting (specifically scope-based undercutting). The remaining two — *bādhita* (cross-channel preference defeat) and *satpratipakṣa* (named symmetric deadlock) — have no direct ASPIC+ counterpart. Bādhita is handled in ASPIC+ via the generic preference relation, but Nyāya provides a *substantive theory* of what that preference should be (pramāṇa hierarchy). Satpratipakṣa is handled implicitly by grounded semantics (UNDECIDED), but Nyāya elevates it to a first-class pathology worth detecting and reporting. The five-way classification is thus not categorically richer in formal expressiveness — everything compiles to ASPIC+ — but it provides two additional named concepts with engineering value for explanation generation. Guhe (2022) draws explicit connections between the Navya-Nyāya doctrine of *upādhi* (defeating conditions) and Pollock's theory of defeasible reasoning.
 
 **Pañcāvayava** (five-membered argument): The proof trace format:
 1. *Pratijñā* — the proposition (claim to be established)
@@ -654,7 +654,7 @@ The present architecture addresses all of these: arguments are compiled from a v
 - *Indirect consistency*: the closure is consistent
 - *Rationality postulates*: no two accepted arguments attack each other
 
-### 6.3 Gradual Semantics and Semiring-Valued Strength
+### 6.3 Gradual Semantics and Annotation-Valued Strength
 
 Standard ASPIC+ produces categorical outputs: IN / OUT / UNDECIDED. For quantitative reasoning, we need gradual semantics that assign *strength values* to arguments.
 
@@ -722,31 +722,48 @@ Each layer does exactly one thing. No layer duplicates another's function. The c
 
 ### 7.2 The Nyāya-to-ASPIC+ Mapping
 
-| Nyāya Concept | ASPIC+ Equivalent | Formal Definition |
-|---------------|-------------------|-------------------|
-| **Vyāpti** (definitional/structural) | **Strict rule** rₛ ∈ Rₛ | φ₁, ..., φₙ → ψ |
-| **Vyāpti** (empirical/regulatory) | **Defeasible rule** rₐ ∈ Rₐ | φ₁, ..., φₙ ⇒ ψ |
-| **Pratyakṣa** (direct evidence) | **Necessary premise** Kₙ | Ground fact from data/observation |
-| **Śabda** (testimony) | **Ordinary premise** Kₚ | Ground fact from source, attackable |
-| **Anumāna** (inference chain) | **Argument tree** | Tree of sub-arguments from premises through rules |
-| **Pañcāvayava** (proof trace) | **Argument structure** | (Conclusion, TopRule, DirectSubArgs, Premises) |
-| **Asiddha** (unestablished reason) | **Undermining attack** | Attack on ordinary premise |
-| **Savyabhicāra** (inconclusive) | **Undercutting attack** | Attack on defeasible rule applicability |
-| **Viruddha** (contradictory) | **Rebutting attack** | Counter-argument for contrary conclusion |
-| **Satpratipakṣa** (counterbalanced) | **Symmetric attack** | Mutual rebutting with no preference winner |
-| **Bādhita** (sublated by higher pramāṇa) | **Preference-based defeat** | Higher-ranked pramāṇa overrides lower |
-| **Pramāṇa hierarchy** (pratyakṣa > anumāna > śabda) | **Argument preference ordering** ≤ | Arguments from pratyakṣa preferred over anumāna over śabda |
-| **ESTABLISHED** | **IN grounded extension** | Argument accepted under skeptical evaluation |
-| **CONTESTED** | **OUT in grounded, IN in preferred** | Argument defeated skeptically but defensible credulously |
-| **OPEN** | **UNDECIDED** | No argument for or against |
-| **PROVISIONAL** | **IN grounded, but from Kₚ** | Accepted but from ordinary (attackable) premises |
-| **Vāda** (honest inquiry) | **Grounded semantics** | Maximally skeptical — accept only the irrefutable |
-| **Jalpa** (adversarial debate) | **Preferred semantics** | Maximally credulous — accept what can be defended |
-| **Vitaṇḍā** (pure critique) | **Stable semantics** | Accept everything not under attack (if consistent) |
+We classify each mapping by its formal status: **exact** (structural isomorphism — the concepts have the same formal content), **approximate** (reasonable correspondence that compiles down correctly but loses some nuance), or **novel** (Nyāya concept that has no direct ASPIC+ counterpart and requires extension or design decision).
 
-This mapping is not forced. Each Nyāya concept has a *natural* computational analogue in ASPIC+, because Nyāya IS an argumentation theory — the Indian philosophical tradition developed these concepts precisely to reason about arguments, attacks, and justified belief.
+#### Exact Mappings (1:1 structural correspondence)
 
-The **bādhita** mapping deserves special note. Classical ASPIC+ has three defeat types (undermining, undercutting, rebutting). Bādhita — defeat by a higher pramāṇa — is a fourth type that operates across epistemic channels. We implement this as a preference ordering: arguments from pratyakṣa (direct evidence) are always preferred over arguments from anumāna (inference), which are preferred over arguments from śabda (testimony). This is not an ad-hoc addition — it is the formalization of Nyāya's own principle that direct perception overrides inference which overrides testimony.
+| Nyāya Concept | ASPIC+ Equivalent | Formal Definition | Why Exact |
+|---|---|---|---|
+| **Vyāpti** (definitional/structural) | **Strict rule** rₛ ∈ Rₛ | φ₁, ..., φₙ → ψ | Both are non-defeasible inference rules. Vyāpti with causal status "definitional" or "structural" cannot be attacked, matching strict rules exactly. |
+| **Vyāpti** (empirical/regulatory) | **Defeasible rule** rₐ ∈ Rₐ | φ₁, ..., φₙ ⇒ ψ | Both are attackable inference rules. Vyāpti scope conditions correspond to the defeasibility — the rule holds unless an exception (undercutter) is established. |
+| **Pratyakṣa** (direct evidence) | **Necessary premise** Kₙ | Ground fact from data/observation | Both are unattackable base facts. Pratyakṣa provides the strongest epistemic grounding; necessary premises are axiomatically certain. |
+| **Asiddha** (unestablished reason) | **Undermining attack** | Attack on ordinary premise | Exact match. Asiddha says "your premise is not established"; undermining attacks a premise. Same formal effect: removes support for the argument. |
+| **Viruddha** (contradictory) | **Rebutting attack** | Counter-argument for contrary conclusion | Exact match. Viruddha says "your reason proves the opposite"; rebutting provides a counter-conclusion. Both target the claim, not the inference rule. |
+| **Anumāna** (inference chain) | **Argument tree** | Tree of sub-arguments from premises through rules | Both are recursive derivation structures: premises → rules → intermediate conclusions → more rules → final conclusion. |
+| **Pañcāvayava** (proof trace) | **Argument structure** | (Conclusion, TopRule, DirectSubArgs, Premises) | The five-membered syllogism maps to the four-tuple of ASPIC+ argument structure. Pratijñā = conclusion, hetu = premises, nigamana = derivation. See note below on udāharaṇa/upanaya. |
+
+#### Approximate Mappings (reasonable correspondence, some nuance lost)
+
+| Nyāya Concept | ASPIC+ Equivalent | What's Lost | Severity |
+|---|---|---|---|
+| **Śabda** (testimony) | **Ordinary premise** Kₚ | Nyāya's śabda has *two independent conditions* for validity: āptavacana (speaker competence) and abhiyoga (communicative sincerity). ASPIC+ ordinary premises are simply "attackable" — no internal structure for *why* they might fail. The trust conditions compile to a single trust_score, losing the two-dimensional structure. | Low — the lost structure can be recovered via two separate attack points on testimony premises. |
+| **Savyabhicāra** (inconclusive) | **Undercutting attack** | Savyabhicāra specifically means "the reason occurs both with and without the conclusion" — it is about *scope violation* (the hetu is present in cases where the sādhya is absent). ASPIC+ undercutting attacks the rule's *applicability* more broadly. Savyabhicāra is a specific *type* of undercutting (scope-based), not all undercutting. | Low — savyabhicāra is a subset of undercutting. The mapping is sound (every savyabhicāra is an undercutting), but not complete (not every undercutting is a savyabhicāra). |
+| **ESTABLISHED / CONTESTED / OPEN / PROVISIONAL** | **IN / OUT / UNDECIDED** | Nyāya has 4-5 epistemic categories; grounded semantics has 3 labels. The within-IN disambiguation (ESTABLISHED vs HYPOTHESIS vs PROVISIONAL) requires examining tag values — it is not purely from the labeling. CONTESTED (OUT in grounded, IN in preferred) requires computing preferred semantics (NP-hard) to verify. | Medium — the 3-label to 5-category mapping requires either tag-based heuristics (current implementation) or expensive preferred semantics computation. |
+| **Vāda / Jalpa / Vitaṇḍā** | **Grounded / Preferred / Stable semantics** | The Nyāya debate types are *social protocols* (normative rules for how debaters should behave). The argumentation semantics are *mathematical operators* over static graphs. Vāda includes norms about fairness and good faith that grounded semantics does not model. Jalpa permits rhetorical tricks (chala, jāti) with no analogue in preferred semantics. Vitaṇḍā is purely destructive (no thesis), but stable semantics does require total assignment. | Medium — useful as a design heuristic for mode selection, but not a formal equivalence. The mapping operates at different levels: pragmatics (Nyāya) vs. semantics (ASPIC+). |
+
+#### Novel Mappings (Nyāya concepts with no direct ASPIC+ counterpart)
+
+| Nyāya Concept | What We Map It To | Why It's Novel | Engineering Value |
+|---|---|---|---|
+| **Bādhita** (sublated by higher pramāṇa) | Preference-based defeat via pramāṇa ordering | ASPIC+ has a generic preference relation ≤ but does not prescribe *what* it should be based on. Bādhita provides a specific, substantive preference theory: evidence type determines the ordering. This is not an ASPIC+ attack type — it is a *constraint on the preference relation* that ASPIC+ leaves parametric. | **High** — provides a principled, non-arbitrary preference ordering instead of "choose your own." |
+| **Satpratipakṣa** (counterbalanced) | Symmetric mutual rebutting with no preference winner → UNDECIDED | ASPIC+ handles this case implicitly — symmetric attacks without preference lead to UNDECIDED under grounded semantics. Nyāya elevates this to a *named pathology* worth detecting and reporting. No ASPIC+ system flags this as a specific condition. | **High for explanation** — enables the engine to report "this is genuinely contested — equally strong arguments exist on both sides" rather than silently returning UNDECIDED. |
+| **Pramāṇa hierarchy** as total ordering | `PramanaType(IntEnum)`: pratyakṣa > anumāna > śabda > upamāna | ASPIC+ allows any preference ordering. Nyāya mandates a *specific* one based on epistemological theory. This is a design decision, not a formal extension — but it is a decision grounded in 2000 years of epistemological argument rather than arbitrary choice. | **High for design** — eliminates the "which preference ordering?" question that every ASPIC+ implementation must answer ad hoc. |
+| **Udāharaṇa** (example in pañcāvayava) | No ASPIC+ equivalent | The third step of the five-membered syllogism requires grounding the inference in an observed instance: "like in the kitchen" (where smoke and fire co-occur). ASPIC+ arguments do not require exemplification. This is a built-in *empirical grounding requirement* that purely formal systems lack. | **Medium** — could be implemented as a constraint requiring at least one grounded instance for each defeasible rule, but this is not currently enforced. |
+| **Pre-inferential validation** (pramāṇa applicability checking) | Not in ASPIC+ | Nyāya insists that before applying inference (anumāna), you verify that inference is the appropriate pramāṇa for this type of knowledge. ASPIC+ assumes all arguments in the graph are legitimate candidates. This is conceptually a type-checking pass before computation. | **Medium** — currently implemented as pramāṇa-type metadata on rules, not as a pre-computation validation gate. Future work. |
+
+#### Summary Assessment
+
+Of the 19 concepts in the original mapping table:
+- **7 are exact** (1:1 structural correspondence — the formal content is identical)
+- **5 are approximate** (sound but incomplete mappings — Nyāya concept compiles to ASPIC+ correctly, but some structure is lost or some nuance conflated)
+- **5 are novel** (Nyāya provides something ASPIC+ does not — substantive preference theory, named pathologies, empirical grounding requirements, pre-inferential validation)
+- **2 are design heuristics** (vāda/jalpa/vitaṇḍā → semantics selection — useful for mode choice, not formal equivalence)
+
+The mapping is **not an isomorphism** — it is a structure-preserving embedding with genuine additions. Everything in Nyāya can be *expressed* in ASPIC+ (with appropriate parameter choices), but the Nyāya framework provides specific parameter values, named special cases, and design constraints that ASPIC+ leaves open. The engineering value is real: it constrains the design space from "arbitrary ASPIC+ with arbitrary preferences" to "ASPIC+ with pramāṇa-ordered preferences, typed defeat, and pre-inferential validation."
 
 ### 7.3 The Provenance Tag
 
@@ -765,10 +782,10 @@ ProvenanceTag = (
 )
 ```
 
-This is a Subjective Logic opinion (Jøsang 2016) extended with provenance metadata. The semiring operations:
+This is a Subjective Logic opinion (Jøsang 2016) extended with provenance metadata. The two composition operations:
 
 **⊗ (sequential composition — chaining):** When argument A supports premise of argument B:
-- `belief_AB = belief_A × belief_B` (evidence attenuates through chains)
+- `belief_AB = belief_A × belief_B` (evidence attenuates through chains — Jøsang 2016, §12.3 trust discounting)
 - `uncertainty_AB = uncertainty_A + uncertainty_B - uncertainty_A × uncertainty_B` (uncertainty grows)
 - `trust_AB = min(trust_A, trust_B)` (weakest link)
 - `decay_AB = min(decay_A, decay_B)` (weakest link)
@@ -777,13 +794,17 @@ This is a Subjective Logic opinion (Jøsang 2016) extended with provenance metad
 - `pramana_AB = lower_pramana(A, B)` (chain quality limited by weakest link)
 
 **⊕ (parallel composition — accrual):** When arguments A and B independently support the same conclusion:
-- Cumulative fusion (Jøsang 2016): `belief_A⊕B = (belief_A × uncertainty_B + belief_B × uncertainty_A) / κ` where κ normalizes
+- Cumulative fusion (Jøsang 2016, §12.6): `belief_A⊕B = (belief_A × uncertainty_B + belief_B × uncertainty_A) / κ` where κ normalizes
 - `source_ids_A⊕B = source_ids_A ∪ source_ids_B`
 - `depth_A⊕B = min(depth_A, depth_B)` (shortest derivation)
 - `pramana_A⊕B = higher_pramana(A, B)` (best source type)
 - `trust_A⊕B = 1 - (1-trust_A)(1-trust_B)` (noisy-OR: multiple independent sources increase trust)
 
-**Why this is a semiring:** The operations satisfy associativity, commutativity, distributivity, and annihilation (the zero tag — no evidence — annihilates any chain). Jøsang (2016, Chapters 11-12) proves that Subjective Logic opinions under cumulative fusion and deduction form a valid algebraic structure.
+**Algebraic status — honest assessment:** The (b,d,u) components under ⊗ (trust discounting) and ⊕ (cumulative fusion) satisfy associativity, commutativity of ⊕, left-unitality of ⊗, and annihilation. However, **⊗ does not distribute over ⊕** — Jøsang's trust discounting applied to a cumulative fusion does not equal the fusion of individual discountings. This is a known property of Subjective Logic (Jøsang 2016, §12.7 discusses operation ordering). The structure is therefore a **principled composite** of two well-defined SL operations, not a semiring in the strict algebraic sense.
+
+The metadata fields (trust_score, decay_factor, pramana_type, derivation_depth) propagate via a **product lattice** — min/max operations that are formally separate from the SL operations on (b,d,u). This is consistent with how practical argumentation systems compose quantitative and qualitative annotations (cf. Modgil & Prakken 2018).
+
+We retain the term "provenance tag" but do not claim semiring closure. The tag is a pragmatic annotation structure where (b,d,u) follows Jøsang's SL algebra and metadata follows monotone lattice propagation.
 
 ### 7.4 What Becomes Unnecessary
 
@@ -799,31 +820,96 @@ This is a Subjective Logic opinion (Jøsang 2016) extended with provenance metad
 | **2-of-8 stalk encoding** | **N/A** | No stalks. |
 | **Spectral gap normalization /10.0** | **N/A** | No Laplacian. |
 
-**Net effect:** 6 independent formalisms → 2 that compose (argumentation structure + semiring annotation). 16 hand-specified decisions → 3 tunable parameters (pramāṇa preference weights) + DSPy-optimizable hyperparameters.
+**Net effect:** 6 independent formalisms → 2 that compose (argumentation structure + SL annotation), plus a product lattice for metadata propagation. The architectural reduction is genuine: the sheaf, Heyting lattice, trust table, and keyword detection module are all eliminated. The remaining hand-specified decisions fall into two categories: (1) **structural** — the pramāṇa preference ordering, the mapping from KB epistemic status to initial (b,d,u) values, the contrariness relation — these derive from Nyāya theory; (2) **numerical** — belief thresholds for within-IN disambiguation, decay half-life, timeout values, confidence caps — these are DSPy-optimizable hyperparameters whose structure (what to parameterize) comes from theory even though their magnitudes remain empirical.
 
-### 7.5 Why This Is Optimal
+### 7.5 Why This Architecture — Formal Justification
 
-We argue this architecture is optimal for the given objectives and constraints by elimination:
+We justify this architecture through three complementary arguments: elimination (minimality), subsumption (expressiveness), and impossibility-awareness (respecting proven tradeoffs).
 
-**Claim: No simpler architecture achieves all 7 desiderata.**
+#### 7.5.1 Minimality: No Simpler Architecture Achieves All 7 Desiderata
 
 **(1) Pure LLM (no symbolic component):** Fails objectives 1 (no formal inference), 2 (no constraint enforcement), 3 (no epistemic propagation), 4 (no structured uncertainty), 5 (no provenance), 7 (no decay awareness). This is Phase 1 — the baseline that motivates the engine.
 
 **(2) LLM + Boolean Datalog (Logic-LM style):** Achieves 1 (inference) and partially 5 (simple provenance), but fails 2 (no defeat handling), 3 (Boolean only), 4 (no uncertainty decomposition), 6 (no scope-as-defeat), 7 (no decay in inference).
 
-**(3) LLM + Lattice Datalog (v3 without sheaf):** Achieves 1, 3, 5, but needs bolt-on mechanisms for 2 (hetvābhāsa detection), 4 (uncertainty decomposition), 6 (scope handling), 7 (decay). This is the path to Frankenstein.
+**(3) LLM + Lattice Datalog (v3 without sheaf):** Achieves 1, 3, 5, but needs bolt-on mechanisms for 2 (hetvābhāsa detection), 4 (uncertainty decomposition), 6 (scope handling), 7 (decay). This is the path to the Frankenstein problem (Section 4.2).
 
-**(4) LLM + ASPIC+ (no semiring):** Achieves 1, 2, 3 (qualitative only), 6, but fails 4 (no quantitative uncertainty), 5 (no source tracking), 7 (no decay modeling). Argumentation alone is qualitative.
+**(4) LLM + ASPIC+ (no annotation):** Achieves 1, 2, 3 (qualitative only), 6, but fails 4 (no quantitative uncertainty), 5 (no source tracking), 7 (no decay modeling). Argumentation alone is qualitative.
 
 **(5) LLM + Provenance Datalog (no argumentation):** Achieves 1, 4, 5, 7, but fails 2 (no defeat), 3 (no epistemic categories — just numbers), 6 (no scope-as-defeat).
 
-**(6) LLM + ASPIC+ over Provenance Semirings (this thesis):** Achieves all 7. Argumentation provides 1 (inference via argument construction), 2 (defeat as native mechanism), 3 (extension membership as epistemic status), 6 (scope violations as attacks). Semiring provides 4 (uncertainty in tags), 5 (source_ids in tags), 7 (decay_factor in tags).
+**(6) LLM + ASPIC+ with SL annotation (this thesis):** Achieves all 7. Argumentation provides 1 (inference via argument construction), 2 (defeat as native mechanism), 3 (extension membership as epistemic status), 6 (scope violations as attacks). SL annotation provides 4 (uncertainty in tags), 5 (source_ids in tags), 7 (decay_factor in tags).
 
-**No subset of components suffices.** Remove the semiring and you lose quantitative reasoning. Remove the argumentation and you lose defeat handling. Both are necessary. Neither alone is sufficient. This is the minimal complete architecture.
+**No subset of components suffices.** Remove the annotation layer and you lose quantitative reasoning. Remove the argumentation and you lose defeat handling. Both are necessary. Neither alone is sufficient.
 
-**Claim: No more natural architecture exists for Nyāya-grounded reasoning.**
+#### 7.5.2 Subsumption: The Architecture Expresses All Alternatives as Special Cases
 
-The argument: Nyāya IS argumentation theory (Section 2). The Nyāya-to-ASPIC+ mapping (Section 7.2) is not an analogy or a metaphor — it is a structural isomorphism between concepts. Every Nyāya primitive has a direct ASPIC+ counterpart. No other computational framework provides this. Lattice Datalog requires importing defeat as a bolt-on. Bayesian networks require importing categorical epistemic distinctions as discretization. Argumentation frameworks ARE the computational form of what Nyāya describes.
+| Alternative System | Expressible in Our Architecture? | Can It Express Ours? |
+|---|---|---|
+| ArgLLMs (QBAF + DF-QuAD) | Yes — QBAF is ASPIC+ with no rules, binary relations | No — no provenance, no typed defeat, no sub-arguments |
+| DeLP (Garcia & Simari 2004) | Yes — DeLP arguments are a subset of ASPIC+ | No — no quantitative tags |
+| Carneades proof standards (Gordon) | Yes — proof standards map to tag threshold conditions | Partially — no SL composition |
+| Plain ASPIC+ (Modgil & Prakken 2014) | Yes — set annotation to Boolean | No — no quantitative reasoning |
+| Provenance Datalog (Green et al. 2007) | Yes — Datalog is the evaluation substrate | No — no defeat, no argumentation |
+| Hunter epistemic graphs (2020) | Yes — probability intervals subsumable by SL opinions | No — no argument structure |
+
+Each alternative is recoverable from our architecture by restricting one or more components. This is a form of **representation theorem**: the architecture is general enough to express all known alternatives as projections.
+
+#### 7.5.3 Three-Level Property Framework
+
+We organize the system's properties into three levels — formal guarantees (provable), architectural principles (design criteria), and impossibility constraints (proven tradeoffs that bound what any system can achieve):
+
+**Level 1: Formal Guarantees (non-negotiable, provable)**
+
+| ID | Property | Formal Basis |
+|---|---|---|
+| F1 | Decidability — every query terminates | Datalog data complexity ∈ PTIME (Vardi 1982) |
+| F2 | Polynomial data complexity for grounded semantics | O(\|args\| × \|attacks\|) (Dvořák & Dunne 2018) |
+| F3 | Soundness — accepted arguments are conflict-free | Dung 1995, Definition 6 |
+| F4 | Rationality postulates — closure, direct/indirect consistency | Caminada & Amgoud 2007, Theorems 3-5 |
+| F5 | Convergence — grounded labeling reaches unique fixpoint | Wu, Caminada & Gabbay 2009 |
+
+**Level 2: Architectural Principles (design criteria, grounded in Nyāya epistemology and argumentation theory)**
+
+| ID | Principle | What It Demands |
+|---|---|---|
+| P1 | Argumentation as single structural principle | Defeat, acceptance, and epistemic status from one mechanism |
+| P2 | Structure from theory, magnitudes from data | Nyāya → what to parameterize; DSPy → how much |
+| P3 | Composition derives from the framework | Tag propagation follows SL algebra, not hand-specified formulas |
+| P4 | Graded acceptance native | Continuous tag values, not binary thresholded |
+| P5 | No dead paths | Every component consumed by the inference pipeline |
+| P6 | Structural provenance | Trace every conclusion to sources via argument tree |
+| P7 | Debate modes as parameter variation | Vāda/jalpa/vitaṇḍā = grounded/preferred/stable |
+| P8 | Falsifiable claims only | Claim only what the implementation delivers |
+
+**Level 3: Impossibility Constraints (proven tradeoffs this architecture respects)**
+
+| ID | Constraint | How We Respond |
+|---|---|---|
+| I1 | No semantics satisfies all desirable principles simultaneously (Baroni & Giacomin 2007) | Choose grounded (satisfies admissibility, reinstatement, conflict-freeness; sacrifice I-maximality) |
+| I2 | Cardinality Precedence and Quality Precedence are incompatible (Bonzon et al. 2016) | Choose QP — matches pramāṇa hierarchy (evidence quality > count) |
+| I3 | Six gradual semantics are pairwise incompatible (Amgoud & Beuselinck 2021) | Pick one (SL-based); don't mix |
+| I4 | Why-provenance for recursive Datalog is NP-complete (Bourgaux et al. 2024) | Lazy/on-demand provenance computation, not eager |
+| I5 | Preferred/stable semantics are coNP/NP-complete (Dvořák & Dunne 2018) | Default to grounded (polynomial); preferred/stable for offline analysis only |
+| I6 | No differentiable relaxation of logic is simultaneously differentiable, sound, and tautology-preserving (Giannini et al. 2023) | Keep Datalog symbolic; differentiate only through neural grounding layer |
+| I7 | Conformal prediction gives marginal, not conditional, coverage (Vovk et al. 2005) | Use coverage groups for approximate conditional guarantees |
+
+#### 7.5.4 Architectural Honesty
+
+The architecture is a **principled composite**: ASPIC+ provides the argumentation skeleton, Subjective Logic provides the uncertainty calculus, a product lattice propagates provenance metadata. These components compose pragmatically, not algebraically — the SL operations on (b,d,u) and the lattice operations on metadata are formally separate structures.
+
+This is consistent with how practical argumentation systems are built in the literature (cf. Modgil & Prakken 2018, Toni 2014). Every working argumentation system bolts on preference mechanisms, trust models, and temporal handling. None are "pure." The contribution is not algebraic unification but **architectural minimality**: two composing formalisms instead of six independent ones, with the structural decisions grounded in Nyāya epistemology and the numerical magnitudes amenable to optimization.
+
+#### 7.5.5 Nyāya as Design Ontology — Not Formal Novelty
+
+The Nyāya-to-ASPIC+ mapping (Section 7.2) is a structural correspondence, not a formal isomorphism. The formal content of the engine is standard ASPIC+ with SL-annotated tags computed over Datalog. What Nyāya provides is:
+
+1. **A substantive preference theory** (pramāṇa hierarchy) where ASPIC+ leaves preferences parametric
+2. **Named defeat pathologies** (5 hetvābhāsa types) that improve explanation generation beyond ASPIC+'s 3 generic attack types
+3. **Pre-inferential validation** — the principle that evidence channel applicability should be checked before inference, not after
+4. **Design vocabulary** that constrains architectural decisions and provides principled defaults
+
+These are engineering advantages grounded in 2000 years of epistemological refinement, not claims of new mathematical expressiveness. Every Nyāya concept compiles to an ASPIC+ construct. The value is in the *design guidance*, not in the *formal power*.
 
 ---
 
@@ -895,7 +981,7 @@ Leofante, Toni et al. (KR 2024) identify four specific requirements for computat
   4. "There is equally strong evidence for an opposing view" (satpratipakṣa → symmetric attack)
   5. "A more direct form of evidence overrides this inference" (bādhita → preference defeat)
 
-These are not ad-hoc categories — they are the result of two millennia of epistemological refinement in the Nyāya tradition, and they map precisely to the formal defeat types in ASPIC+ (Section 7.2).
+These are not ad-hoc categories — they are the result of two millennia of epistemological refinement in the Nyāya tradition. Three map exactly to ASPIC+ defeat types (asiddha/savyabhicāra/viruddha → undermining/undercutting/rebutting); two are novel named concepts (bādhita = preference defeat, satpratipakṣa = named deadlock) that ASPIC+ handles implicitly but does not elevate to first-class contestation grounds (Section 7.2).
 
 **(I) Interaction — structured human-machine dialogue:**
 - ArgLLMs: Score modification interface — single interaction mode.

@@ -156,6 +156,16 @@ class ArgumentationFramework:
     ) -> tuple[Optional[EpistemicStatus], ProvenanceTag, list[Argument]]:
         """
         Derive epistemic status for a conclusion from the extension.
+
+        Status derives primarily from LABELS (IN/OUT/UNDECIDED), with
+        tag quality used only for within-IN disambiguation.  (Fixes I-01)
+
+        - IN + strong tag  → ESTABLISHED
+        - IN + moderate tag → HYPOTHESIS
+        - IN + weak tag    → PROVISIONAL
+        - UNDECIDED        → OPEN
+        - All OUT          → CONTESTED (with heuristic preferred check)
+
         Returns (EpistemicStatus | None, combined ProvenanceTag, relevant arguments).
         """
         args_for = [
@@ -166,34 +176,37 @@ class ArgumentationFramework:
         if not args_for:
             return (None, ProvenanceTag.zero(), [])
 
-        # Combine tags of accepted arguments via ⊕
         accepted = [
             a for a in args_for
             if self.labels.get(a.id) == Label.IN
         ]
+        undecided = [
+            a for a in args_for
+            if self.labels.get(a.id) == Label.UNDECIDED
+        ]
 
-        if not accepted:
-            undecided = [
-                a for a in args_for
-                if self.labels.get(a.id) == Label.UNDECIDED
-            ]
-            if undecided:
-                combined = undecided[0].tag
-                for a in undecided[1:]:
-                    combined = ProvenanceTag.oplus(combined, a.tag)
-                return (combined.epistemic_status(), combined, undecided)
-            else:
-                # All OUT — contested
-                combined = args_for[0].tag
-                for a in args_for[1:]:
-                    combined = ProvenanceTag.oplus(combined, a.tag)
-                return (EpistemicStatus.CONTESTED, combined, args_for)
+        if accepted:
+            combined = accepted[0].tag
+            for a in accepted[1:]:
+                combined = ProvenanceTag.oplus(combined, a.tag)
+            # Within-IN disambiguation by tag quality
+            status = combined.epistemic_status()
+            return (status, combined, accepted)
 
-        combined = accepted[0].tag
-        for a in accepted[1:]:
+        if undecided:
+            combined = undecided[0].tag
+            for a in undecided[1:]:
+                combined = ProvenanceTag.oplus(combined, a.tag)
+            return (EpistemicStatus.OPEN, combined, undecided)
+
+        # All OUT — check if potentially reinstatable (approximate preferred)
+        combined = args_for[0].tag
+        for a in args_for[1:]:
             combined = ProvenanceTag.oplus(combined, a.tag)
-
-        return (combined.epistemic_status(), combined, accepted)
+        # All arguments OUT — conservatively mark CONTESTED.
+        # Full preferred semantics (NP-hard) would be needed to distinguish
+        # "defensibly reinstatable" from "definitively defeated".
+        return (EpistemicStatus.CONTESTED, combined, args_for)
 
     # ── Preferred Semantics (Phase 4) ──
 

@@ -585,7 +585,7 @@ def main():
     section("STAGE 11: Final Response Assembly")
     final_response = {
         "query_text": SAMPLE_QUERY,
-        "contestation_mode": "vada",
+        "semantics": "grounded",  # always vāda (polynomial)
         "status": "completed",
         "response": response.response if response else "Synthesis failed",
         "sources": response.sources_cited if response else [],

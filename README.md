@@ -135,7 +135,6 @@ grounding = GroundingPipeline(knowledge_store=ks)
 engine = AnvikshikiEngineV4(
     knowledge_store=ks,
     grounding_pipeline=grounding,
-    contestation_mode="vada",
 )
 
 result = engine(
@@ -193,7 +192,7 @@ anvikshiki_ecosystem/
 │   │   ├── business_expert.yaml  # Business strategy KB (11 vyāptis, 8 hetvābhāsas)
 │   │   ├── sample_architecture.yaml
 │   │   ├── business_expert_trace.md
-│   │   └── practical_useage.md   # Usage examples (Levels 1–3)
+│   │   └── practical_usage.md   # Usage examples (Levels 1–3)
 │   └── tests/                    # 249 tests, 0 LLM calls needed
 │       ├── test_engine_v4.py
 │       ├── test_t2_compiler_v4.py
@@ -225,14 +224,14 @@ anvikshiki_ecosystem/
 │       └── stage3_reference_bank.md      # Source verification
 │
 ├── docs/
-│   ├── eli5_trace.md                     # ELI5 engine walkthrough
-│   ├── eli5_trace_e2e.md                 # End-to-end trace with augmented KB
-│   ├── pipeline_flowchart_llama3.2.md    # Full pipeline flowchart
+│   ├── pipeline_eli5.md                     # ELI5 engine walkthrough
+│   ├── pipeline_eli5_full.md                 # End-to-end trace with augmented KB
+│   ├── pipeline_flowchart_path_b.md    # Full pipeline flowchart
 │   ├── predicate_extraction_design.md    # Extraction module design doc
 │   └── predicate_extraction_theory.md    # Pragmatics-based extraction theory
 │
 ├── theory/
-│   ├── thesis2_v1.md             # Current thesis: ASPIC+ over provenance semirings
+│   ├── thesis_v4_r1.md             # Current thesis: ASPIC+ over provenance semirings
 │   ├── BUILD_GUIDE.md            # Implementation manual (DSPy 3.1.x)
 │   ├── ecosystem_evolution.md    # Full project evolution log (meta-prompt → engine)
 │   └── history/                  # All historical versions

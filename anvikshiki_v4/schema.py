@@ -54,7 +54,29 @@ class DecayRisk(str, Enum):
     CRITICAL = "critical"
 
 
+class AugmentationOrigin(str, Enum):
+    """How a vyapti was produced."""
+
+    CURATED = "curated"                    # Hand-authored in base KB
+    GUIDE_EXTRACTED = "guide_extracted"     # T2b: extracted from guide prose
+    LLM_PARAMETRIC = "llm_parametric"      # T3b v1: LLM parametric knowledge
+    WEB_SOURCED = "web_sourced"            # T3b v2: web search evidence
+    HITL_PROMOTED = "hitl_promoted"        # T3b v3: promoted from shadow KB
+
+
 # ─── Component Models ────────────────────────────────────────
+
+
+class AugmentationMetadata(BaseModel):
+    """Provenance metadata for non-curated vyaptis."""
+
+    origin: AugmentationOrigin
+    generated_at: Optional[datetime] = None
+    generating_query: str = ""
+    framework_vyaptis_used: list[str] = Field(default_factory=list)
+    source_chapter_ids: list[str] = Field(default_factory=list)
+    parent_vyapti_id: Optional[str] = None
+    generation_model: str = ""
 
 
 class Confidence(BaseModel):
@@ -90,6 +112,9 @@ class Vyapti(BaseModel):
     # Datalog-compilable fields
     antecedents: list[str] = Field(default_factory=list, description="Predicate names required")
     consequent: str = Field(default="", description="Predicate name produced")
+
+    # Origin tracking (None = curated base KB, backward-compatible)
+    augmentation_metadata: Optional[AugmentationMetadata] = None
 
 
 class Hetvabhasa(BaseModel):
@@ -147,3 +172,21 @@ class KnowledgeStore(BaseModel):
     dependency_graph: dict[str, list[str]] = Field(default_factory=dict)
     chapter_fingerprints: dict[str, ChapterFingerprint] = Field(default_factory=dict)
     reference_bank: dict[str, dict] = Field(default_factory=dict)
+
+    # Domain-aware contrariness pairs (fixes audit III-02)
+    # Each pair is [pred_a, pred_b] meaning they are domain-contradictory
+    # e.g. ["value_creation", "value_destruction"]
+    contrariness_pairs: list[list[str]] = Field(
+        default_factory=list,
+        description="Domain-specific contradictory predicate pairs beyond syntactic not_ negation",
+    )
+
+    # T2b compile-time extensions (populated by compile_t2b)
+    fine_grained_vyapti_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs of vyaptis extracted from guide prose (not base KB)",
+    )
+    synonym_table: dict[str, str] = Field(
+        default_factory=dict,
+        description="Predicate alias → canonical name, for semantic coverage matching",
+    )

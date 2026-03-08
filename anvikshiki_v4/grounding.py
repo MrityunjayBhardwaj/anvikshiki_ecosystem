@@ -17,10 +17,18 @@ DSPy 3.x: Uses dspy.ChainOfThought with typed signatures.
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 import dspy
 from pydantic import BaseModel, Field
+
+
+class GroundingMode(str, Enum):
+    """Configurable grounding rigor."""
+    MINIMAL = "minimal"   # 1 call: Layer 1 + single GroundQuery (temp=0)
+    PARTIAL = "partial"   # N=3 ensemble + round-trip (no solver)
+    FULL = "full"         # N=5 ensemble + round-trip + solver feedback
 
 from .datalog_engine import DatalogEngine
 from .schema import KnowledgeStore
@@ -148,48 +156,95 @@ class OntologySnippetBuilder:
 
 class GroundingPipeline(dspy.Module):
     """
-    The complete five-layer grounding defense.
+    Five-layer grounding defense with configurable rigor.
 
-    Layers 1-2: Always active (zero/minimal cost)
-    Layer 3:    Always active (5x grounding cost — ensemble)
-    Layer 4:    Conditional (ensemble agreement < 0.9)
-    Layer 5:    Conditional (solver returns validation errors)
+    Modes:
+      MINIMAL — 1 LLM call (Layer 1 + single GroundQuery, temperature=0)
+      PARTIAL — N=3 ensemble (Layers 1-4, no solver feedback)
+      FULL    — N=5 ensemble + round-trip + solver feedback (Layers 1-5)
+
+    Mode can be set at init time or overridden per forward() call.
     """
 
     def __init__(
         self,
         knowledge_store: KnowledgeStore,
         datalog_engine: Optional[DatalogEngine] = None,
+        mode: GroundingMode = GroundingMode.FULL,
     ):
         super().__init__()
         self.ks = knowledge_store
         self.engine = datalog_engine
+        self.mode = mode
 
         # Layer 1
         self.snippet_builder = OntologySnippetBuilder()
 
-        # Layer 3: Ensemble grounding (5 calls)
+        # Layer 3: Ensemble grounding
         self.grounder = dspy.ChainOfThought(GroundQuery)
 
         # Layer 4: Round-trip verification
         self.verbalizer = dspy.ChainOfThought(VerbalizePredicates)
         self.checker = dspy.ChainOfThought(CheckFaithfulness)
 
-    def forward(self, query: str) -> GroundingResult:
-        # ── LAYER 1: Build ontology-constrained prompt ──
+    def forward(
+        self,
+        query: str,
+        mode: Optional[GroundingMode] = None,
+    ) -> GroundingResult:
+        active_mode = mode or self.mode
+
+        # ── LAYER 1: Build ontology-constrained prompt (always on) ──
         snippet = self.snippet_builder.build(self.ks)
 
-        # ── LAYERS 2+3: Ensemble grounding (N=5) ──
-        # Layer 2 (grammar constraint) is applied at the serving level
-        # if using SGLang/vLLM with XGrammar — transparent to DSPy.
-        # For API models, DSPy's adapter handles structured output.
+        if active_mode == GroundingMode.MINIMAL:
+            return self._forward_minimal(query, snippet)
+        elif active_mode == GroundingMode.PARTIAL:
+            return self._forward_ensemble(query, snippet, n=3, use_solver=False)
+        else:
+            return self._forward_ensemble(query, snippet, n=5, use_solver=True)
+
+    # ── MINIMAL: 1 call, temperature=0 ──
+
+    def _forward_minimal(self, query: str, snippet: str) -> GroundingResult:
+        g = self.grounder(
+            query=query,
+            ontology_snippet=snippet,
+            domain_type=self.ks.domain_type.value,
+            config={"temperature": 0},
+        )
+        candidate_preds = g.predicates
+        candidate_vyaptis = g.relevant_vyaptis
+
+        warnings: list[str] = []
+        warnings.extend(self._check_scope(candidate_preds))
+        warnings.extend(self._check_decay(candidate_vyaptis))
+
+        return GroundingResult(
+            predicates=candidate_preds,
+            confidence=1.0,
+            disputed=[],
+            warnings=warnings,
+            refinement_rounds=0,
+            clarification_needed=False,
+        )
+
+    # ── PARTIAL / FULL: N-ensemble + optional round-trip + optional solver ──
+
+    def _forward_ensemble(
+        self,
+        query: str,
+        snippet: str,
+        n: int,
+        use_solver: bool,
+    ) -> GroundingResult:
+        # Layer 2 (grammar constraint) applied at serving level — transparent.
         groundings = []
-        for i in range(5):
+        for i in range(n):
             g = self.grounder(
                 query=query,
                 ontology_snippet=snippet,
                 domain_type=self.ks.domain_type.value,
-                # rollout_id bypasses cache for diverse outputs
                 config={"rollout_id": i, "temperature": 0.7},
             )
             groundings.append(g)
@@ -232,13 +287,12 @@ class GroundingPipeline(dspy.Module):
                 verbalized_predicates=verb.verbalization,
             )
             if not faith.faithful:
-                # Drop disputed predicates if round-trip fails
                 candidate_preds = sorted(consensus_preds)
                 confidence = 1.0 if consensus_preds else 0.0
 
-        # ── LAYER 5: Solver-feedback refinement ──
+        # ── LAYER 5: Solver-feedback refinement (FULL only) ──
         refinement_rounds = 0
-        if self.engine is not None:
+        if use_solver and self.engine is not None:
             for _ in range(3):
                 errors = self.engine.validate_predicates(candidate_preds)
                 if not errors:

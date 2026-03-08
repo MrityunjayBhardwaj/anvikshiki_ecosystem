@@ -41,10 +41,34 @@ class Label(Enum):
 @dataclass(frozen=True)
 class ProvenanceTag:
     """
-    Semiring-valued annotation on arguments.
-    Extends Subjective Logic opinions (Jøsang 2016) with provenance metadata.
+    Annotation on arguments combining two independent structures:
 
-    Invariant: belief + disbelief + uncertainty ≈ 1.0 (within tolerance 0.05)
+    Structure 1: Subjective Logic opinion (b, d, u)
+        Josang (2016) trust discounting (tensor) and cumulative fusion (oplus).
+        b + d + u = 1.0 invariant.  Tensor is associative with identity one().
+        NOTE: This is NOT a full semiring — distributivity fails for SL
+        (Josang 2016, §3.6).  We use it as a commutative monoid pair.
+
+    Structure 2: Provenance metadata product lattice
+        Four fields form a bounded product lattice L = L_p × L_t × L_d × L_depth:
+          - pramana_type: UPAMANA(1) < SABDA(2) < ANUMANA(3) < PRATYAKSA(4)
+          - trust_score:  [0,1] with standard ≤
+          - decay_factor: [0,1] with standard ≤
+          - derivation_depth: ℕ with standard ≤
+
+        Composition axioms (consistent across all four fields):
+          tensor (sequential) = meet (∧) = min  — weakest-link principle:
+              chaining through inference cannot strengthen metadata.
+          oplus (parallel)    = join (∨) = max  — best-source principle:
+              accruing independent arguments takes the strongest metadata.
+
+        Exception: derivation_depth uses + for tensor (chains add depth)
+        and min for oplus (parallel paths report the shallowest).
+
+    These two structures compose independently — metadata lattice ops
+    do NOT interact with SL opinion arithmetic.
+
+    Invariant: belief + disbelief + uncertainty ≈ 1.0 (tolerance 0.05)
     """
     belief: float = 1.0              # Evidence FOR [0,1]
     disbelief: float = 0.0           # Evidence AGAINST [0,1]
@@ -79,25 +103,23 @@ class ProvenanceTag:
     def tensor(a: 'ProvenanceTag', b: 'ProvenanceTag') -> 'ProvenanceTag':
         """⊗: Sequential composition (chaining through inference).
 
-        When argument A supports a premise of argument B, the combined
-        evidence attenuates through the chain.
+        SL opinion: Josang trust discounting (Josang 2016, §10.3).
+          Preserves b+d+u=1 exactly.  Associative.  Identity = one().
+          Disbelief ATTENUATES: d_result = a.b × b.d ≤ b.d.
+
+        Metadata lattice: meet (∧) = min for pramana, trust, decay.
+          derivation_depth uses + (chains accumulate depth).
+          Weakest-link: chaining cannot strengthen provenance.
         """
-        raw_b = a.belief * b.belief
-        raw_d = min(1.0, a.disbelief + b.disbelief
-                     - a.disbelief * b.disbelief)
-        raw_u = min(1.0, a.uncertainty + b.uncertainty
-                     - a.uncertainty * b.uncertainty)
-        # Normalize to maintain b + d + u = 1.0 invariant
-        total = raw_b + raw_d + raw_u
-        if total > 0:
-            raw_b, raw_d, raw_u = raw_b / total, raw_d / total, raw_u / total
-        else:
-            raw_b, raw_d, raw_u = 0.0, 0.0, 1.0
+        new_b = a.belief * b.belief
+        new_d = a.belief * b.disbelief
+        new_u = a.disbelief + a.uncertainty + a.belief * b.uncertainty
         return ProvenanceTag(
-            belief=raw_b,
-            disbelief=raw_d,
-            uncertainty=raw_u,
+            belief=new_b,
+            disbelief=new_d,
+            uncertainty=new_u,
             source_ids=a.source_ids | b.source_ids,
+            # Metadata: monotone lattice, NOT part of semiring axioms
             pramana_type=PramanaType(min(a.pramana_type, b.pramana_type)),
             trust_score=min(a.trust_score, b.trust_score),
             decay_factor=min(a.decay_factor, b.decay_factor),
@@ -108,30 +130,56 @@ class ProvenanceTag:
     def oplus(a: 'ProvenanceTag', b: 'ProvenanceTag') -> 'ProvenanceTag':
         """⊕: Parallel composition (accrual of independent arguments).
 
-        Uses cumulative fusion (Jøsang 2016) — non-idempotent, so
-        multiple independent arguments strengthen the conclusion.
+        SL opinion: Cumulative fusion (Josang 2016, §12.3).
+          Non-idempotent — multiple independent arguments strengthen.
+          Source overlap discount: interpolate between fusion (independent)
+          and averaging (dependent) by overlap ratio.
+
+        Metadata lattice: join (∨) = max for pramana, trust, decay.
+          derivation_depth uses min (parallel paths report shallowest).
+          Best-source: accrual takes the strongest provenance.
         """
+        # Source overlap discount (III-07)
+        if a.source_ids and b.source_ids:
+            overlap = len(a.source_ids & b.source_ids)
+            total_sources = len(a.source_ids | b.source_ids)
+            overlap_ratio = overlap / total_sources if total_sources > 0 else 0.0
+        else:
+            overlap_ratio = 0.0
+
         kappa = a.uncertainty + b.uncertainty \
             - a.uncertainty * b.uncertainty
         if kappa < 1e-10:
             # Both fully certain — weighted average
-            new_b = (a.belief + b.belief) / 2
-            new_d = (a.disbelief + b.disbelief) / 2
-            new_u = 0.0
+            fused_b = (a.belief + b.belief) / 2
+            fused_d = (a.disbelief + b.disbelief) / 2
+            fused_u = 0.0
         else:
-            new_b = (a.belief * b.uncertainty
-                     + b.belief * a.uncertainty) / kappa
-            new_d = (a.disbelief * b.uncertainty
-                     + b.disbelief * a.uncertainty) / kappa
-            new_u = (a.uncertainty * b.uncertainty) / kappa
+            fused_b = (a.belief * b.uncertainty
+                       + b.belief * a.uncertainty) / kappa
+            fused_d = (a.disbelief * b.uncertainty
+                       + b.disbelief * a.uncertainty) / kappa
+            fused_u = (a.uncertainty * b.uncertainty) / kappa
+
+        # Interpolate: independent fusion <-> simple average by overlap
+        if overlap_ratio > 0:
+            avg_b = (a.belief + b.belief) / 2
+            avg_d = (a.disbelief + b.disbelief) / 2
+            avg_u = (a.uncertainty + b.uncertainty) / 2
+            new_b = (1 - overlap_ratio) * fused_b + overlap_ratio * avg_b
+            new_d = (1 - overlap_ratio) * fused_d + overlap_ratio * avg_d
+            new_u = (1 - overlap_ratio) * fused_u + overlap_ratio * avg_u
+        else:
+            new_b, new_d, new_u = fused_b, fused_d, fused_u
 
         return ProvenanceTag(
             belief=min(1.0, new_b),
             disbelief=min(1.0, new_d),
             uncertainty=max(0.0, new_u),
             source_ids=a.source_ids | b.source_ids,
+            # Metadata: monotone lattice
             pramana_type=PramanaType(max(a.pramana_type, b.pramana_type)),
-            trust_score=1 - (1 - a.trust_score) * (1 - b.trust_score),
+            trust_score=max(a.trust_score, b.trust_score),
             decay_factor=max(a.decay_factor, b.decay_factor),
             derivation_depth=min(a.derivation_depth, b.derivation_depth),
         )
@@ -154,8 +202,9 @@ class ProvenanceTag:
     def epistemic_status(self) -> 'EpistemicStatus':
         """Derive epistemic status from tag values.
 
-        NOTE: These thresholds are DSPy-optimizable parameters.
-        Defaults are reasonable starting points, not final values.
+        WARNING: These are hand-tuned thresholds with no calibration guarantee.
+        Planned replacement: conformal prediction classifier (see
+        discussions/towards-categorical-uq-with-conformal-predictions.md).
         """
         if self.belief > 0.8 and self.uncertainty <= 0.1:
             return EpistemicStatus.ESTABLISHED
