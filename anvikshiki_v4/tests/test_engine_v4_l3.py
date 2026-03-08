@@ -131,7 +131,7 @@ class TestFullPipelineVada:
         engine = AnvikshikiEngineV4(
             knowledge_store=business_ks,
             grounding_pipeline=grounding,
-            contestation_mode="vada",
+
         )
         engine.synthesizer = make_mock_synthesizer()
 
@@ -202,15 +202,14 @@ class TestFullPipelineVada:
         result = engine.forward(query="test", retrieved_chunks=["x"])
         assert result.grounding_confidence == 0.77
 
-    def test_contestation_mode_is_vada(self, business_ks):
-        """Contestation analysis reports mode=vada."""
+    def test_contestation_analysis_present(self, business_ks):
+        """Contestation analysis reports vāda results."""
         grounding = MockGrounding(
             predicates=["positive_unit_economics"],
         )
         engine = AnvikshikiEngineV4(
             knowledge_store=business_ks,
             grounding_pipeline=grounding,
-            contestation_mode="vada",
         )
         engine.synthesizer = make_mock_synthesizer()
 
@@ -280,67 +279,6 @@ class TestFullPipelineVada:
         derived_conclusions = set(result.provenance.keys())
         assert "value_creation" in derived_conclusions
         assert "long_term_value" in derived_conclusions
-
-
-class TestFullPipelineJalpa:
-    """Test pipeline in jalpa (preferred semantics) mode."""
-
-    def test_jalpa_mode_output(self, business_ks):
-        """Jalpa mode produces preferred extension analysis."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
-        )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
-            grounding_pipeline=grounding,
-            contestation_mode="jalpa",
-        )
-        engine.synthesizer = make_mock_synthesizer()
-
-        result = engine.forward(query="jalpa test", retrieved_chunks=["x"])
-
-        assert result.contestation["mode"] == "jalpa"
-        assert "num_preferred" in result.contestation
-        assert "defensible_positions" in result.contestation
-        assert "counter_arguments" in result.contestation
-
-    def test_jalpa_extension_size(self, business_ks):
-        """Jalpa still produces IN-labeled arguments."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics"],
-        )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
-            grounding_pipeline=grounding,
-            contestation_mode="jalpa",
-        )
-        engine.synthesizer = make_mock_synthesizer()
-
-        result = engine.forward(query="test", retrieved_chunks=["x"])
-        assert result.extension_size > 0
-
-
-class TestFullPipelineVitanda:
-    """Test pipeline in vitaṇḍā (stable semantics) mode."""
-
-    def test_vitanda_mode_output(self, business_ks):
-        """Vitaṇḍā mode produces vulnerability audit."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
-        )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
-            grounding_pipeline=grounding,
-            contestation_mode="vitanda",
-        )
-        engine.synthesizer = make_mock_synthesizer()
-
-        result = engine.forward(query="vitanda test", retrieved_chunks=["x"])
-
-        assert result.contestation["mode"] == "vitanda"
-        assert "num_stable" in result.contestation
-        assert "vulnerabilities" in result.contestation
-        assert "undefended" in result.contestation
 
 
 class TestClarificationEarlyReturn:
@@ -667,59 +605,6 @@ class TestSynthesisReward:
 
 
 # ════════════════════════════════════════════════════════════════
-# Cross-Mode Consistency Tests
-# ════════════════════════════════════════════════════════════════
-
-
-class TestCrossModeConsistency:
-    """Verify invariants across contestation modes."""
-
-    def _run_all_modes(self, business_ks, predicates):
-        """Run the same predicates through vada, jalpa, vitanda."""
-        results = {}
-        for mode in ("vada", "jalpa", "vitanda"):
-            grounding = MockGrounding(predicates=predicates)
-            engine = AnvikshikiEngineV4(
-                knowledge_store=business_ks,
-                grounding_pipeline=grounding,
-                contestation_mode=mode,
-            )
-            engine.synthesizer = make_mock_synthesizer()
-            results[mode] = engine.forward(
-                query=f"{mode} test", retrieved_chunks=["x"]
-            )
-        return results
-
-    def test_same_grounding_confidence(self, business_ks):
-        """All modes report the same grounding confidence."""
-        results = self._run_all_modes(
-            business_ks, ["positive_unit_economics", "growing_market"]
-        )
-        assert results["vada"].grounding_confidence == 0.85
-        assert results["jalpa"].grounding_confidence == 0.85
-        assert results["vitanda"].grounding_confidence == 0.85
-
-    def test_same_provenance_keys(self, business_ks):
-        """All modes derive the same set of conclusions."""
-        results = self._run_all_modes(
-            business_ks, ["positive_unit_economics", "growing_market"]
-        )
-        # Provenance and uncertainty should cover same conclusions
-        vada_concs = set(results["vada"].provenance.keys())
-        jalpa_concs = set(results["jalpa"].provenance.keys())
-        vitanda_concs = set(results["vitanda"].provenance.keys())
-        assert vada_concs == jalpa_concs == vitanda_concs
-
-    def test_extension_sizes_consistent(self, business_ks):
-        """All modes have non-negative extension sizes."""
-        results = self._run_all_modes(
-            business_ks, ["positive_unit_economics"]
-        )
-        for mode, r in results.items():
-            assert r.extension_size >= 0, f"{mode} has negative extension"
-
-
-# ════════════════════════════════════════════════════════════════
 # Edge Cases
 # ════════════════════════════════════════════════════════════════
 
@@ -882,7 +767,7 @@ class TestLivePipeline:
         engine = AnvikshikiEngineV4(
             knowledge_store=business_ks,
             grounding_pipeline=grounding,
-            contestation_mode="vada",
+
         )
 
         result = engine.forward(
@@ -934,7 +819,7 @@ class TestLivePipeline:
         engine = AnvikshikiEngineV4(
             knowledge_store=business_ks,
             grounding_pipeline=grounding,
-            contestation_mode="vada",
+
         )
         # Use real synthesizer (no mock) — this is the LLM test
         result = engine.forward(

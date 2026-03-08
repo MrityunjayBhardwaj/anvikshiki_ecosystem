@@ -16,6 +16,7 @@ from .uncertainty import compute_uncertainty_v4
 from .contestation import ContestationManager
 from .grounding import GroundingMode
 from .reasoning_lm import ReasoningLM
+from .engine_params import EngineParams, CompilerParams, SynthesisParams, GroundingParams
 
 __all__ = [
     "ProvenanceTag", "PramanaType", "RuleType", "EpistemicStatus",
@@ -32,4 +33,5 @@ __all__ = [
     "ContestationManager",
     "GroundingMode",
     "ReasoningLM",
+    "EngineParams", "CompilerParams", "SynthesisParams", "GroundingParams",
 ]

@@ -116,7 +116,6 @@ def initialize_engine(
     kb_yaml_path: str,
     guide_dir: Optional[str] = None,
     guide_text: Optional[dict[str, str]] = None,
-    contestation_mode: str = "vada",
     embedding_model: str = "openai/text-embedding-3-small",
     retriever_k: int = 5,
 ) -> tuple[AnvikshikiEngineV4, CompileArtifacts]:
@@ -129,7 +128,6 @@ def initialize_engine(
                    guide text is loaded from here.
         guide_text: Pre-loaded guide text dict (chapter_id → markdown).
                     Takes precedence over guide_dir.
-        contestation_mode: "vada", "jalpa", or "vitanda"
         embedding_model: Model for T3a retriever embeddings
         retriever_k: Default number of chunks to retrieve
 
@@ -182,7 +180,6 @@ def initialize_engine(
     engine = AnvikshikiEngineV4(
         knowledge_store=active_ks,
         grounding_pipeline=grounding_pipeline,
-        contestation_mode=contestation_mode,
         coverage_analyzer=coverage_analyzer,
         augmentation_pipeline=augmentation_pipeline,
         t3a_retriever=t3a_retriever,

@@ -135,7 +135,6 @@ grounding = GroundingPipeline(knowledge_store=ks)
 engine = AnvikshikiEngineV4(
     knowledge_store=ks,
     grounding_pipeline=grounding,
-    contestation_mode="vada",
 )
 
 result = engine(

@@ -8,15 +8,11 @@ import math
 from itertools import product as iter_product
 from datetime import datetime
 from .schema import KnowledgeStore, CausalStatus
-from .schema import EpistemicStatus as KBEpistemicStatus
 from .schema_v4 import (
     Argument, Attack, ProvenanceTag, PramanaType
 )
 from .argumentation import ArgumentationFramework
-
-# Maximum sub-argument combinations per rule to avoid combinatorial explosion
-MAX_ARGUMENT_COMBOS_PER_RULE = 5
-
+from .engine_params import CompilerParams, DEFAULT_PARAMS
 
 # ── Tag Construction ──
 
@@ -27,15 +23,9 @@ PRAMANA_MAP = {
     CausalStatus.REGULATORY: PramanaType.SABDA,
 }
 
-BELIEF_MAP = {
-    KBEpistemicStatus.ESTABLISHED: (0.95, 0.0, 0.05),
-    KBEpistemicStatus.WORKING_HYPOTHESIS: (0.6, 0.1, 0.3),
-    KBEpistemicStatus.GENUINELY_OPEN: (0.2, 0.2, 0.6),
-    KBEpistemicStatus.ACTIVELY_CONTESTED: (0.4, 0.4, 0.2),
-}
-
-DECAY_HALF_LIFE_DAYS = 365      # DSPy-optimizable
-DECAY_UNDERMINE_THRESHOLD = 0.3  # DSPy-optimizable
+# Module-level defaults from centralized params (engine_params.py).
+# Functions accept an optional CompilerParams to override.
+_DEFAULT_COMPILER = DEFAULT_PARAMS.compiler
 
 
 def _predicate_name(pred: str) -> str:
@@ -106,15 +96,21 @@ def _are_contrary(a: str, b: str, ks: KnowledgeStore | None = None) -> bool:
     return False
 
 
-def _build_rule_tag(vyapti, knowledge_store: KnowledgeStore) -> ProvenanceTag:
+def _build_rule_tag(
+    vyapti,
+    knowledge_store: KnowledgeStore,
+    params: CompilerParams = _DEFAULT_COMPILER,
+) -> ProvenanceTag:
     """Build a provenance tag for a vyāpti from its KB metadata."""
-    b, d, u = BELIEF_MAP.get(vyapti.epistemic_status, (0.5, 0.1, 0.4))
+    b, d, u = params.belief_map.get(
+        vyapti.epistemic_status, params.belief_fallback
+    )
     trust = vyapti.confidence.formulation * vyapti.confidence.existence
 
     decay = 1.0
     if vyapti.last_verified:
         age_days = (datetime.now() - vyapti.last_verified).days
-        decay = math.exp(-0.693 * age_days / DECAY_HALF_LIFE_DAYS)
+        decay = math.exp(-params.LN2 * age_days / params.decay_half_life_days)
 
     return ProvenanceTag(
         belief=b, disbelief=d, uncertainty=u,
@@ -135,7 +131,10 @@ def _deep_copy_af(af: ArgumentationFramework) -> ArgumentationFramework:
     return copy.deepcopy(af)
 
 
-def precompile_kb(knowledge_store: KnowledgeStore) -> ArgumentationFramework:
+def precompile_kb(
+    knowledge_store: KnowledgeStore,
+    params: CompilerParams = _DEFAULT_COMPILER,
+) -> ArgumentationFramework:
     """Phase 1: Build AF from KB rules only (no query facts).
 
     Call once per KB, cache the result.  Query-specific facts are
@@ -144,11 +143,10 @@ def precompile_kb(knowledge_store: KnowledgeStore) -> ArgumentationFramework:
     """
     af = ArgumentationFramework()
 
-    MAX_ITERATIONS = 100
-    for _ in range(MAX_ITERATIONS):
+    for _ in range(params.max_fixpoint_iterations):
         prev_count = len(af.arguments)
-        _derive_rule_arguments(af, knowledge_store)
-        _derive_attacks(af, knowledge_store)
+        _derive_rule_arguments(af, knowledge_store, params)
+        _derive_attacks(af, knowledge_store, params)
         if len(af.arguments) == prev_count:
             break
 
@@ -159,6 +157,7 @@ def compile_t2(
     knowledge_store: KnowledgeStore,
     query_facts: list[dict],
     precompiled_af: ArgumentationFramework | None = None,
+    params: CompilerParams = _DEFAULT_COMPILER,
 ) -> ArgumentationFramework:
     """
     Build the argumentation framework from KB + query facts.
@@ -202,11 +201,10 @@ def compile_t2(
         ))
 
     # ── Steps 2-4: Forward chain with fixpoint ──
-    MAX_ITERATIONS = 100
-    for _ in range(MAX_ITERATIONS):
+    for _ in range(params.max_fixpoint_iterations):
         prev_count = len(af.arguments)
-        _derive_rule_arguments(af, knowledge_store)
-        _derive_attacks(af, knowledge_store)
+        _derive_rule_arguments(af, knowledge_store, params)
+        _derive_attacks(af, knowledge_store, params)
         if len(af.arguments) == prev_count:
             break
 
@@ -216,11 +214,12 @@ def compile_t2(
 def _derive_rule_arguments(
     af: ArgumentationFramework,
     ks: KnowledgeStore,
+    params: CompilerParams = _DEFAULT_COMPILER,
 ):
     """Create rule-based arguments for all applicable vyāptis.
 
     Builds ALL sub-argument combinations (not just the strongest),
-    capped at MAX_ARGUMENT_COMBOS_PER_RULE per rule to avoid
+    capped at params.max_argument_combos_per_rule per rule to avoid
     combinatorial explosion.  (Fixes audit III-03)
 
     Tracks (rule_id, sub_argument_ids) to prevent cyclic re-derivation.
@@ -254,9 +253,9 @@ def _derive_rule_arguments(
         combos.sort(
             key=lambda c: sum(a.tag.belief for a in c), reverse=True
         )
-        combos = combos[:MAX_ARGUMENT_COMBOS_PER_RULE]
+        combos = combos[:params.max_argument_combos_per_rule]
 
-        rule_tag = _build_rule_tag(v, ks)
+        rule_tag = _build_rule_tag(v, ks, params)
         is_strict = v.causal_status.value in ("definitional", "structural")
 
         for combo in combos:
@@ -287,6 +286,7 @@ def _derive_rule_arguments(
 def _derive_attacks(
     af: ArgumentationFramework,
     ks: KnowledgeStore,
+    params: CompilerParams = _DEFAULT_COMPILER,
 ):
     """Derive all three attack types from AF structure."""
     existing_attacks = {
@@ -367,7 +367,7 @@ def _derive_attacks(
 
     # 3c. Undermining attacks (asiddha): decay-expired premises
     for a in list(af.arguments.values()):
-        if a.tag.decay_factor >= DECAY_UNDERMINE_THRESHOLD:
+        if a.tag.decay_factor >= params.decay_undermine_threshold:
             continue
         stale_conclusion = f"_stale_{a.id}"
         if any(arg.conclusion == stale_conclusion

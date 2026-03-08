@@ -41,18 +41,34 @@ class Label(Enum):
 @dataclass(frozen=True)
 class ProvenanceTag:
     """
-    Annotation on arguments combining two structures:
+    Annotation on arguments combining two independent structures:
 
-    1. Subjective Logic opinion (b, d, u) — forms a semiring under
-       tensor (Josang deduction) and oplus (cumulative fusion).
-    2. Provenance metadata (pramana_type, trust_score, decay_factor,
-       derivation_depth) — propagates via a monotone product lattice.
+    Structure 1: Subjective Logic opinion (b, d, u)
+        Josang (2016) trust discounting (tensor) and cumulative fusion (oplus).
+        b + d + u = 1.0 invariant.  Tensor is associative with identity one().
+        NOTE: This is NOT a full semiring — distributivity fails for SL
+        (Josang 2016, §3.6).  We use it as a commutative monoid pair.
 
-    These compose pragmatically, not algebraically.  Semiring axioms
-    (associativity, distributivity) hold for (b,d,u) only.  Metadata
-    uses consistent lattice ops: tensor=min, oplus=max for all fields.
+    Structure 2: Provenance metadata product lattice
+        Four fields form a bounded product lattice L = L_p × L_t × L_d × L_depth:
+          - pramana_type: UPAMANA(1) < SABDA(2) < ANUMANA(3) < PRATYAKSA(4)
+          - trust_score:  [0,1] with standard ≤
+          - decay_factor: [0,1] with standard ≤
+          - derivation_depth: ℕ with standard ≤
 
-    Invariant: belief + disbelief + uncertainty ≈ 1.0 (within tolerance 0.05)
+        Composition axioms (consistent across all four fields):
+          tensor (sequential) = meet (∧) = min  — weakest-link principle:
+              chaining through inference cannot strengthen metadata.
+          oplus (parallel)    = join (∨) = max  — best-source principle:
+              accruing independent arguments takes the strongest metadata.
+
+        Exception: derivation_depth uses + for tensor (chains add depth)
+        and min for oplus (parallel paths report the shallowest).
+
+    These two structures compose independently — metadata lattice ops
+    do NOT interact with SL opinion arithmetic.
+
+    Invariant: belief + disbelief + uncertainty ≈ 1.0 (tolerance 0.05)
     """
     belief: float = 1.0              # Evidence FOR [0,1]
     disbelief: float = 0.0           # Evidence AGAINST [0,1]
@@ -87,17 +103,14 @@ class ProvenanceTag:
     def tensor(a: 'ProvenanceTag', b: 'ProvenanceTag') -> 'ProvenanceTag':
         """⊗: Sequential composition (chaining through inference).
 
-        Uses Josang's trust discounting operator (Josang 2016, §10.3).
-        Preserves b+d+u=1 exactly (no normalization needed).
-        Provably associative.  Left identity = one().
-        Disbelief ATTENUATES: d_result = a.b * b.d ≤ b.d.
-        (Fixes audit III-05, III-06, II-01)
+        SL opinion: Josang trust discounting (Josang 2016, §10.3).
+          Preserves b+d+u=1 exactly.  Associative.  Identity = one().
+          Disbelief ATTENUATES: d_result = a.b × b.d ≤ b.d.
 
-        Only (b,d,u) use this formula.  Metadata fields propagate via
-        a monotone product lattice (NOT part of semiring axioms).
+        Metadata lattice: meet (∧) = min for pramana, trust, decay.
+          derivation_depth uses + (chains accumulate depth).
+          Weakest-link: chaining cannot strengthen provenance.
         """
-        # Josang trust discounting (§10.3): preserves b+d+u=1 exactly,
-        # provably associative, disbelief attenuates (d = a.b * b.d ≤ b.d)
         new_b = a.belief * b.belief
         new_d = a.belief * b.disbelief
         new_u = a.disbelief + a.uncertainty + a.belief * b.uncertainty
@@ -117,12 +130,14 @@ class ProvenanceTag:
     def oplus(a: 'ProvenanceTag', b: 'ProvenanceTag') -> 'ProvenanceTag':
         """⊕: Parallel composition (accrual of independent arguments).
 
-        Uses cumulative fusion (Josang 2016) — non-idempotent, so
-        multiple independent arguments strengthen the conclusion.
+        SL opinion: Cumulative fusion (Josang 2016, §12.3).
+          Non-idempotent — multiple independent arguments strengthen.
+          Source overlap discount: interpolate between fusion (independent)
+          and averaging (dependent) by overlap ratio.
 
-        Source overlap: if sources overlap, interpolate between cumulative
-        fusion (independent) and simple averaging (dependent) proportional
-        to the overlap ratio.  (Fixes audit III-07)
+        Metadata lattice: join (∨) = max for pramana, trust, decay.
+          derivation_depth uses min (parallel paths report shallowest).
+          Best-source: accrual takes the strongest provenance.
         """
         # Source overlap discount (III-07)
         if a.source_ids and b.source_ids:
@@ -187,8 +202,9 @@ class ProvenanceTag:
     def epistemic_status(self) -> 'EpistemicStatus':
         """Derive epistemic status from tag values.
 
-        NOTE: These thresholds are DSPy-optimizable parameters.
-        Defaults are reasonable starting points, not final values.
+        WARNING: These are hand-tuned thresholds with no calibration guarantee.
+        Planned replacement: conformal prediction classifier (see
+        discussions/towards-categorical-uq-with-conformal-predictions.md).
         """
         if self.belief > 0.8 and self.uncertainty <= 0.1:
             return EpistemicStatus.ESTABLISHED

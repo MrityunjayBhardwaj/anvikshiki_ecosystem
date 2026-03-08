@@ -13,10 +13,7 @@ def compute_uncertainty_v4(
     """
     Decompose uncertainty into three independent components.
     All values derived from ProvenanceTag — no hand-tuned dictionaries.
-
-    Thresholds match schema_v4.ProvenanceTag.epistemic_status():
-      ESTABLISHED: belief > 0.8 and uncertainty <= 0.1
-      HYPOTHESIS: belief > 0.5 and uncertainty < 0.3
+    Epistemic status is passed in (computed by argumentation layer).
     """
     return {
         "conclusion": conclusion,

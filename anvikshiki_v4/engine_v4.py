@@ -18,6 +18,7 @@ from .contestation import ContestationManager
 from .coverage import CoverageResult, SemanticCoverageAnalyzer
 from .kb_augmentation import AugmentationPipeline, AugmentationResult
 from .t3a_retriever import T3aRetriever
+from .engine_params import SynthesisParams, DEFAULT_PARAMS
 
 
 # ── DSPy Signatures ──
@@ -42,43 +43,50 @@ class SynthesizeResponse(dspy.Signature):
         desc="Source IDs actually used in the response")
 
 
-def _synthesis_reward(args: dict, pred: dspy.Prediction) -> float:
+_DEFAULT_SYNTHESIS = DEFAULT_PARAMS.synthesis
+
+
+def _synthesis_reward(
+    args: dict,
+    pred: dspy.Prediction,
+    params: SynthesisParams = _DEFAULT_SYNTHESIS,
+) -> float:
     """Reward function for dspy.Refine.
 
-    Weights aligned with calibration_metric_v4 in optimize.py:
-      substantive response: 0.20, sources: 0.15, epistemic hedging: 0.20,
-      hetvābhāsa warnings: 0.15, no overconfidence: 0.15, extension: 0.15
+    Weights from engine_params.SynthesisParams (sum to 1.0):
+      substantive response, sources, epistemic hedging,
+      hetvābhāsa warnings, no overconfidence, extension quality.
     """
     score = 0.0
 
-    # 1. Non-empty, substantive response (matches metric criterion 1)
-    if pred.response and len(pred.response) > 50:
-        score += 0.2
+    # 1. Non-empty, substantive response
+    if pred.response and len(pred.response) > params.min_response_length:
+        score += params.reward_substantive
 
-    # 2. Sources cited (matches metric criterion 2)
+    # 2. Sources cited
     if pred.sources_cited and len(pred.sources_cited) > 0:
-        score += 0.15
+        score += params.reward_sources
 
-    # 3. Epistemic qualification language (matches metric criterion 4)
+    # 3. Epistemic qualification language
     hedges = ["established", "hypothesis", "provisional", "contested",
               "uncertain", "open question", "evidence suggests",
               "limited evidence"]
     if any(h in pred.response.lower() for h in hedges):
-        score += 0.2
+        score += params.reward_hedging
 
-    # 4. Hetvābhāsa warnings when violations present (matches metric criterion 5)
+    # 4. Hetvābhāsa warnings when violations present
     if "defeated" in args.get("defeated_arguments", "").lower():
         if any(w in pred.response.lower()
                for w in ["caveat", "however", "limitation", "exception"]):
-            score += 0.15
+            score += params.reward_hetvabhasa_warning
 
-    # 5. No overconfidence (matches metric criterion 6)
+    # 5. No overconfidence
     if "certainly" not in pred.response.lower():
-        score += 0.15
+        score += params.reward_no_overconfidence
 
-    # 6. Extension quality signal from input (matches metric criterion 3)
+    # 6. Extension quality signal from input
     if "No accepted conclusions" not in args.get("accepted_arguments", ""):
-        score += 0.15
+        score += params.reward_extension_quality
 
     return min(1.0, score)
 
@@ -92,7 +100,6 @@ class AnvikshikiEngineV4(dspy.Module):
         self,
         knowledge_store: KnowledgeStore,
         grounding_pipeline,  # GroundingPipeline from grounding.py
-        contestation_mode: str = "vada",
         coverage_analyzer: Optional[SemanticCoverageAnalyzer] = None,
         augmentation_pipeline: Optional[AugmentationPipeline] = None,
         t3a_retriever: Optional[T3aRetriever] = None,
@@ -101,7 +108,6 @@ class AnvikshikiEngineV4(dspy.Module):
         super().__init__()
         self.ks = knowledge_store
         self.grounding = grounding_pipeline
-        self.contestation_mode = contestation_mode
         self.contestation_mgr = ContestationManager()
 
         # Coverage-based routing components (optional)
@@ -112,9 +118,9 @@ class AnvikshikiEngineV4(dspy.Module):
 
         self.synthesizer = dspy.Refine(
             module=dspy.ChainOfThought(SynthesizeResponse),
-            N=3,
+            N=_DEFAULT_SYNTHESIS.refine_n,
             reward_fn=_synthesis_reward,
-            threshold=0.5,
+            threshold=_DEFAULT_SYNTHESIS.refine_threshold,
         )
 
     def forward(self, query: str, retrieved_chunks: list[str]):
@@ -138,42 +144,17 @@ class AnvikshikiEngineV4(dspy.Module):
         ]
         af = compile_t2(self.ks, query_facts)
 
-        # STEP 3: Compute extension + contestation analysis
-        contestation_analysis = None
-        if self.contestation_mode == "jalpa":
-            jalpa_result = self.contestation_mgr.jalpa(af, timeout_seconds=30.0)
-            labels = (jalpa_result.preferred_extensions[0]
-                      if jalpa_result.preferred_extensions
-                      else af.compute_grounded())
-            contestation_analysis = {
-                "mode": "jalpa",
-                "num_preferred": len(jalpa_result.preferred_extensions),
-                "defensible_positions": jalpa_result.defensible_positions,
-                "counter_arguments": jalpa_result.counter_arguments,
-            }
-        elif self.contestation_mode == "vitanda":
-            vitanda_result = self.contestation_mgr.vitanda(
-                af, timeout_seconds=60.0)
-            labels = (vitanda_result.stable_extensions[0]
-                      if vitanda_result.stable_extensions
-                      else af.compute_grounded())
-            contestation_analysis = {
-                "mode": "vitanda",
-                "num_stable": len(vitanda_result.stable_extensions),
-                "vulnerabilities": {
-                    c: len(atks) for c, atks
-                    in vitanda_result.vulnerability_inventory.items()
-                },
-                "undefended": vitanda_result.undefended,
-            }
-        else:
-            vada_result = self.contestation_mgr.vada(af)
-            labels = af.labels  # vada already computed grounded
-            contestation_analysis = {
-                "mode": "vada",
-                "open_questions": vada_result.open_questions,
-                "suggested_evidence": vada_result.suggested_evidence,
-            }
+        # STEP 3: Compute grounded extension + vāda analysis
+        # Always uses grounded semantics (polynomial, guaranteed termination).
+        # Preferred/stable semantics (jalpa/vitanda) are NP/coNP-hard and
+        # available via ContestationManager for offline analysis only.
+        vada_result = self.contestation_mgr.vada(af)
+        labels = af.labels  # vada already computed grounded
+        contestation_analysis = {
+            "mode": "vada",
+            "open_questions": vada_result.open_questions,
+            "suggested_evidence": vada_result.suggested_evidence,
+        }
 
         # STEP 4: Derive epistemic status per conclusion
         conclusions = set(
@@ -366,42 +347,14 @@ class AnvikshikiEngineV4(dspy.Module):
 
             retrieved_chunks = [c.text for c in t3a_chunks]
 
-        # STEP 6: Compute extension + contestation (same as forward())
-        contestation_analysis = None
-        if self.contestation_mode == "jalpa":
-            jalpa_result = self.contestation_mgr.jalpa(af, timeout_seconds=30.0)
-            labels = (jalpa_result.preferred_extensions[0]
-                      if jalpa_result.preferred_extensions
-                      else af.compute_grounded())
-            contestation_analysis = {
-                "mode": "jalpa",
-                "num_preferred": len(jalpa_result.preferred_extensions),
-                "defensible_positions": jalpa_result.defensible_positions,
-                "counter_arguments": jalpa_result.counter_arguments,
-            }
-        elif self.contestation_mode == "vitanda":
-            vitanda_result = self.contestation_mgr.vitanda(
-                af, timeout_seconds=60.0)
-            labels = (vitanda_result.stable_extensions[0]
-                      if vitanda_result.stable_extensions
-                      else af.compute_grounded())
-            contestation_analysis = {
-                "mode": "vitanda",
-                "num_stable": len(vitanda_result.stable_extensions),
-                "vulnerabilities": {
-                    c: len(atks) for c, atks
-                    in vitanda_result.vulnerability_inventory.items()
-                },
-                "undefended": vitanda_result.undefended,
-            }
-        else:
-            vada_result = self.contestation_mgr.vada(af)
-            labels = af.labels
-            contestation_analysis = {
-                "mode": "vada",
-                "open_questions": vada_result.open_questions,
-                "suggested_evidence": vada_result.suggested_evidence,
-            }
+        # STEP 6: Compute grounded extension + vāda analysis
+        vada_result = self.contestation_mgr.vada(af)
+        labels = af.labels
+        contestation_analysis = {
+            "mode": "vada",
+            "open_questions": vada_result.open_questions,
+            "suggested_evidence": vada_result.suggested_evidence,
+        }
 
         # STEP 7: Derive epistemic status, provenance, uncertainty
         conclusions = set(
