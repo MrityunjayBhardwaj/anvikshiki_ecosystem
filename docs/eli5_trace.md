@@ -304,6 +304,40 @@ The process repeats (fixpoint iteration) until no new arguments can be derived.
 
 **Source:** `t2_compiler_v4.py:92-145`, `t2_compiler_v4.py:148-206`, `t2_compiler_v4.py:209-307`
 
+> **For readers who want to see the formal machinery:**
+>
+> When the engine "fires a rule," it's constructing an ASPIC+ argument. Here's the formal representation of the unit economics example:
+>
+> ```
+> A0001: positive_unit_economics     [premise, pramana=PRATYAKSA, b=0.85]
+> A0002: growing_market              [premise, pramana=PRATYAKSA, b=0.80]
+> A0003: value_creation              [via V01: pos_unit_eco ⇒ value_creation]
+>         tag = A0001.tag ⊗ V01.tag
+>             = (b=0.85, u=0.15) ⊗ (b=0.95, u=0.05)
+>             = (b=0.808, u=0.193)    [belief attenuates through chain]
+>
+> A0004: long_term_value             [via V08: value_creation ∧ growing_market ⇒ long_term_value]
+>         tag = A0003.tag ⊗ A0002.tag ⊗ V08.tag
+>             = (b=0.808) × (b=0.80) × (b=0.60) ≈ b=0.388  [each step weakens chain]
+>         pramana = min(PRATYAKSA, PRATYAKSA, ANUMANA) = ANUMANA  [weakest link]
+> ```
+>
+> When `subsidized_entity` is present, the engine creates:
+>
+> ```
+> A0005: _undercut_V01              [scope violation]
+>         tag = (b=1.0, pramana=PRATYAKSA)
+>
+> Attack(attacker=A0005, target=A0003, type="undercutting", hetvabhasa="savyabhicara")
+> → A0003 labeled OUT → A0004 loses its support → also OUT
+> ```
+>
+> This is not LLM reasoning. It is a deterministic symbolic computation over
+> a mathematically-defined argumentation graph. The outcome is provable
+> given the inputs — the same query will always produce the same labels.
+>
+> *Full formal treatment: [thesis_v3.md §6.1](../theory/thesis_v3.md)*
+
 ---
 
 ## Stage 5: Grounded Semantics — The Judge Decides
