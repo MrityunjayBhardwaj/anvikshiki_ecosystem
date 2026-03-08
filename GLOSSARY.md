@@ -36,7 +36,7 @@ Every meaningful Claude session mapped to its topic, commits, and files touched.
 | 3 | `13aa2739` | Mar 2 | Guide Gen A | Applied meta-prompt v3.26 to non-fiction writing domain | pre-git |
 | 4 | `ad79baae` | Mar 2 | BUILD_GUIDE | Read thesis_v2.md; created technical BUILD_GUIDE; first engine implementation attempt | pre-git |
 | 5 | `08cfe99f` | Mar 2 | Guide Gen B | Continued guide generation with v3.26 meta-prompt | pre-git |
-| 6 | `2afb4792` | Mar 3 | Architecture Overhaul | Critical audit of hand-specified decisions; normalizing flows debate; Frankenstein diagnosis; ASPIC+ discovery; new thesis written (thesis2_v1.md) | pre-git |
+| 6 | `2afb4792` | Mar 3 | Architecture Overhaul | Critical audit of hand-specified decisions; normalizing flows debate; Frankenstein diagnosis; ASPIC+ discovery; new thesis written (thesis_v4_r1.md) | pre-git |
 | 7 | `2b92b540` | Mar 4 | Implementation + Docs | Predicate extraction design; flowcharts; ELI5 trace; **git init + initial commit**; history archive | `ec70444`, `547de52`, `abfcba9` |
 | 8 | `e3e84d62` | Mar 5 | AKL Design | T3/T2/T1 pipeline discussion; Adaptive Knowledge Landscape integration design | `c627180` |
 | 9 | `16b48804` | Mar 5 | Guide Gen C | Business expert guide expert treatment; AKL topics; chapter generation | — |
@@ -330,14 +330,14 @@ Every meaningful Claude session mapped to its topic, commits, and files touched.
 
 ---
 
-#### `anvikshiki_v4/data/business_expert_trace.md`
+#### `anvikshiki_v4/data/business_expert_pipeline_trace.md`
 - **What:** Trace artifact — full pipeline trace for the business expert domain. Earlier format than `query_trace.md`. Shows KB loading, vyapti compilation, and first-pass grounding.
 - **Created:** `ec70444` · 2026-03-04 · Session 7 (`2b92b540`)
 - **Last modified:** `ec70444` (trace artifact)
 
 ---
 
-#### `anvikshiki_v4/data/practical_useage.md` ⚠️
+#### `anvikshiki_v4/data/practical_usage.md` ⚠️
 - **What:** Usage guide — code examples for instantiating the engine, running queries, interpreting results. Should live in `docs/` not `data/`. Filename has a typo ("useage" → "usage").
 - **Created:** `ec70444` · 2026-03-04 · Session 7 (`2b92b540`)
 - **Last modified:** `67d45c8` · 2026-03-08 — removed `contestation_mode` example
@@ -349,20 +349,20 @@ Every meaningful Claude session mapped to its topic, commits, and files touched.
 
 ---
 
-#### `theory/thesis2_v1.md` ← **Canonical current thesis**
+#### `theory/thesis_v4_r1.md` ← **Canonical current thesis**
 - **What:** The primary architecture thesis. Proposes replacing the Frankenstein multi-formalism architecture with ASPIC+ structured argumentation + Subjective Logic annotation using Nyāya epistemology as the design ontology. Shows: (1) Nyāya maps naturally to argumentation; (2) SL + product lattice replaces all ad-hoc quantification; (3) sheaf, Heyting lattice, trust tables, keyword fallacy detection all eliminated; (4) Datalog computes grounded semantics in polynomial time. Satisfies all 8 Contestable AI properties (Moreira et al. 2025).
 - **Created:** `77522f8` · 2026-03-06 · Session 11 (`31879926`) — committed, but written in Session 6 (`2afb4792`)
 - **Last modified:** `77522f8` (unchanged since commit)
-- **Predecessor:** `theory/history/thesis/thesis_v3.md` (architecture gen 3, different system)
+- **Predecessor:** `theory/history/thesis/thesis_v4_r3.md` (architecture gen 3, different system)
 
 ---
 
-#### `theory/thesis_v3.md` ← **Structural revision of thesis2_v1** ⚠️ naming issue
+#### `theory/thesis_v4_r3.md` ← **Structural revision of thesis2_v1** ⚠️ naming issue
 - **What:** Document revision 3 of thesis2_v1 — NOT a third-generation architecture (see naming note). Addresses three expert reviewer critiques: (1) §2.1 Quick Reference table at point of first Nyāya concept introduction; (2) §6.1 fully worked unit economics inference chain; (3) §9.4 complete T3 retrieval mechanics (epistemic inheritance, Savyabhicāra routing, Satpratipakṣa routing). Appendix A contains the ELI5 progressive disclosure sidebar.
 - **Lines:** ~614
 - **Created:** `fd3e609` · 2026-03-08 · Session 11 (`31879926`)
 - **Last modified:** `fd3e609` (same commit as creation)
-- **⚠️ Naming conflict:** `theory/history/thesis/thesis_v3.md` is a completely different document (architecture generation 3, lattice-Datalog system). This file should be renamed `thesis_v4_r3.md` or the convention should be established as `theory/thesis.md` = canonical current.
+- **⚠️ Naming conflict:** `theory/history/thesis/thesis_v4_r3.md` is a completely different document (architecture generation 3, lattice-Datalog system). This file should be renamed `thesis_v4_r3.md` or the convention should be established as `theory/thesis.md` = canonical current.
 
 ---
 
@@ -391,42 +391,42 @@ The archive captures the architecture's earlier generations. All files added in 
 | `thesis_v1.md` | Original engine thesis — Prolog-based, Heyting lattice, sheaf | Gen 1 |
 | `thesis_v2.md` | Revised thesis — Prolog→Datalog, five-layer grounding, semi-naive eval | Gen 2 |
 | `thesis_v2_patch.md` | Incremental patches to v2 before full v3 rewrite | Gen 2 patch |
-| `thesis_v3.md` | Gen 3 thesis — lattice-Datalog + normalizing flows (pre-ASPIC+ pivot) | Gen 3 |
+| `thesis_v4_r3.md` | Gen 3 thesis — lattice-Datalog + normalizing flows (pre-ASPIC+ pivot) | Gen 3 |
 
-> **Critical note:** These version numbers (v1, v2, v3) refer to architecture generations, not document revisions. They are fully superseded by `theory/thesis2_v1.md` and `theory/thesis_v3.md` which describe the current ASPIC+ system.
+> **Critical note:** These version numbers (v1, v2, v3) refer to architecture generations, not document revisions. They are fully superseded by `theory/thesis_v4_r1.md` and `theory/thesis_v4_r3.md` which describe the current ASPIC+ system.
 
 #### `theory/history/build_guides/`
 
 | File | What |
 |------|------|
-| `BUILD_GUIDE_v2.md` | Build guide for Gen 2 (Datalog) engine |
-| `BUILD_GUIDE_v3.md` | Build guide for Gen 3 (lattice-Datalog) engine |
-| `BUILD_GUIDE_v4.md` | Build guide for Gen 4 pre-pivot (DSPy + egglog) |
-| `BUILD_V4_PROMPT.md` | The exact prompt used to generate BUILD_GUIDE_v4 |
+| `build_guide_v2.md` | Build guide for Gen 2 (Datalog) engine |
+| `build_guide_v3.md` | Build guide for Gen 3 (lattice-Datalog) engine |
+| `build_guide_v4.md` | Build guide for Gen 4 pre-pivot (DSPy + egglog) |
+| `build_guide_v4_gen_prompt.md` | The exact prompt used to generate BUILD_GUIDE_v4 |
 
 #### `theory/history/meta_prompts/`
 
 | File | What |
 |------|------|
-| `meta_prompt_v3.2.md` | Meta-prompt v3.2 — 7 stages, basic sourcing |
-| `meta_prompt_v3.25.md` | Meta-prompt v3.25 — added epistemic status on vyāptis |
-| `meta_prompt_v3.26.md` | Meta-prompt v3.26 — 8 stages, Stage 8 Safety Net, voice calibration |
-| `anvikshiki_meta2_design_doc.md` | Design document for the second meta-prompt generation |
-| `anvikshiki_meta2_prompt.md` | Second-generation meta-prompt |
-| `anvikshiki_meta2_prompt_v3_26.md` | v3.26 applied to meta2 framework |
+| `meta_prompt_v3_2.md` | Meta-prompt v3.2 — 7 stages, basic sourcing |
+| `meta_prompt_v3_25.md` | Meta-prompt v3.25 — added epistemic status on vyāptis |
+| `meta_prompt_v3_26.md` | Meta-prompt v3.26 — 8 stages, Stage 8 Safety Net, voice calibration |
+| `meta_prompt_gen2_design_doc.md` | Design document for the second meta-prompt generation |
+| `meta_prompt_gen2.md` | Second-generation meta-prompt |
+| `meta_prompt_gen2_v3_26.md` | v3.26 applied to meta2 framework |
 
 #### `theory/history/discussions/`
 
 | File | What | Session |
 |------|------|---------|
 | `adaptive-knowledge-landscape.md` | Original AKL design — graph-structured KB with dynamic node creation | `e3e84d62` |
-| `build_spec_adaptive_knowledge_landscape_v1.md` | Build spec for AKL v1 | `e3e84d62` |
+| `build-spec-adaptive-knowledge-landscape-v1.md` | Build spec for AKL v1 | `e3e84d62` |
 | `agentic-systems-for-guide-creation.md` | Agent team design (Orchestrator, Analyst, Architect, Verifier) | `e84e32d4` |
-| `critical-analysis-v4-post-fix-round.md` | Critical analysis of the engine after first fix round | `21b283c9` |
+| `critical-analysis-v4-pre-aspic-pivot.md` | Critical analysis of the engine after first fix round | `21b283c9` |
 | `improving-meta-prompt-for-concrete-sourcing.md` | Discussion on 6-class provenance classification | `e84e32d4` |
 | `is-anvikshiki-turing-complete.md` | Formal analysis of Turing completeness; why Datalog's limits are features | `e84e32d4` |
 | `knowledge-bank-and-agent-council.md` | Two-layer knowledge bank design + online agent council proposal | `e84e32d4` |
-| `v3-25-vs-v3-26-comparison.md` | Side-by-side comparison of meta-prompt versions | `16b48804` |
+| `meta-prompt-v3_25-vs-v3_26-comparison.md` | Side-by-side comparison of meta-prompt versions | `16b48804` |
 
 ---
 
@@ -470,7 +470,7 @@ Active design documents for the current (v4/ASPIC+) system. All created in Sessi
 
 ---
 
-#### `docs/eli5_trace.md` ← **Primary user-facing explanation**
+#### `docs/pipeline_eli5.md` ← **Primary user-facing explanation**
 - **What:** Plain-English walkthrough of the entire pipeline using the business strategy example. Every stage (0–9+): What it does, Why it exists, How it works, Source code reference. Based on a real test run (Llama-3.2-3B). The canonical document for understanding the system end-to-end without reading code.
 - **Created:** `ec70444` · 2026-03-04 · Session 7 (`2b92b540`)
 - **Last modified:** `fd3e609` · 2026-03-08 · Session 11 (`31879926`)
@@ -480,8 +480,8 @@ Active design documents for the current (v4/ASPIC+) system. All created in Sessi
 
 ---
 
-#### `docs/eli5_trace_e2e.md`
-- **What:** Extended ELI5 trace covering the full N=5 ensemble grounding path (Path C). Companion to `eli5_trace.md` which covers Path B (lightweight). Shows the additional layers 3–5 with actual model call traces.
+#### `docs/pipeline_eli5_full.md`
+- **What:** Extended ELI5 trace covering the full N=5 ensemble grounding path (Path C). Companion to `pipeline_eli5.md` which covers Path B (lightweight). Shows the additional layers 3–5 with actual model call traces.
 - **Created:** `ec70444` · 2026-03-04 · Session 7 (`2b92b540`)
 - **Last modified:** `ec70444` (unchanged since initial commit)
 
@@ -501,7 +501,7 @@ Active design documents for the current (v4/ASPIC+) system. All created in Sessi
 
 ---
 
-#### `docs/pipeline_flowchart_llama3.2.md`
+#### `docs/pipeline_flowchart_path_b.md`
 - **What:** Full end-to-end pipeline flowchart for the Llama-3.2-3B path (Path B: lightweight grounding). Shows every function call, data transformation, and output at each stage. The "how does data flow" document.
 - **Created:** `ec70444` · 2026-03-04 · Session 7 (`2b92b540`) — produced in Session 7
 - **Last modified:** `ec70444` (unchanged)
@@ -509,14 +509,14 @@ Active design documents for the current (v4/ASPIC+) system. All created in Sessi
 ---
 
 #### `docs/pipeline_flowchart_llama3.2md.md` ⚠️
-- **What:** Duplicate or near-duplicate of `pipeline_flowchart_llama3.2.md`. Filename has `.md` appearing twice — likely a naming accident. Content may be identical or slightly variant.
+- **What:** Duplicate or near-duplicate of `pipeline_flowchart_path_b.md`. Filename has `.md` appearing twice — likely a naming accident. Content may be identical or slightly variant.
 - **Created:** `ec70444` · 2026-03-04
 - **Note:** Candidate for deletion after diff verification.
 
 ---
 
 #### `docs/pipeline_flowchart_coverage_routing.md`
-- **What:** Updated pipeline flowchart showing the full T2b/T3a/T3b/coverage routing logic. Extension of `pipeline_flowchart_llama3.2.md` to include the compile-time augmentation path and query-time AKL fallback.
+- **What:** Updated pipeline flowchart showing the full T2b/T3a/T3b/coverage routing logic. Extension of `pipeline_flowchart_path_b.md` to include the compile-time augmentation path and query-time AKL fallback.
 - **Created:** `74f74ca` · 2026-03-05 · Session 11 (`31879926`)
 - **Last modified:** `74f74ca` (unchanged since introduction)
 
@@ -680,7 +680,7 @@ None of these components spoke to each other. Adding a new pramāṇa type requi
 
 The session explored alternatives — normalizing flows, sheaf homology, categorical UQ — before landing on ASPIC+ structured argumentation as the answer. The key realization: **Nyāya's existing theory of inference, testimony, and conflict resolution maps directly onto ASPIC+ concepts**. The philosophy already had the solution. The computational framework just needed to be identified.
 
-The session concluded with writing `thesis2_v1.md` — the ASPIC+ thesis. This document claims: all six formalisms collapse into one coherent framework. The sheaf becomes unnecessary because ASPIC+ defeat relations handle local-global consistency. The Heyting lattice becomes unnecessary because argumentation semantics (IN/OUT/UNDECIDED) handles epistemic status. The trust tables become ProvenanceTag fields. The fallacy detectors become Attack construction rules.
+The session concluded with writing `thesis_v4_r1.md` — the ASPIC+ thesis. This document claims: all six formalisms collapse into one coherent framework. The sheaf becomes unnecessary because ASPIC+ defeat relations handle local-global consistency. The Heyting lattice becomes unnecessary because argumentation semantics (IN/OUT/UNDECIDED) handles epistemic status. The trust tables become ProvenanceTag fields. The fallacy detectors become Attack construction rules.
 
 **Philosophy:** Coherent architecture beats composable complexity. A system that fails in one place should fail uniformly, not mysteriously at the intersection of six formalisms.
 
@@ -692,7 +692,7 @@ Session 7 (`2b92b540`, 11MB) was the implementation session. With the thesis set
 
 Key decisions made:
 - **Predicate extraction pipeline (5 stages A–E):** The hardest unsolved problem — getting from natural language queries to verified Datalog predicates without hallucination. The 5-layer grounding defense was designed here, with ensemble voting (N=5) as the consensus mechanism.
-- **ELI5 trace:** The user insisted on a plain-English walkthrough before the formal thesis. The `eli5_trace.md` was written to explain every pipeline stage using the business strategy example — a decision that later directly addressed reviewer critique 2.
+- **ELI5 trace:** The user insisted on a plain-English walkthrough before the formal thesis. The `pipeline_eli5.md` was written to explain every pipeline stage using the business strategy example — a decision that later directly addressed reviewer critique 2.
 - **Git initialization:** The repo was formally initialized. The initial commit (`ec70444`) captured the full engine implementation plus documentation. Three subsequent commits (`547de52`, `abfcba9`) cleaned up artifacts and organized the history archive.
 
 The archiving commit `abfcba9` was philosophically significant — it explicitly moved all pre-ASPIC+ work into `theory/history/`. The message: those architectures were worth preserving (they show how the thinking evolved) but they are superseded.
@@ -753,7 +753,7 @@ Three test classes deleted: `TestFullPipelineJalpa`, `TestFullPipelineVitanda`, 
 
 The user had shared `discussions/thesis2_v1_expert_reviewer_critiques.md` — a detailed critique from two expert reviewers identifying three structural weaknesses. Commit `fd3e609` addressed all three:
 - **Critique 1** (philosophical-computational gap): §2.1 Quick Reference table moved to point of first Nyāya concept introduction
-- **Critique 2** (ELI5-thesis gap): §6.1 unit economics worked example + eli5_trace.md Stage 4 formal sidebar
+- **Critique 2** (ELI5-thesis gap): §6.1 unit economics worked example + pipeline_eli5.md Stage 4 formal sidebar
 - **Critique 3** (T3 handwave): §9.4 rewritten from 6 lines to full section covering epistemic inheritance, Savyabhicāra routing, Satpratipakṣa routing
 
 **Philosophy of this session:** Honesty as a design constraint. A system that claims to do what it doesn't is harder to fix than a system that honestly documents what it does. The Path A fixes weren't about adding features — they were about removing claims that the code didn't support. The reviewer response was about making the documentation's internal connections as explicit as the code's.
@@ -772,7 +772,7 @@ This is deferred because it requires labeled training data (manually annotated e
 
 ### The Naming Problem (Still Open)
 
-`theory/thesis_v3.md` (this session's doc revision of the ASPIC+ thesis) collides with `theory/history/thesis/thesis_v3.md` (architecture generation 3). Both are correctly named by their own logic but create confusion together. The fix is to establish a clear convention:
+`theory/thesis_v4_r3.md` (this session's doc revision of the ASPIC+ thesis) collides with `theory/history/thesis/thesis_v4_r3.md` (architecture generation 3). Both are correctly named by their own logic but create confusion together. The fix is to establish a clear convention:
 
 - `theory/thesis.md` = canonical current (no version number — version tracking is git's job)
 - `theory/history/thesis/` = all historical versions, labeled by architecture generation

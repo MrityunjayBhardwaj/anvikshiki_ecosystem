@@ -140,7 +140,7 @@
 
 **Strategy:** Show no subset of components achieves all 7 desiderata.
 
-Already done in thesis2_v1.md Section 7.5:
+Already done in thesis_v4_r1.md Section 7.5:
 - Pure LLM: fails 1, 2, 3, 4, 5, 7
 - LLM + Boolean Datalog: fails 2, 3, 4, 6, 7
 - LLM + Lattice Datalog: needs bolt-ons for 2, 4, 6, 7 → Frankenstein

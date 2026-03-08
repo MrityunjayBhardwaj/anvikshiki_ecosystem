@@ -718,7 +718,7 @@ The API contract requires all reasoning artifacts in a single response — the n
 
 ## Appendix: Rigorous Mapping of Each Stage to the Thesis
 
-> How each pipeline step and its implementation maps to the claims, formalisms, and design decisions stated in `thesis2_v1.md` — *The Ānvīkṣikī Engine (v4): From Nyāya Epistemology to Neurosymbolic Argumentation*.
+> How each pipeline step and its implementation maps to the claims, formalisms, and design decisions stated in `thesis_v4_r1.md` — *The Ānvīkṣikī Engine (v4): From Nyāya Epistemology to Neurosymbolic Argumentation*.
 
 ---
 

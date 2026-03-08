@@ -18,7 +18,7 @@ This thesis proposes a minimal complete alternative: **structured argumentation 
 
 ---
 
-## Sections 1–1.4 — unchanged from thesis2_v1.md §1
+## Sections 1–1.4 — unchanged from thesis_v4_r1.md §1
 
 ---
 
@@ -148,7 +148,7 @@ Nigamana  (conclude)  →  Label.IN in grounded extn.  = accepted
 
 ---
 
-## Sections 3–5 — unchanged from thesis2_v1.md §3–§5
+## Sections 3–5 — unchanged from thesis_v4_r1.md §3–§5
 
 ---
 
@@ -278,29 +278,29 @@ tag_value_creation ⊕ tag_ch3:
 
 ---
 
-### 6.2–6.4 — unchanged from thesis2_v1.md §6.2–§6.4
+### 6.2–6.4 — unchanged from thesis_v4_r1.md §6.2–§6.4
 
 ---
 
-## Section 7 — unchanged from thesis2_v1.md §7
+## Section 7 — unchanged from thesis_v4_r1.md §7
 
 *(Note: §7.2 contains the full formal Nyāya-to-ASPIC+ classification. A navigation preview now appears in §2.1 Quick Reference above.)*
 
 ---
 
-## Section 8 — unchanged from thesis2_v1.md §8
+## Section 8 — unchanged from thesis_v4_r1.md §8
 
 ---
 
 ## 9. Implementation Sketch
 
-### 9.1–9.3 — unchanged from thesis2_v1.md §9.1–§9.3
+### 9.1–9.3 — unchanged from thesis_v4_r1.md §9.1–§9.3
 
 ---
 
 ### 9.4 Phase 4: T3 — The Retrieval Corpus with Epistemic Routing
 
-*This section replaces the 6-line handwave in thesis2_v1.md §9.4. T3 receives the same architectural rigor as T2.*
+*This section replaces the 6-line handwave in thesis_v4_r1.md §9.4. T3 receives the same architectural rigor as T2.*
 
 #### 9.4.1 Architecture Overview
 
@@ -549,17 +549,17 @@ The T3 system is not a dumb search index. It is an epistemically-governed retrie
 
 ---
 
-### 9.5–9.7 — unchanged from thesis2_v1.md §9.5–§9.7
+### 9.5–9.7 — unchanged from thesis_v4_r1.md §9.5–§9.7
 
 ---
 
-## Sections 10–11 — unchanged from thesis2_v1.md §10–§11
+## Sections 10–11 — unchanged from thesis_v4_r1.md §10–§11
 
 ---
 
-## Appendix A: ELI5 Progressive Disclosure Sidebar (for Stage D in eli5_trace.md)
+## Appendix A: ELI5 Progressive Disclosure Sidebar (for Stage D in pipeline_eli5.md)
 
-*This sidebar should be inserted in `docs/eli5_trace.md` at Stage 4 "Build Arguments, Fire Rules, Derive Attacks".*
+*This sidebar should be inserted in `docs/pipeline_eli5.md` at Stage 4 "Build Arguments, Fire Rules, Derive Attacks".*
 
 ---
 
@@ -608,6 +608,6 @@ The T3 system is not a dumb search index. It is an epistemically-governed retrie
 | T3 retrieval effects column added to hetvābhāsa table | §2.3 | Preview T3 routing at first hetvābhāsa mention |
 | Unit economics worked example added | §6.1 | Ground abstract ⊗/⊕ math in concrete numbers; show chain degradation |
 | §9.4 rewritten from 6 lines to full section | §9.4 | T3 deserves same rigor as T2; §9.4.1–9.4.5 cover architecture, epistemic inheritance, Savyabhicāra routing, Satpratipakṣa routing, pipeline integration |
-| ELI5 Stage D sidebar added | eli5_trace.md | Progressive disclosure — casual readers get the narrative; formal readers get the ASPIC+ representation inline |
+| ELI5 Stage D sidebar added | pipeline_eli5.md | Progressive disclosure — casual readers get the narrative; formal readers get the ASPIC+ representation inline |
 
 The thesis argument is unchanged. The architecture is unchanged. What changed is how the document discloses the connection between the philosophy and the implementation.

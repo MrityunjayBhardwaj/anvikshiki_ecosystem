@@ -1251,7 +1251,7 @@ The LLM is still just a translator and writer. All reasoning is still symbolic. 
 
 ## Appendix: Mapping to the Thesis
 
-> How each pipeline stage maps to claims in `thesis2_v1.md` — *The Ānvīkṣikī Engine (v4):
+> How each pipeline stage maps to claims in `thesis_v4_r1.md` — *The Ānvīkṣikī Engine (v4):
 > From Nyāya Epistemology to Neurosymbolic Argumentation*.
 
 ---
@@ -1304,7 +1304,7 @@ This follows the **Ontology Learning Layer Cake** (Buitelaar, Cimiano & Magnini 
 
 ### Query Pipeline Stages 0-11 → Same thesis mapping as original ELI5 trace
 
-The query pipeline stages map identically to the original ELI5 trace appendix (see `docs/eli5_trace.md`). The only difference is that the augmented KB produces:
+The query pipeline stages map identically to the original ELI5 trace appendix (see `docs/pipeline_eli5.md`). The only difference is that the augmented KB produces:
 - **Deeper inference chains** (Stage 4) → more tensor operations → more honest attenuation
 - **More precise grounding** (Stage 3) → sub-component predicates → richer vocabulary
 - **More detectable conflicts** (Stage 9) → section-level contradictions visible
