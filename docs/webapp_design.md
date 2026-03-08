@@ -1,6 +1,7 @@
 # Ānvīkṣikī Webapp — Design Document
 
 > Branch: `webapp` · Author: Session 13 · Date: 2026-03-09
+> **Updated:** 2026-03-09 — aligned to shadcn/ui CLI v4, Next.js 15 + React 19, React Flow v12 (`@xyflow/react`), FastAPI native SSE
 
 ---
 
@@ -48,21 +49,51 @@
 
 ## 2. Stack Decision
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| Frontend framework | **Next.js 14** (App Router) | RSC for static panels, client components for live query state |
-| UI components | **shadcn/ui** + Tailwind CSS | Copy-owned components, dark mode first, accessible, consistent |
-| Graph visualization | **React Flow** (`@xyflow/react`) | Best-in-class argument graph with custom nodes, handles, dagre layout |
-| State management | **Zustand** | Lightweight; one store per concern (query, kb, trace) |
-| Backend | **FastAPI** (Python 3.12) | Same process as the engine; no serialization overhead |
-| Streaming | **Server-Sent Events (SSE)** | Each pipeline stage emits a progress event; simpler than WebSocket |
-| Python↔JS types | **Pydantic → JSON Schema → zod** | Auto-generated type safety across the boundary |
-| Package manager | **pnpm** | Workspace-friendly, fast |
-| Icons | **Lucide React** (bundled with shadcn) | Consistent with shadcn design language |
+| Layer | Choice | Version | Rationale |
+|-------|--------|---------|-----------|
+| Frontend framework | **Next.js** (App Router) | **15** | RSC for static panels, client components for live query state; full React 19 support |
+| UI components | **shadcn/ui** + Tailwind CSS | **CLI v4** | Copy-owned components, OKLCH color system, dark mode first, accessible |
+| Graph visualization | **React Flow** | **v12** (`@xyflow/react`) | Custom nodes/edges, SSR support, built-in dark mode, TypeScript-first |
+| State management | **Zustand** | latest | Lightweight; one store per concern (query, kb, trace) |
+| Backend | **FastAPI** | **0.135+** | Native SSE support; same process as engine |
+| Streaming | **Server-Sent Events (SSE)** | FastAPI built-in | Each pipeline stage emits a progress event; `EventSourceResponse` + `ServerSentEvent` |
+| Python↔JS types | **Pydantic → JSON Schema → zod** | — | Auto-generated type safety across the boundary |
+| Package manager | **pnpm** | — | Workspace-friendly, fast |
+| Icons | **Lucide React** (bundled with shadcn) | — | Consistent with shadcn design language |
+
+### Key version notes
+
+**shadcn/ui CLI v4 (March 2026):**
+- CLI package renamed: use `pnpm dlx shadcn@latest` (not `shadcn-ui`)
+- Default style is now **`new-york`** (old default style deprecated)
+- Colors moved from HSL → **OKLCH** by default (perceptually uniform, better on modern displays)
+- New components: `chart` (Recharts composition), `data-table` (TanStack Table), `sidebar` (responsive collapsible)
+- `components.json` `$schema` → `https://ui.shadcn.com/schema.json`
+
+**React Flow v12 — breaking changes from v11:**
+
+| v11 | v12 |
+|-----|-----|
+| `import ReactFlow from 'reactflow'` | `import { ReactFlow } from '@xyflow/react'` |
+| `import 'reactflow/dist/style.css'` | `import '@xyflow/react/dist/style.css'` |
+| `node.width` / `node.height` | `node.measured.width` / `node.measured.height` |
+| `xPos` / `yPos` in node | `positionAbsoluteX` / `positionAbsoluteY` |
+| `parentNode` | `parentId` |
+| `nodeInternals` | `nodeLookup` |
+| `onEdgeUpdate` | `onReconnect` |
+| `updateEdge()` | `reconnectEdge()` |
+| `getTransformForBounds()` | removed |
+
+New in v12: SSR/SSG support, built-in `ColorMode` for dark mode, computing flows API.
+
+**FastAPI native SSE (v0.135+):**
+- No longer need `sse-starlette` package — FastAPI ships `EventSourceResponse` and `ServerSentEvent` natively
+- Auto keep-alive pings every 15s, `Cache-Control: no-cache`, `X-Accel-Buffering: no` headers set automatically
+- Usage: `async def route() -> AsyncIterable[ServerSentEvent]: yield ServerSentEvent(data={...}, event="stage:grounding")`
 
 **Why not WebSockets?** SSE is one-directional (server → client) and sufficient here. The only real-time direction is pipeline progress → browser. Queries go over HTTP POST. SSE avoids the reconnect complexity of WS for this use case.
 
-**Why React Flow instead of D3?** The argumentation graph is a node-edge graph with structured data per node. React Flow gives us customizable React components per node (EpistemicStatus badge, ProvenanceTag tooltip, belief bar) without writing canvas rendering code.
+**Why React Flow instead of D3?** The argumentation graph is a node-edge graph with structured data per node. React Flow v12 gives us customizable React components per node (EpistemicStatus badge, ProvenanceTag tooltip, belief bar) without writing canvas rendering code, plus first-class SSR and dark mode out of the box.
 
 ---
 
@@ -400,6 +431,64 @@ Support edges (argument uses another as premise): soft gray arrows, thin, no lab
 - Floating toolbar (top-right of graph): Fit View, Zoom In, Zoom Out, Toggle Support Edges, Export PNG
 - Legend (collapsible, bottom-left): IN / OUT / UNDECIDED / Premise, + edge types
 
+**React Flow v12 implementation notes:**
+
+```typescript
+// components/graph/ArgumentationGraph.tsx
+// IMPORTANT: React Flow v12 package is @xyflow/react (not reactflow)
+import { ReactFlow, Background, Controls, useNodesState,
+         useEdgesState, ColorMode } from '@xyflow/react'
+import '@xyflow/react/dist/style.css'   // ← path changed in v12
+import { ArgumentNode } from './ArgumentNode'
+import { AttackEdge } from './AttackEdge'
+import { useTheme } from 'next-themes'
+
+const nodeTypes = { argument: ArgumentNode, premise: ArgumentNode }
+const edgeTypes = { attack: AttackEdge }
+
+export function ArgumentationGraph({ result }: { result: EngineResult }) {
+  const { resolvedTheme } = useTheme()
+  const [nodes, , onNodesChange] = useNodesState(transformToNodes(result))
+  const [edges, , onEdgesChange] = useEdgesState(transformToEdges(result))
+
+  return (
+    <ReactFlow
+      nodes={nodes} edges={edges}
+      nodeTypes={nodeTypes} edgeTypes={edgeTypes}
+      onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+      colorMode={resolvedTheme as ColorMode}  // ← v12 built-in dark mode
+      fitView
+    >
+      <Background /> <Controls />
+    </ReactFlow>
+  )
+}
+
+// components/graph/graphLayout.ts
+// Node dimensions in v12: use node.measured.width / node.measured.height
+// (not node.width / node.height — those are input dimensions, not computed)
+import dagre from '@dagrejs/dagre'
+
+export function applyDagreLayout(nodes: Node[], edges: Edge[]) {
+  const g = new dagre.graphlib.Graph()
+  g.setGraph({ rankdir: 'BT', ranksep: 80, nodesep: 40 })
+  g.setDefaultEdgeLabel(() => ({}))
+
+  nodes.forEach(n => g.setNode(n.id, {
+    width: n.measured?.width ?? 200,   // ← v12: use measured dimensions
+    height: n.measured?.height ?? 80,
+  }))
+  edges.forEach(e => g.setEdge(e.source, e.target))
+  dagre.layout(g)
+
+  return nodes.map(n => {
+    const pos = g.node(n.id)
+    return { ...n, position: { x: pos.x - (n.measured?.width ?? 200) / 2,
+                                y: pos.y - (n.measured?.height ?? 80) / 2 } }
+  })
+}
+```
+
 ---
 
 ### 6.4 Pipeline Trace Drawer
@@ -511,10 +600,17 @@ Clicking a row restores that query's full result — graph, provenance, violatio
 
 ## 7. Component Library (shadcn/ui)
 
-Complete list of shadcn components to install:
+**Init (run once):**
 
 ```bash
-npx shadcn@latest add \
+pnpm dlx shadcn@latest init
+# Prompts: style → new-york, base color → neutral, CSS variables → yes
+```
+
+**Add all components:**
+
+```bash
+pnpm dlx shadcn@latest add \
   button badge card separator sheet drawer \
   command input textarea label \
   tabs accordion scroll-area \
@@ -524,7 +620,30 @@ npx shadcn@latest add \
   select toggle-group \
   toast sonner \
   hover-card \
-  collapsible
+  collapsible \
+  chart \
+  sidebar
+```
+
+**`components.json` (generated by init — do not edit manually):**
+
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils"
+  }
+}
 ```
 
 Custom components built on top (not from shadcn, but use shadcn primitives):
@@ -599,38 +718,78 @@ User clicks ArgumentNode (A0003)
 
 ### Color Palette (CSS custom properties)
 
+shadcn/ui CLI v4 generates OKLCH tokens automatically in `app/globals.css` — this is now the default color format (replacing HSL). We extend the generated file with domain-specific tokens:
+
 ```css
-:root {
-  /* Epistemic status colors */
-  --established: oklch(0.72 0.17 145);   /* emerald */
-  --hypothesis:  oklch(0.75 0.15 80);    /* amber */
-  --provisional: oklch(0.70 0.10 260);   /* slate-blue */
-  --open:        oklch(0.60 0.00 0);     /* neutral */
-  --contested:   oklch(0.70 0.18 35);    /* orange */
+/* app/globals.css
+   Top section: shadcn-generated base tokens (do not edit)
+   Bottom section: Ānvīkṣikī domain extensions */
 
-  /* Label colors (IN / OUT / UNDECIDED) */
-  --label-in:        oklch(0.72 0.17 145);   /* green */
-  --label-out:       oklch(0.65 0.22 25);    /* red */
-  --label-undecided: oklch(0.65 0.00 0);     /* gray */
+@layer base {
+  :root {
+    /* ── shadcn base tokens (generated by `pnpm dlx shadcn@latest init`) ── */
+    --background:          oklch(1 0 0);
+    --foreground:          oklch(0.207 0.013 254.3);
+    --primary:             oklch(0.205 0.105 263.9);
+    --primary-foreground:  oklch(1 0 0);
+    --destructive:         oklch(0.577 0.245 27.325);
+    --muted:               oklch(0.961 0.006 264.5);
+    --muted-foreground:    oklch(0.55 0.013 254.3);
+    --border:              oklch(0.928 0.006 264.5);
+    --radius:              0.5rem;
+    /* ... (full list generated — do not copy-paste, let shadcn write it) */
 
-  /* Pramāṇa hierarchy (weakest → strongest) */
-  --pramana-upamana:  oklch(0.75 0.10 300);  /* violet */
-  --pramana-sabda:    oklch(0.75 0.12 240);  /* blue */
-  --pramana-anumana:  oklch(0.70 0.15 200);  /* cyan */
-  --pramana-pratyaksa: oklch(0.72 0.17 145); /* emerald (strongest) */
+    /* ── Ānvīkṣikī domain tokens ── */
 
-  /* Attack edge colors */
-  --attack-rebuttal:    oklch(0.65 0.22 25); /* red */
-  --attack-undercutting: oklch(0.70 0.18 35);/* orange */
-  --attack-undermining:  oklch(0.65 0.18 60);/* yellow */
+    /* Epistemic status */
+    --established:  oklch(0.72 0.17 145);    /* emerald */
+    --hypothesis:   oklch(0.75 0.15 80);     /* amber */
+    --provisional:  oklch(0.70 0.10 260);    /* slate-blue */
+    --open:         oklch(0.60 0.00 0);      /* neutral */
+    --contested:    oklch(0.70 0.18 35);     /* orange */
 
-  /* Coverage decision colors */
-  --coverage-full:    var(--established);
-  --coverage-partial: var(--hypothesis);
-  --coverage-decline: oklch(0.65 0.15 270);  /* indigo */
-  --coverage-ood:     var(--label-out);
+    /* Argumentation labels */
+    --label-in:         oklch(0.72 0.17 145);  /* green */
+    --label-out:        oklch(0.65 0.22 25);   /* red */
+    --label-undecided:  oklch(0.65 0.00 0);    /* gray */
+
+    /* Pramāṇa hierarchy (weakest → strongest) */
+    --pramana-upamana:   oklch(0.75 0.10 300); /* violet */
+    --pramana-sabda:     oklch(0.75 0.12 240); /* blue */
+    --pramana-anumana:   oklch(0.70 0.15 200); /* cyan */
+    --pramana-pratyaksa: oklch(0.72 0.17 145); /* emerald */
+
+    /* Attack edge types */
+    --attack-rebuttal:     oklch(0.65 0.22 25);  /* red */
+    --attack-undercutting: oklch(0.70 0.18 35);  /* orange */
+    --attack-undermining:  oklch(0.65 0.18 60);  /* yellow */
+
+    /* Coverage routing */
+    --coverage-full:    var(--established);
+    --coverage-partial: var(--hypothesis);
+    --coverage-decline: oklch(0.65 0.15 270);    /* indigo */
+    --coverage-ood:     var(--label-out);
+  }
+
+  .dark {
+    /* ── shadcn dark tokens (generated) ── */
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    /* ... */
+
+    /* Domain tokens: OKLCH values are perceptually stable across
+       light and dark — no override needed for most tokens.
+       Exception: increase chroma slightly for dark mode vibrancy */
+    --established:  oklch(0.78 0.19 145);
+    --hypothesis:   oklch(0.80 0.17 80);
+    --contested:    oklch(0.76 0.20 35);
+    --label-in:     oklch(0.78 0.19 145);
+    --label-out:    oklch(0.70 0.24 25);
+  }
 }
 ```
+
+> **Why OKLCH?** Perceptually uniform — equal numeric distance = equal perceived difference. Gradients don't pass through gray. Works with wide-gamut displays (P3). This is why shadcn switched from HSL in CLI v4.
 
 ### Typography
 
@@ -686,7 +845,7 @@ anvikshiki_ecosystem/
 ├── scripts/               # existing
 ├── docs/
 │   └── webapp_design.md   # this file
-└── pyproject.toml         # add fastapi, uvicorn, sse-starlette
+└── pyproject.toml         # add fastapi>=0.135, uvicorn (no sse-starlette needed)
 ```
 
 ---
@@ -859,15 +1018,97 @@ Deliverable: `curl -X POST localhost:8000/api/query -d '{"query":"How do unit ec
 **Goal:** SSE endpoint that emits stage events during query execution.
 
 Files:
-- `backend/sse_pipeline.py` — generator that monkey-patches the engine pipeline stages to emit SSE events at each stage completion
+- `backend/sse_pipeline.py` — async generator wrapping engine pipeline stages
 
-Approach: wrap each stage function with a context manager that calls `yield SSEEvent(type="stage:grounding", data=...)` after the stage returns. Since Python generators can't run in threads, use `asyncio.Queue` + background task.
+**Implementation pattern (FastAPI native SSE, v0.135+):**
+
+```python
+# backend/sse_pipeline.py
+from collections.abc import AsyncIterable
+from fastapi.sse import ServerSentEvent
+import asyncio, json
+
+async def stream_query(query: str, mode: str) -> AsyncIterable[ServerSentEvent]:
+    """Runs engine pipeline, yielding SSE events per stage."""
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def run():
+        try:
+            # Stage 1: Grounding
+            grounding = await asyncio.to_thread(engine_state.engine.grounding, query)
+            await queue.put(ServerSentEvent(
+                event="stage:grounding",
+                data=json.dumps({"predicates": grounding.predicates,
+                                 "confidence": grounding.confidence,
+                                 "mode": mode}),
+            ))
+            # Stage 2: Coverage
+            coverage = await asyncio.to_thread(engine_state.engine.coverage_analyzer.analyze,
+                                               grounding.predicates)
+            await queue.put(ServerSentEvent(
+                event="stage:coverage",
+                data=json.dumps(coverage.model_dump()),
+            ))
+            # ... stages 3–5 similarly ...
+            full_result = await asyncio.to_thread(engine_state.engine.forward_with_coverage, query)
+            await queue.put(ServerSentEvent(event="complete", data=full_result.model_dump_json()))
+        except Exception as e:
+            await queue.put(ServerSentEvent(event="error", data=json.dumps({"message": str(e)})))
+        finally:
+            await queue.put(None)  # sentinel
+
+    asyncio.create_task(run())
+    while True:
+        event = await queue.get()
+        if event is None:
+            break
+        yield event
+
+# backend/main.py (route)
+from fastapi.sse import EventSourceResponse
+
+@app.get("/api/query/stream", response_class=EventSourceResponse)
+async def query_stream(query: str, mode: str = "partial"):
+    return EventSourceResponse(stream_query(query, mode))
+    # FastAPI automatically adds: Cache-Control: no-cache,
+    # X-Accel-Buffering: no, keep-alive pings every 15s
+```
 
 Deliverable: `curl -N localhost:8000/api/query/stream?query=...` streams stage events.
 
-### Phase 3 — Next.js skeleton + KB select (1 day)
+### Phase 3 — Next.js 15 skeleton + KB select (1 day)
 
-**Goal:** Landing page with KB select → compile → navigate to studio shell.
+**Goal:** Scaffold project, install all dependencies, landing page with KB select → compile → navigate to studio shell.
+
+**Scaffold commands:**
+
+```bash
+# In anvikshiki_ecosystem/
+pnpm create next-app@latest webapp \
+  --typescript --tailwind --eslint \
+  --app --src-dir=false --import-alias="@/*"
+
+cd webapp
+
+# Install shadcn (CLI v4)
+pnpm dlx shadcn@latest init
+# → style: new-york, base color: neutral, CSS variables: yes
+
+# Add all components
+pnpm dlx shadcn@latest add button badge card separator sheet drawer \
+  command input textarea label tabs accordion scroll-area \
+  dialog tooltip popover progress skeleton table select \
+  toggle-group toast sonner hover-card collapsible chart sidebar
+
+# React Flow v12
+pnpm add @xyflow/react @dagrejs/dagre
+
+# State + validation
+pnpm add zustand zod
+
+# Dev
+pnpm add -D @types/dagre
+```
 
 Files:
 - `webapp/app/page.tsx` — KB select grid
@@ -875,6 +1116,11 @@ Files:
 - `webapp/lib/api.ts` — typed fetch wrappers
 - `webapp/store/kbStore.ts` — KB state
 - `webapp/components/kb/KBSelectCard.tsx`
+
+**Next.js 15 notes:**
+- `async` Server Components by default — static panels (KB summary sidebar) are RSC
+- Query Studio is `'use client'` — it needs live state
+- `next.config.ts` needs `rewrites` to proxy `/api/*` → `http://localhost:8000/*` for local dev (avoids CORS)
 
 Deliverable: Can load a KB from the UI and see the stub studio screen.
 
