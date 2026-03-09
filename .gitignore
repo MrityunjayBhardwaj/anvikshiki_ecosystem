@@ -34,3 +34,10 @@ htmlcov/
 
 # Misc
 *.db
+
+# Traces (large runtime artifacts)
+traces/
+
+# Next.js build
+webapp/.next/
+webapp/node_modules/
