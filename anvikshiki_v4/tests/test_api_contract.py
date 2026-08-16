@@ -63,6 +63,28 @@ def _schema_fields(schema_name: str, minimum: int = 3) -> set[str]:
     return fields
 
 
+def _schema_field_types(schema_name: str) -> dict[str, str]:
+    """Map each top-level key of a `z.object({...})` to its declaration text.
+
+    Enough to tell `z.number()` from `z.object({...})` without reimplementing
+    zod in Python — which is the point, since the declaration is the contract
+    and restating it here would create a second one.
+    """
+    src = _types_source()
+    match = re.search(
+        rf"export const {schema_name} = z\.object\(\{{(.*?)^\}}\);",
+        src, re.DOTALL | re.MULTILINE,
+    )
+    assert match, f"{schema_name} not found in {TYPES_TS.name}"
+    body = match.group(1)
+    keys = re.findall(r"^\s{2}(\w+):", body, re.MULTILINE)
+    parts = re.split(r"^\s{2}\w+:", body, flags=re.MULTILINE)[1:]
+    assert len(keys) == len(parts), f"{schema_name}: key/declaration split disagreed"
+    decls = {k: v.strip() for k, v in zip(keys, parts)}
+    assert decls, f"{schema_name} parsed as empty"
+    return decls
+
+
 def _ts_enum(name: str) -> set[str]:
     """Values of a `z.enum([...])` declaration."""
     src = _types_source()
@@ -191,15 +213,28 @@ def test_enums_agree_across_the_boundary(ts_name, py_enum):
 
 
 def test_uncertainty_entry_matches_its_declared_shape(result):
-    """The numeric fields of an uncertainty entry must actually be numeric."""
-    promised = _schema_fields("UncertaintyEntrySchema", minimum=4)
-    assert "aleatoric" in promised and "total_confidence" in promised
+    """Each uncertainty field must have the kind of value the API declares.
+
+    The declaration is read rather than restated, so this keeps holding when
+    the payload changes — as it will when the continuous belief layer goes and
+    `aleatoric` stops being an object.
+    """
+    declared = _schema_field_types("UncertaintyEntrySchema")
+    assert {"aleatoric", "total_confidence"} <= set(declared)
 
     entries = result.get("uncertainty")
     assert entries, "no uncertainty entries produced for a query with conclusions"
+
     for conc, entry in entries.items():
-        assert isinstance(entry["total_confidence"], (int, float)), conc
-        assert isinstance(entry["aleatoric"], (int, float)), (
-            f"{conc}: aleatoric is {type(entry['aleatoric']).__name__}, "
-            f"and the API declares it a number"
-        )
+        for field, decl in declared.items():
+            if field not in entry or entry[field] is None:
+                continue                       # optional / nullable
+            value = entry[field]
+            if decl.startswith("z.number()"):
+                assert isinstance(value, (int, float)) and not isinstance(value, bool), (
+                    f"{conc}.{field} is {type(value).__name__}, declared a number"
+                )
+            elif decl.startswith("z.object("):
+                assert isinstance(value, dict), (
+                    f"{conc}.{field} is {type(value).__name__}, declared an object"
+                )

@@ -5,7 +5,7 @@ import { BaseEdge, EdgeLabelRenderer, getStraightPath, type EdgeProps } from "@x
 import type { AttackEdge as AttackEdgeType } from "@/lib/types";
 
 const EDGE_COLOR: Record<string, string> = {
-  rebuttal:     "var(--attack-rebuttal)",
+  rebutting:    "var(--attack-rebuttal)",
   undercutting: "var(--attack-undercutting)",
   undermining:  "var(--attack-undermining)",
 };

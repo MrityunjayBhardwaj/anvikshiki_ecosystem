@@ -7,7 +7,9 @@ export const EpistemicStatus = z.enum(["established", "hypothesis", "provisional
 export const Label = z.enum(["in", "out", "undecided"]);
 export const CoverageDecision = z.enum(["FULL", "PARTIAL", "DECLINE"]);
 export const GroundingMode = z.enum(["minimal", "partial", "full"]);
-export const AttackType = z.enum(["rebuttal", "undercutting", "undermining"]);
+// "rebutting", not "rebuttal": it is what the compiler emits, what ASPIC+ calls
+// it, and the only spelling consistent with its two siblings here.
+export const AttackType = z.enum(["rebutting", "undercutting", "undermining"]);
 export const RuleType = z.enum(["strict", "defeasible"]);
 
 // ── ProvenanceTag ──────────────────────────────────────────────────────────
@@ -59,7 +61,12 @@ export const ProvenanceEntrySchema = z.object({
 export const UncertaintyEntrySchema = z.object({
   total_confidence: z.number(),
   epistemic: z.object({ status: EpistemicStatus }),
-  aleatoric: z.number().optional().nullable(),
+  // The engine sends the disbelief mass with the sentence explaining it, not a
+  // bare number. Described as it is rather than as it was assumed to be.
+  aleatoric: z.object({
+    disbelief: z.number(),
+    explanation: z.string(),
+  }).optional().nullable(),
   model: z.number().optional().nullable(),
 });
 

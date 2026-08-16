@@ -46,7 +46,7 @@ function transformToEdges(result: EngineResult): Edge[] {
     target: attack.target,
     type: "attack",
     data: { attack },
-    animated: attack.attack_type === "rebuttal",
+    animated: attack.attack_type === "rebutting",
   }));
 }
 
