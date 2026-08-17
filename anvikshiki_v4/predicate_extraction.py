@@ -37,6 +37,7 @@ from .extraction_schema import (
     SynonymCluster,
     ValidationResult,
 )
+from .span_verification import diagnose
 from .schema import (
     AugmentationMetadata,
     AugmentationOrigin,
@@ -100,6 +101,20 @@ def _split_into_sections(text: str, max_tokens: int = 512) -> list[str]:
         sections.append("\n".join(current))
 
     return sections
+
+
+def _section_header(section: str) -> str:
+    """The markdown heading a section opens with, or "" if it has none.
+
+    `_split_into_sections` starts a new section at every `###` line but also
+    splits on the token budget, so a section may begin mid-prose with no
+    heading at all. Returning "" for those is the honest answer — inheriting
+    the previous section's heading would attach a claim to a part of the
+    chapter it did not come from, which is the failure this locator exists to
+    prevent.
+    """
+    first = section.lstrip().split("\n", 1)[0].strip()
+    return first.lstrip("#").strip() if first.startswith("#") else ""
 
 
 def was_truncated(module: object) -> bool | None:
@@ -212,6 +227,18 @@ class ExtractPredicates(dspy.Signature):
     )
     descriptions: list[str] = dspy.OutputField(
         desc="One-sentence description for each predicate, same order."
+    )
+    quotes: list[str] = dspy.OutputField(
+        desc=(
+            "For each predicate, same order: the exact span of section_text "
+            "the claim was read from, copied character for character. Do not "
+            "paraphrase, summarise, or repair the wording — this is checked "
+            "against the section and a span that is not found there is "
+            "recorded as unverified. Prefer a full sentence; a fragment "
+            "shorter than about 24 characters cannot be told apart from "
+            "coincidence. Return an empty string for a predicate you cannot "
+            "point at a span for, rather than inventing one."
+        )
     )
     claim_types: list[str] = dspy.OutputField(
         desc="Claim type for each: causal, conditional, metric, definitional, scope, negation"
@@ -436,6 +463,9 @@ class StageAExtractor(dspy.Module):
         failures: list[str] = []
         truncated_sections = 0
         truncations: list[str] = []
+        quoteless_candidates = 0
+        unverified_quote_candidates = 0
+        quote_failures: list[str] = []
         # True only while every response so far could be checked. One
         # undeterminable section is enough to make the zero-section figure
         # uninterpretable, so this falls to False and stays there — the
@@ -470,6 +500,7 @@ class StageAExtractor(dspy.Module):
 
             predicates = getattr(result, "predicates", None) or []
             descriptions = getattr(result, "descriptions", None) or []
+            quotes = getattr(result, "quotes", None) or []
             claim_types = getattr(result, "claim_types", None) or []
             related = getattr(result, "related_vyaptis", None) or []
 
@@ -499,11 +530,34 @@ class StageAExtractor(dspy.Module):
                 desc = descriptions[j] if j < len(descriptions) else ""
                 ct_str = claim_types[j] if j < len(claim_types) else "causal"
                 rel = related[j] if j < len(related) else "none"
+                quote = quotes[j] if j < len(quotes) else ""
 
                 try:
                     ct = ClaimType(ct_str)
                 except ValueError:
                     ct = ClaimType.CAUSAL
+
+                # Checked here, against the section actually sent to the model,
+                # rather than later against a re-read of the source. This is
+                # the only moment the exact input text is in hand, and a model
+                # asked to quote will sometimes paraphrase — so a check now is
+                # strictly stronger than one that has to re-fetch and hope the
+                # source has not moved.
+                verdict = diagnose(quote, section)
+                if not quote.strip():
+                    quoteless_candidates += 1
+                    found: bool | None = None
+                elif verdict:
+                    unverified_quote_candidates += 1
+                    quote_failures.append(
+                        f"section {i}: {norm}: {verdict}: {quote[:80]!r}"
+                    )
+                    # `too short to discriminate` did find the words, so the
+                    # verdict is honest about that rather than calling it
+                    # missing; it is still not usable as a citation.
+                    found = verdict == "too short to discriminate"
+                else:
+                    found = True
 
                 candidate = CandidatePredicate(
                     name=norm,
@@ -511,7 +565,10 @@ class StageAExtractor(dspy.Module):
                     claim_type=ct,
                     provenance=Provenance(
                         chapter_id=chapter_id,
+                        section_header=_section_header(section),
                         paragraph_index=i,
+                        quote=quote.strip(),
+                        quote_found_in_source=found,
                         confidence=0.5,
                     ),
                     related_existing_vyapti=rel if rel != "none" else None,
@@ -530,6 +587,14 @@ class StageAExtractor(dspy.Module):
             truncated_sections=truncated_sections,
             truncations=truncations,
             truncation_checked=truncation_checked,
+            # Unconditionally True: the section is in hand for every candidate
+            # built here, so unlike truncation there is no path where the
+            # check cannot run. It is set so that a run predating span capture
+            # stays distinguishable from one that checked and found nothing.
+            quotes_checked=True,
+            quoteless_candidates=quoteless_candidates,
+            unverified_quote_candidates=unverified_quote_candidates,
+            quote_failures=quote_failures,
         )
 
     def _build_predicate_list(self) -> str:
@@ -924,13 +989,19 @@ class StageDConstructor(dspy.Module):
                 ProposedVyapti(
                     id=vid,
                     name=candidate.description[:80] if candidate.description else candidate.name,
-                    # Reads `quote` under its new name. The `or` is left as it
-                    # was rather than quietly improved, but it is worth knowing
-                    # what it does today: nothing populates `quote`, so this
-                    # always takes the right branch and every statement is the
-                    # model's own description. The construction reads as
-                    # "prefer the source's words", and there are none to prefer.
-                    statement=candidate.provenance.quote or candidate.description,
+                    # Only a *verified* quote is preferred to the description.
+                    # The old `quote or description` was harmless while quotes
+                    # were never captured; now that they are, it would promote
+                    # an unverified span — a sentence the model produced and
+                    # the section does not contain — into the rule's statement,
+                    # where it would read as the source's own words. The
+                    # fallback still happens, but the provenance records that
+                    # it did, so it is not silent.
+                    statement=(
+                        candidate.provenance.quote
+                        if candidate.provenance.quote_found_in_source
+                        else candidate.description
+                    ),
                     causal_status="empirical",
                     antecedents=[candidate.name],
                     consequent=candidate.name + "_effect",
