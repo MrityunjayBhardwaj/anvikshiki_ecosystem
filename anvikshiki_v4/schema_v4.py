@@ -264,6 +264,20 @@ class Argument:
     is_strict: bool = False            # Strict vs defeasible top rule
     tag: ProvenanceTag = field(
         default_factory=ProvenanceTag.one)
+    # Status in L: the meet of this argument's top rule and its
+    # sub-arguments. Declared with a None default only because the fields
+    # above already carry defaults; __post_init__ makes it mandatory.
+    status: Optional['EpistemicStatus'] = None
+
+    def __post_init__(self):
+        if self.status is None:
+            raise ValueError(
+                f"argument {self.id!r} was built without a status from the "
+                f"lattice. There is no sensible default: the top would score "
+                f"an unevaluated argument as ESTABLISHED and the bottom would "
+                f"report it as defeated. Compute the meet of its top rule and "
+                f"its sub-arguments, or state its premise status explicitly."
+            )
 
 
 @dataclass

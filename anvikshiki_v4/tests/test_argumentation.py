@@ -7,7 +7,8 @@ from anvikshiki_v4.argumentation import ArgumentationFramework
 
 
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
-              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False):
+              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False,
+              status=EpistemicStatus.HYPOTHESIS):
     return Argument(
         id=aid, conclusion=conclusion, top_rule=None,
         premises=frozenset([conclusion]), is_strict=strict,
@@ -17,6 +18,7 @@ def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
             pramana_type=pramana, trust_score=trust,
             decay_factor=decay, derivation_depth=depth,
         ),
+        status=status,
     )
 
 
@@ -83,10 +85,18 @@ def test_pramana_preference():
 
 
 def test_equal_pramana_strength_wins():
-    """Same pramāṇa, higher strength wins."""
+    """Same pramāṇa, higher status wins.
+
+    Strength is a place in the lattice now rather than a product of floats,
+    so the preference this exercises is stated as ESTABLISHED over
+    HYPOTHESIS. The relation being tested is unchanged — an argument defeats
+    a rival it is not strictly less preferred than.
+    """
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.8, trust=0.9))
-    af.add_argument(_make_arg("A1", "not_p", belief=0.5, trust=0.7))
+    af.add_argument(_make_arg("A0", "p", belief=0.8, trust=0.9,
+                              status=EpistemicStatus.ESTABLISHED))
+    af.add_argument(_make_arg("A1", "not_p", belief=0.5, trust=0.7,
+                              status=EpistemicStatus.HYPOTHESIS))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     labels = af.compute_grounded()
@@ -95,9 +105,11 @@ def test_equal_pramana_strength_wins():
 
 
 def test_epistemic_status_established():
+    """An accepted ESTABLISHED argument carries its status to the conclusion."""
     af = ArgumentationFramework()
     af.add_argument(_make_arg("A0", "p", belief=0.9,
-                              pramana=PramanaType.PRATYAKSA))
+                              pramana=PramanaType.PRATYAKSA,
+                              status=EpistemicStatus.ESTABLISHED))
     af.compute_grounded()
     status, tag, args = af.get_epistemic_status("p")
     assert status == EpistemicStatus.ESTABLISHED

@@ -1,7 +1,7 @@
 # tests/test_contestation.py
 import pytest
 from anvikshiki_v4.schema_v4 import (
-    Argument, Attack, Label, ProvenanceTag, PramanaType
+    Argument, Attack, Label, ProvenanceTag, PramanaType, EpistemicStatus
 )
 from anvikshiki_v4.argumentation import ArgumentationFramework
 from anvikshiki_v4.contestation import ContestationManager
@@ -16,6 +16,7 @@ def _simple_af():
         tag=ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
                           pramana_type=PramanaType.ANUMANA,
                           trust_score=0.8, decay_factor=0.9),
+        status=EpistemicStatus.HYPOTHESIS,
     ))
     return af
 
@@ -44,6 +45,7 @@ def test_vitanda_returns_vulnerabilities():
         tag=ProvenanceTag(belief=0.6, disbelief=0.3, uncertainty=0.1,
                           pramana_type=PramanaType.SABDA,
                           trust_score=0.7, decay_factor=0.9),
+        status=EpistemicStatus.HYPOTHESIS,
     ))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))

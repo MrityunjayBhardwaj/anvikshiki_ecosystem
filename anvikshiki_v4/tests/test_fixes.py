@@ -10,7 +10,8 @@ from anvikshiki_v4.uncertainty import compute_uncertainty_v4
 
 
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
-              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False):
+              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False,
+              status=EpistemicStatus.HYPOTHESIS):
     return Argument(
         id=aid, conclusion=conclusion, top_rule=None,
         premises=frozenset([conclusion]), is_strict=strict,
@@ -20,6 +21,7 @@ def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
             pramana_type=pramana, trust_score=trust,
             decay_factor=decay, derivation_depth=depth,
         ),
+        status=status,
     )
 
 
@@ -365,12 +367,14 @@ class TestArgumentTreeRecursionGuard:
             id="A0", conclusion="p", top_rule=None,
             premises=frozenset(["p"]), is_strict=True,
             tag=ProvenanceTag(belief=0.9, disbelief=0.0, uncertainty=0.1),
+            status=EpistemicStatus.ESTABLISHED,
         ))
         af.add_argument(Argument(
             id="A1", conclusion="q", top_rule="V1",
             sub_arguments=("A0",),
             premises=frozenset(["p"]), is_strict=False,
             tag=ProvenanceTag(belief=0.7, disbelief=0.1, uncertainty=0.2),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.compute_grounded()
 
@@ -390,12 +394,14 @@ class TestArgumentTreeRecursionGuard:
             sub_arguments=("A1",),
             premises=frozenset(["p"]), is_strict=False,
             tag=ProvenanceTag(belief=0.7, disbelief=0.1, uncertainty=0.2),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.add_argument(Argument(
             id="A1", conclusion="q", top_rule="V2",
             sub_arguments=("A0",),
             premises=frozenset(["q"]), is_strict=False,
             tag=ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.compute_grounded()
 

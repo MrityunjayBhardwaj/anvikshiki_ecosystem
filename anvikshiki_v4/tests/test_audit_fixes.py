@@ -22,7 +22,8 @@ from anvikshiki_v4.t2_compiler_v4 import (
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
               belief=0.7, disbelief=None, uncertainty=None,
               trust=0.8, decay=0.9, depth=1, strict=False,
-              source_ids=frozenset()):
+              source_ids=frozenset(),
+              status=EpistemicStatus.HYPOTHESIS):
     if disbelief is None:
         disbelief = max(0.0, round(1 - belief - 0.1, 4))
     if uncertainty is None:
@@ -36,6 +37,7 @@ def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
             decay_factor=decay, derivation_depth=depth,
             source_ids=source_ids,
         ),
+        status=status,
     )
 
 
@@ -304,10 +306,16 @@ class TestLabelBasedEpistemicStatus:
         assert status == EpistemicStatus.CONTESTED
 
     def test_in_strong_is_established(self):
-        """IN with strong tag → ESTABLISHED."""
+        """IN with an ESTABLISHED argument → ESTABLISHED.
+
+        Previously "IN with a strong tag": the label still gates the
+        outcome, and what it is joined with is now a lattice element rather
+        than a belief read through a cutoff.
+        """
         af = ArgumentationFramework()
         af.add_argument(_make_arg("A0", "p", belief=0.9,
-                                  disbelief=0.05, uncertainty=0.05))
+                                  disbelief=0.05, uncertainty=0.05,
+                                  status=EpistemicStatus.ESTABLISHED))
         af.compute_grounded()
 
         status, tag, args = af.get_epistemic_status("p")
