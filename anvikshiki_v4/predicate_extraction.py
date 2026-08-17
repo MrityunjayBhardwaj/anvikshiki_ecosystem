@@ -867,6 +867,38 @@ class StageCCanonicalizer(dspy.Module):
 # ─── Stage D: Construct New Vyaptis ────────────────────────────
 
 
+def _dedupe_provenance(records: list[Provenance]) -> list[Provenance]:
+    """Drop repeats while keeping order, comparing on what locates the claim.
+
+    Two candidates can point at the same sentence of the same chapter, and a
+    rule that lists it twice is not better sourced than one that lists it
+    once. That distinction is about to matter: the citation tier counts these
+    records, so a duplicate is a claim of corroboration nobody made — the same
+    error as the overlap-discount bug, where one piece of evidence restated
+    walked belief upward.
+
+    Equality is on the locator and the quote rather than on the whole model,
+    because `confidence` is a per-candidate score and two records of the same
+    span disagreeing about it are still the same span.
+    """
+    seen: set[tuple] = set()
+    unique: list[Provenance] = []
+    for record in records:
+        key = (
+            record.chapter_id,
+            record.section_header,
+            record.paragraph_index,
+            record.doc_url,
+            record.content_sha256,
+            record.quote,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(record)
+    return unique
+
+
 class StageDConstructor(dspy.Module):
     """Stage D: Construct new vyaptis from extracted predicates."""
 
@@ -886,6 +918,17 @@ class StageDConstructor(dspy.Module):
         new_vyaptis: list[ProposedVyapti] = []
         refinement_vyaptis: list[ProposedVyapti] = []
         vocab_set = set(stage_c.vocabulary)
+
+        # Provenance is computed per candidate in Stage A and was then thrown
+        # away here, so every rule extraction produced carried an empty list.
+        # A predicate can be introduced by more than one candidate, and each
+        # occurrence is a separate place the claim was found, so this maps to a
+        # list rather than keeping whichever candidate happened to come last.
+        provenance_by_predicate: dict[str, list[Provenance]] = {}
+        for candidate in stage_a.candidates:
+            provenance_by_predicate.setdefault(candidate.name, []).append(
+                candidate.provenance
+            )
 
         # Determine next vyapti ID number
         existing_ids = sorted(self.ks.vyaptis.keys())
@@ -953,6 +996,17 @@ class StageDConstructor(dspy.Module):
                 ),
                 epistemic_status=getattr(result, "epistemic_status", "hypothesis") or "hypothesis",
                 sources=getattr(result, "sources", None) or [],
+                # Both ends of the relationship are predicates, and either may
+                # have been introduced by a candidate in this run. The
+                # consequent often was not — it can be an existing
+                # knowledge-base predicate — so this list is frequently
+                # shorter than two and sometimes empty. `provenance_attached`
+                # is what separates that from never having looked.
+                provenance=_dedupe_provenance(
+                    provenance_by_predicate.get(name, [])
+                    + provenance_by_predicate.get(node.parent, [])
+                ),
+                provenance_attached=True,
                 parent_vyapti=node.source_vyapti,
             )
 
@@ -1014,6 +1068,13 @@ class StageDConstructor(dspy.Module):
                     confidence_formulation=0.5,
                     epistemic_status="hypothesis",
                     sources=[],
+                    # Exactly one candidate built this rule, and its statement
+                    # is taken from that candidate's quote a few lines above —
+                    # so the record saying where the quote came from has to
+                    # travel with it. Without this the rule quoted a source it
+                    # could not name.
+                    provenance=[candidate.provenance],
+                    provenance_attached=True,
                     parent_vyapti=candidate.related_existing_vyapti,
                 )
             )
@@ -1124,6 +1185,14 @@ class StageEValidator:
                     epistemic_status=es,
                     decay_risk=dr,
                     sources=proposed.sources,
+                    # The second half of the candidate-to-rule step. Threading
+                    # provenance onto the proposal alone would have changed
+                    # nothing observable: `Vyapti` is what reaches the
+                    # knowledge base and what a citation tier reads, so
+                    # stopping at `ProposedVyapti` would leave the record
+                    # dying one conversion later instead of one earlier.
+                    provenance=proposed.provenance,
+                    provenance_attached=proposed.provenance_attached,
                     antecedents=proposed.antecedents,
                     consequent=proposed.consequent,
                     # Stamped here, not by a later pass. Absence of this

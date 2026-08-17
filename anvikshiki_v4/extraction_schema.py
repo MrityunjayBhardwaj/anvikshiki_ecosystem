@@ -344,6 +344,32 @@ class ProposedVyapti(BaseModel):
     decay_risk: str = "moderate"
     sources: list[str] = Field(default_factory=list)
     provenance: list[Provenance] = Field(default_factory=list)
+    provenance_attached: bool = Field(
+        default=False,
+        description=(
+            "Whether the candidate-to-rule step tried to carry provenance "
+            "across. Needed because an empty `provenance` list meant two "
+            "different things and nothing could tell them apart: no "
+            "contributing candidate had a record, or the construction site "
+            "never passed one. Every rule extraction has ever produced was "
+            "the second, and a citation tier computed over those lists would "
+            "have reported the same value after every source gained a DOI — "
+            "measuring our own plumbing and calling it the state of the "
+            "corpus.\n\n"
+            "False is the conservative default here because it is the "
+            "conservative reading of data written *before* this flag existed: "
+            "those rules had nothing attached, and a True default would claim "
+            "retroactively that they had been checked. Construction sites set "
+            "it True when they have looked, whether or not they found "
+            "anything.\n\n"
+            "A rule with no provenance stays constructible on purpose. The "
+            "sub-rule path can legitimately find none — its consequent may be "
+            "an existing knowledge-base predicate that no candidate in this "
+            "run introduced — so refusing to build it would discard a real "
+            "rule to enforce a record-keeping rule. The flag makes that case "
+            "visible instead of forbidding it."
+        ),
+    )
     parent_vyapti: Optional[str] = None
 
 
