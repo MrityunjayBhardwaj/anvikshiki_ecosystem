@@ -43,6 +43,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from .predicate_contrariness import (
+    affirmative,
     match_veto,
     negation_differs,
     normalize_negation,
@@ -193,13 +194,11 @@ class SemanticCoverageAnalyzer:
         rule concluding the negation of what it asked about.
         """
         normalized = normalize_negation(predicate_name(pred))
-        affirmative = (
-            normalized[4:] if normalized.startswith("not_") else normalized
-        )
+        unnegated = affirmative(normalized)
         # Deduplicated: for an affirmative query the two forms are the same,
         # and looking twice would be wasted work rather than wrong.
-        forms = [normalized] if affirmative == normalized else [
-            normalized, affirmative
+        forms = [normalized] if unnegated == normalized else [
+            normalized, unnegated
         ]
 
         for layer in ("exact", "synonym", "token"):

@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Callable, Optional
 
+from .predicate_contrariness import affirmative, normalize_negation
+
 
 # ─── Heyting Lattice ─────────────────────────────────────────
 
@@ -282,6 +284,22 @@ class DatalogEngine:
         Validate predicate strings against the known vocabulary.
         Used by Layer 5 of the grounding defense.
 
+        A predicate is looked up **as written** first, and only then by its
+        affirmative form. `known_preds` is built from rule heads as well as
+        bodies, so a negated name can legitimately be in it —
+        `not_value_creation` is V11's consequent in the knowledge base shipped
+        here. Stripping before the lookup rejected exactly those predicates and
+        named a string the caller never wrote, listing the one they did write as
+        valid on the same line.
+
+        The affirmative fallback stays, and is not a leniency: a query asserting
+        `not_X` against a vocabulary that knows `X` is *about* a concept the
+        knowledge base holds, which is the same call coverage routing makes.
+        What changed is the order, and that double negation is eliminated before
+        either lookup — a single strip on `not_not_X` lands on `not_X`, so this
+        validator used to accept a doubly-negated name because the *opposite*
+        predicate happened to be in the vocabulary.
+
         Returns list of error messages (empty = all valid).
         """
         errors: list[str] = []
@@ -302,14 +320,23 @@ class DatalogEngine:
                 )
                 continue
 
-            name = pred_str.split("(")[0].strip()
-            if name.startswith("not_"):
-                name = name[4:]
+            literal = pred_str.split("(")[0].strip()
+            written = normalize_negation(literal)
+            forms = [written]
+            if affirmative(written) != written:
+                forms.append(affirmative(written))
 
-            if name not in known_preds:
+            if not any(form in known_preds for form in forms):
                 hint = sorted(known_preds)[:10]
+                # Double negation is the one case where the name looked up is
+                # not the name typed, so say both — the complaint that opened
+                # this was an error naming a string absent from its own input.
+                as_written = (
+                    "" if written == literal else f" (written '{literal}')"
+                )
                 errors.append(
-                    f"Unknown predicate: '{name}' — valid: {hint}"
+                    f"Unknown predicate: '{written}'{as_written}"
+                    f" — valid: {hint}"
                 )
 
         return errors
