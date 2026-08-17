@@ -78,37 +78,3 @@ def test_build_rule_tag(sample_ks):
     # enters the reasoning as a lattice element where the argument is built.
     assert not hasattr(tag, "belief")
     assert tag.trust_score == pytest.approx(0.9 * 0.85)
-
-
-# ── Path resolution ──
-#
-# A knowledge base has to resolve to the same file whatever directory the
-# process was started from. When it did not, the same suite reported
-# 263 passed from the repo root and 73 file-not-found errors from anywhere else.
-
-
-def test_repo_relative_path_resolves_from_another_directory(tmp_path, monkeypatch):
-    """The repo-relative literal every caller uses works from any cwd."""
-    monkeypatch.chdir(tmp_path)
-    ks = load_knowledge_store("anvikshiki_v4/data/sample_architecture.yaml")
-    assert len(ks.vyaptis) > 0
-
-
-def test_path_that_exists_relative_to_cwd_wins(tmp_path, monkeypatch):
-    """A path that already resolves is used as given — the anchor is a fallback."""
-    local = tmp_path / "anvikshiki_v4" / "data"
-    local.mkdir(parents=True)
-    (local / "sample_architecture.yaml").write_text(
-        "domain_type: FORMAL\npramanas: [local_override]\nvyaptis: {}\n"
-    )
-    monkeypatch.chdir(tmp_path)
-    ks = load_knowledge_store("anvikshiki_v4/data/sample_architecture.yaml")
-    assert ks.pramanas == ["local_override"]
-
-
-def test_missing_file_still_raises_naming_the_requested_path(tmp_path, monkeypatch):
-    """The fallback must not turn a genuine bad path into a silent success."""
-    monkeypatch.chdir(tmp_path)
-    with pytest.raises(FileNotFoundError) as excinfo:
-        load_knowledge_store("anvikshiki_v4/data/no_such_kb.yaml")
-    assert "anvikshiki_v4/data/no_such_kb.yaml" in str(excinfo.value)

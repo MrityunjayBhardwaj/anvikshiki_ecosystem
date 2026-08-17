@@ -493,10 +493,10 @@ class TestVyaptiCompleteness:
 
 class TestDAGValidity:
     def test_valid(self):
-        assert dag_validity(ValidationResult(is_valid=True)) == 1.0
+        assert dag_validity(ValidationResult(ran=True, is_valid=True)) == 1.0
 
     def test_invalid(self):
-        vr = ValidationResult(cycle_errors=["cycle: a -> b -> a"])
+        vr = ValidationResult(ran=True, cycle_errors=["cycle: a -> b -> a"])
         assert dag_validity(vr) == 0.0
 
 
@@ -518,7 +518,7 @@ class TestCompositeEvaluator:
     def test_composite_score_range(self, sample_stage_a, sample_stage_d):
         gold = {"ltv_exceeds_cac", "positive_contribution_margin", "payback_within_runway"}
         evaluator = ExtractionEvaluator(gold)
-        validation = ValidationResult(is_valid=True, coverage_ratio=0.3)
+        validation = ValidationResult(ran=True, is_valid=True, coverage_ratio=0.3)
 
         metrics = evaluator.evaluate(sample_stage_a, sample_stage_d, validation)
         assert 0.0 <= metrics["composite"] <= 1.0
@@ -606,6 +606,7 @@ class TestHITLRendering:
 
     def test_render_validation_summary(self):
         vr = ValidationResult(
+            ran=True,
             is_valid=False,
             cycle_errors=["cycle: a -> b -> a"],
             coverage_ratio=0.25,

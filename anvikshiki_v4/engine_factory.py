@@ -22,11 +22,13 @@ Usage:
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 from pathlib import Path
 from typing import Optional
 
+from .paths import resolve_repo_path
 from .schema import KnowledgeStore
 from .t2_compiler_v4 import load_knowledge_store
 from .t2b_compiler import T2bResult, compile_t2b
@@ -69,12 +71,25 @@ def load_guide_dir(guide_dir: str) -> dict[str, str]:
 
     Files that don't match guide_ch*.md or guide_opening*.md patterns
     are skipped (stage files, pure prompt files, etc.).
+
+    Raises FileNotFoundError when the directory is not there. It used to
+    return an empty mapping instead, which meant an engine asked for guides it
+    never received still answered — retrieving nothing, citing nothing, and
+    reporting no problem. Because the path was resolved against the working
+    directory, that happened to every process not started from the repo root:
+    seven chapters from there, zero and silent from anywhere else.
+
+    An empty result now means one thing only — the directory exists and holds
+    no matching files. "Nothing was there" and "nowhere to look" are different
+    facts, and a caller can finally tell them apart.
     """
     guide_text: dict[str, str] = {}
-    guide_path = Path(guide_dir)
+    guide_path = resolve_repo_path(guide_dir, description="guide directory")
 
     if not guide_path.is_dir():
-        return guide_text
+        raise NotADirectoryError(
+            errno.ENOTDIR, os.strerror(errno.ENOTDIR), str(guide_dir)
+        )
 
     for md_file in sorted(guide_path.glob("*.md")):
         name = md_file.stem
