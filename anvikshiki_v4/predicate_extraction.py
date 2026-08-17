@@ -924,7 +924,13 @@ class StageDConstructor(dspy.Module):
                 ProposedVyapti(
                     id=vid,
                     name=candidate.description[:80] if candidate.description else candidate.name,
-                    statement=candidate.provenance.sentence or candidate.description,
+                    # Reads `quote` under its new name. The `or` is left as it
+                    # was rather than quietly improved, but it is worth knowing
+                    # what it does today: nothing populates `quote`, so this
+                    # always takes the right branch and every statement is the
+                    # model's own description. The construction reads as
+                    # "prefer the source's words", and there are none to prefer.
+                    statement=candidate.provenance.quote or candidate.description,
                     causal_status="empirical",
                     antecedents=[candidate.name],
                     consequent=candidate.name + "_effect",

@@ -7,10 +7,21 @@ Follows the pattern of schema.py — Pydantic BaseModel with Field descriptors.
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
+
+_SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
 
 
 # ─── Stage A: Candidate Extraction ─────────────────────────────
@@ -28,15 +39,120 @@ class ClaimType(str, Enum):
 
 
 class Provenance(BaseModel):
-    """Where in the guide text a claim was found."""
+    """Where a claim was found — in the guide corpus, or in a fetched document.
 
-    chapter_id: str
+    Two locator families, because the two kinds of source are addressed
+    differently and neither can address the other. A guide chapter is addressed
+    by position inside a corpus we hold; a retrieved document is addressed by
+    URL plus a content hash, because the thing at that URL can change under us
+    and a locator that cannot notice that is not a locator.
+
+    `quote` is the span itself, and it is what makes the record checkable rather
+    than merely descriptive: given a locator and a quote, a later pass can go
+    back to the source and confirm the words are there. That check is not in
+    this model — it is the validation gate — but the fields it needs are.
+
+    A note on what this model does *not* yet guarantee. Nothing in the pipeline
+    currently populates `quote`: the extraction signature has no output field
+    for it, the construction site does not set it, and the one real run on disk
+    has 24 candidates with an empty span in all 24. So the fields below are the
+    surface a verification gate needs, and the gate has nothing to verify until
+    extraction is asked to quote. Adding fields does not add evidence.
+    """
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    # ── Guide-corpus locator ──
+    chapter_id: str = Field(
+        default="",
+        description=(
+            "Chapter in the guide corpus, e.g. 'ch02'. Defaulted rather than "
+            "required so a document-sourced claim does not have to invent one; "
+            "the model validator below requires *a* locator instead."
+        ),
+    )
     section_header: str = ""
     paragraph_index: int = 0
-    sentence: str = Field(
-        default="", description="The exact sentence containing the claim"
+
+    # ── Fetched-document locator ──
+    doc_url: str = Field(
+        default="",
+        description="Absolute URL of the document the claim was read from.",
+    )
+    retrieved_at: Optional[datetime] = Field(
+        default=None,
+        description=(
+            "When the document was fetched. Absent means nobody recorded it, "
+            "which is different from the document being fresh — decay reads "
+            "this, so a missing value must not read as 'just now'."
+        ),
+    )
+    content_sha256: str = Field(
+        default="",
+        description=(
+            "SHA-256 of the exact bytes the quote was taken from. Without it a "
+            "URL locates a moving target: the page can change and the quote "
+            "will simply stop being found, with nothing to say whether it was "
+            "fabricated or the source was edited."
+        ),
+    )
+
+    quote: str = Field(
+        default="",
+        validation_alias=AliasChoices("quote", "sentence"),
+        description=(
+            "The claim's span, verbatim from the source. Named `quote` rather "
+            "than `sentence` because it is a citation to be checked, not "
+            "incidental context, and because it need not be one sentence. "
+            "`sentence` is still accepted when parsing so traces written "
+            "before the rename keep loading."
+        ),
     )
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+
+    @field_validator("content_sha256")
+    @classmethod
+    def _sha256_is_a_hash_or_absent(cls, value: str) -> str:
+        """A malformed digest must fail loudly rather than sit there unusable.
+
+        The failure this prevents is a placeholder — "TODO", "unknown", a
+        truncated paste — occupying the field that later decides whether a
+        quote can be re-checked. Empty is a legitimate value meaning nobody
+        hashed anything; 63 hex characters is not.
+        """
+        if value and not _SHA256_RE.fullmatch(value):
+            raise ValueError(
+                f"content_sha256 must be 64 hex characters or empty, "
+                f"got {len(value)} character(s): {value[:16]!r}"
+            )
+        return value.lower()
+
+    @field_validator("doc_url")
+    @classmethod
+    def _doc_url_is_absolute_or_absent(cls, value: str) -> str:
+        """A relative URL cannot be re-fetched from anywhere but here."""
+        if value and "://" not in value:
+            raise ValueError(
+                f"doc_url must be absolute (scheme://host/...), got {value!r}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _at_least_one_locator(self) -> Provenance:
+        """A provenance record that locates nothing is not provenance.
+
+        `chapter_id` used to be required, which enforced this for the guide
+        path by accident. Defaulting it so a fetched document need not fake a
+        chapter opens the hole, so the requirement is stated instead of relying
+        on one field's arity — and it is stated as "at least one", because
+        which family applies depends on where the claim came from.
+        """
+        if not self.chapter_id and not self.doc_url:
+            raise ValueError(
+                "Provenance needs a locator: set chapter_id for a guide claim "
+                "or doc_url for a fetched document"
+            )
+        return self
 
 
 class CandidatePredicate(BaseModel):
