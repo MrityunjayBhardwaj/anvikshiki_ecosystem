@@ -215,12 +215,16 @@ def test_enums_agree_across_the_boundary(ts_name, py_enum):
 def test_uncertainty_entry_matches_its_declared_shape(result):
     """Each uncertainty field must have the kind of value the API declares.
 
-    The declaration is read rather than restated, so this keeps holding when
-    the payload changes — as it will when the continuous belief layer goes and
-    `aleatoric` stops being an object.
+    The declaration is read rather than restated, so this kept holding when
+    the continuous belief layer went: `total_confidence` left the schema and
+    this test needed only its floor updated, not its logic.
     """
     declared = _schema_field_types("UncertaintyEntrySchema")
-    assert {"aleatoric", "total_confidence"} <= set(declared)
+    assert {"epistemic", "aleatoric", "inference"} <= set(declared)
+    assert "total_confidence" not in declared, (
+        "the composite is back in the contract — it multiplied three "
+        "quantities under weights nobody derived"
+    )
 
     entries = result.get("uncertainty")
     assert entries, "no uncertainty entries produced for a query with conclusions"

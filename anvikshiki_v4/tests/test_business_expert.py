@@ -15,6 +15,7 @@ Tests the full v4 engine pipeline against business_expert.yaml:
 import pytest
 from anvikshiki_v4.t2_compiler_v4 import compile_t2, load_knowledge_store
 from anvikshiki_v4.schema_v4 import Label, PramanaType, EpistemicStatus
+from anvikshiki_v4.lattice import rank
 from anvikshiki_v4.contestation import ContestationManager
 from anvikshiki_v4.uncertainty import compute_uncertainty_v4
 
@@ -153,10 +154,13 @@ class TestChainDerivation:
         for a in af.arguments.values():
             args_by_conc[a.conclusion] = a
 
-        # Premise > rule-derived > chain-derived
-        assert args_by_conc["positive_unit_economics"].tag.strength > \
-               args_by_conc["value_creation"].tag.strength > \
-               args_by_conc["long_term_value"].tag.strength
+        # Weakest link: chaining cannot strengthen a conclusion, so status
+        # is non-increasing along premise → rule-derived → chain-derived.
+        # Not strictly decreasing — chaining through established rules
+        # legitimately holds a status, which is the whole point of the meet.
+        assert rank(args_by_conc["positive_unit_economics"].status) >= \
+               rank(args_by_conc["value_creation"].status) >= \
+               rank(args_by_conc["long_term_value"].status)
 
     def test_independent_vyaptis_dont_fire_without_antecedents(self, business_ks):
         """V09 (disruption) shouldn't fire without its specific antecedents."""
@@ -380,8 +384,7 @@ class TestContestationProtocols:
         pre_attack_count = len(af.attacks)
 
         # Contest value_creation with counter-evidence
-        new_id = cm.apply_contestation(
-            af=af,
+        new_id = cm.apply_contestation(af=af,
             contestation_type="viruddha",
             target_arg_id=vc_arg.id,
             evidence={
@@ -410,8 +413,7 @@ class TestUncertaintyQuantification:
             a for a in af.arguments.values() if a.conclusion == "value_creation"
         )
         status, tag, _ = af.get_epistemic_status("value_creation")
-        report = compute_uncertainty_v4(
-            tag=vc_arg.tag,
+        report = compute_uncertainty_v4(tag=vc_arg.tag,
             grounding_confidence=0.9,
             conclusion="value_creation",
             epistemic_status=status,
@@ -420,10 +422,15 @@ class TestUncertaintyQuantification:
         assert "epistemic" in report
         assert "aleatoric" in report
         assert "inference" in report
-        assert report["total_confidence"] > 0
+        assert "total_confidence" not in report
 
-    def test_higher_uncertainty_for_deeper_chains(self, business_ks):
-        """V08 (depth=2 chain) should have higher uncertainty than V01 (depth=1)."""
+    def test_deeper_chains_are_never_stronger(self, business_ks):
+        """A two-step chain cannot outrank the one-step it was built on.
+
+        Previously "deeper chain → higher uncertainty", which was the belief
+        product decaying. The lattice makes it a bound rather than a slide:
+        the chain is the meet of its links, so it sits at or below them.
+        """
         facts = [
             {"predicate": "positive_unit_economics", "confidence": 0.9},
             {"predicate": "binding_constraint_identified", "confidence": 0.85},
@@ -440,8 +447,7 @@ class TestUncertaintyQuantification:
                 v08_arg = a
 
         assert v01_arg is not None and v08_arg is not None
-        # Deeper chain → higher uncertainty (lower strength)
-        assert v08_arg.tag.uncertainty > v01_arg.tag.uncertainty
+        assert rank(v08_arg.status) <= rank(v01_arg.status)
 
 
 # ── Disruption Theory (Contested Vyāpti) ──
@@ -464,8 +470,9 @@ class TestDisruptionTheory:
         af = compile_t2(business_ks, disruption_facts)
         for a in af.arguments.values():
             if a.conclusion == "disruption_vulnerability":
-                # CONTESTED rule: disbelief attenuated, uncertainty high
-                assert a.tag.uncertainty > 0.3
+                # A rule the KB records as contested carries that status
+                # into every argument built on it.
+                assert a.status == EpistemicStatus.CONTESTED
 
     def test_disruption_not_fires_without_antecedents(self, business_ks):
         """V09 needs both incumbent_rational_allocation AND low_margin_market_entrant."""

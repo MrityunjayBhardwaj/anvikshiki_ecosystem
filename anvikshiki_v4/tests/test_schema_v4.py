@@ -1,130 +1,156 @@
 # tests/test_schema_v4.py
+"""Tests for the provenance tag and the argument it annotates.
+
+Everything here used to be about the Subjective Logic opinion — that
+chaining attenuated belief, that accrual accumulated it, that a tag's belief
+and uncertainty could be read through cutoffs to produce a status, and that
+b + d + u summed to one. None of that exists now: an argument's grade is its
+status in the epistemic lattice, computed from the argumentation labelling.
+
+What is left on the tag is provenance metadata, which composes by min along
+a chain and max across accrual. The laws over that composition are stated in
+`test_algebra_laws.py`; these are the specific behaviours worth pinning.
+"""
+
 import pytest
-import math
+
 from anvikshiki_v4.schema_v4 import (
-    ProvenanceTag, PramanaType, EpistemicStatus, Argument, Attack, Label
+    Argument, EpistemicStatus, PramanaType, ProvenanceTag
 )
 
 
-# ── Semiring Law Tests ──
+# ── Composition ──
 
-def test_tensor_associativity():
-    a = ProvenanceTag(belief=0.8, disbelief=0.1, uncertainty=0.1,
-                      trust_score=0.9, decay_factor=0.95, derivation_depth=1)
-    b = ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
-                      trust_score=0.85, decay_factor=0.9, derivation_depth=1)
-    c = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
-                      trust_score=0.95, decay_factor=0.92, derivation_depth=1)
+def test_tensor_is_associative():
+    a = ProvenanceTag(trust_score=0.9, decay_factor=0.95, derivation_depth=1)
+    b = ProvenanceTag(trust_score=0.85, decay_factor=0.9, derivation_depth=1)
+    c = ProvenanceTag(trust_score=0.95, decay_factor=0.92, derivation_depth=1)
     ab_c = ProvenanceTag.tensor(ProvenanceTag.tensor(a, b), c)
     a_bc = ProvenanceTag.tensor(a, ProvenanceTag.tensor(b, c))
-    assert abs(ab_c.belief - a_bc.belief) < 1e-10
-    assert abs(ab_c.trust_score - a_bc.trust_score) < 1e-10
+    assert ab_c == a_bc
     assert ab_c.derivation_depth == a_bc.derivation_depth == 3
 
 
-def test_oplus_commutativity():
-    a = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
-    b = ProvenanceTag(belief=0.5, disbelief=0.15, uncertainty=0.35,
-                      trust_score=0.85, decay_factor=0.95, derivation_depth=1)
-    ab = ProvenanceTag.oplus(a, b)
-    ba = ProvenanceTag.oplus(b, a)
-    assert abs(ab.belief - ba.belief) < 1e-10
-    assert abs(ab.disbelief - ba.disbelief) < 1e-10
-    assert abs(ab.uncertainty - ba.uncertainty) < 1e-10
+def test_oplus_is_commutative():
+    a = ProvenanceTag(trust_score=0.8, decay_factor=0.9, derivation_depth=2)
+    b = ProvenanceTag(trust_score=0.85, decay_factor=0.95, derivation_depth=1)
+    assert ProvenanceTag.oplus(a, b) == ProvenanceTag.oplus(b, a)
 
 
-def test_tensor_left_identity():
-    """Trust discounting: one() is a LEFT identity — tensor(one(), a) == a."""
-    a = ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
-                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
-    result = ProvenanceTag.tensor(ProvenanceTag.one(), a)
-    assert abs(result.belief - a.belief) < 1e-10
-    assert abs(result.disbelief - a.disbelief) < 1e-10
-    assert abs(result.uncertainty - a.uncertainty) < 1e-10
-    assert abs(result.trust_score - a.trust_score) < 1e-10
-    assert result.derivation_depth == a.derivation_depth
-
-
-def test_oplus_identity():
-    a = ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
-                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
-    result = ProvenanceTag.oplus(a, ProvenanceTag.zero())
-    assert abs(result.belief - a.belief) < 1e-10
-
-
-def test_tensor_annihilation():
-    a = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
-                      trust_score=0.9, decay_factor=0.95, derivation_depth=1)
-    result = ProvenanceTag.tensor(a, ProvenanceTag.zero())
-    assert result.belief == 0.0
-    assert result.strength == 0.0
-
-
-# ── Tag Arithmetic Tests ──
-
-def test_tensor_attenuates():
-    a = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
+def test_chaining_takes_the_weakest_link():
+    a = ProvenanceTag(pramana_type=PramanaType.PRATYAKSA,
                       trust_score=0.8, decay_factor=0.9, derivation_depth=1)
-    b = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
+    b = ProvenanceTag(pramana_type=PramanaType.SABDA,
                       trust_score=0.85, decay_factor=0.95, derivation_depth=1)
     result = ProvenanceTag.tensor(a, b)
-    # Trust discounting: b = a.b * b.b = 0.9 * 0.9 = 0.81
-    assert result.belief == pytest.approx(0.81, rel=0.01)
-    assert result.belief < min(a.belief, b.belief)  # Attenuation property
-    assert result.trust_score == 0.8   # min (lattice)
-    assert result.derivation_depth == 2
+    assert result.pramana_type == PramanaType.SABDA   # min
+    assert result.trust_score == 0.8                  # min
+    assert result.decay_factor == 0.9                 # min
+    assert result.derivation_depth == 2               # sum
 
 
-def test_oplus_accumulates():
-    """Three HYPOTHESIS-level tags: combined belief > any individual."""
-    tag = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                        trust_score=0.8, decay_factor=0.9, derivation_depth=1)
-    combined = ProvenanceTag.oplus(tag, tag)
-    combined = ProvenanceTag.oplus(combined, tag)
-    assert combined.belief > 0.6  # Non-idempotent accumulation
+def test_accrual_takes_the_best_source():
+    a = ProvenanceTag(pramana_type=PramanaType.SABDA,
+                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
+    b = ProvenanceTag(pramana_type=PramanaType.PRATYAKSA,
+                      trust_score=0.85, decay_factor=0.95, derivation_depth=1)
+    result = ProvenanceTag.oplus(a, b)
+    assert result.pramana_type == PramanaType.PRATYAKSA  # max
+    assert result.trust_score == 0.85                    # max
+    assert result.decay_factor == 0.95                   # max
+    assert result.derivation_depth == 1                  # min
 
 
-# ── Epistemic Status Tests ──
+def test_accrual_is_idempotent():
+    """Restating one argument must not strengthen its provenance.
 
-def test_epistemic_status_established():
-    tag = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05)
-    assert tag.epistemic_status() == EpistemicStatus.ESTABLISHED
-
-
-def test_epistemic_status_hypothesis():
-    tag = ProvenanceTag(belief=0.6, disbelief=0.15, uncertainty=0.25)
-    assert tag.epistemic_status() == EpistemicStatus.HYPOTHESIS
-
-
-def test_epistemic_status_contested():
-    tag = ProvenanceTag(belief=0.4, disbelief=0.5, uncertainty=0.1)
-    assert tag.epistemic_status() == EpistemicStatus.CONTESTED
+    This needed a source-overlap discount when accrual was cumulative
+    fusion, and the discount did not fire when a tag carried no source ids.
+    max is idempotent whatever the provenance says.
+    """
+    for sources in (frozenset(["s1"]), frozenset(["s1", "s2"]), frozenset()):
+        tag = ProvenanceTag(trust_score=0.7, decay_factor=0.8,
+                            source_ids=sources)
+        assert ProvenanceTag.oplus(tag, tag) == tag
 
 
-def test_epistemic_status_open():
-    tag = ProvenanceTag(belief=0.15, disbelief=0.15, uncertainty=0.7)
-    assert tag.epistemic_status() == EpistemicStatus.OPEN
+# ── Identities ──
+
+def test_one_is_the_identity_for_chaining():
+    """one() sits at the TOP of the metadata lattice, so min leaves a alone."""
+    a = ProvenanceTag(pramana_type=PramanaType.SABDA,
+                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
+    assert ProvenanceTag.tensor(ProvenanceTag.one(), a) == a
+    assert ProvenanceTag.tensor(a, ProvenanceTag.one()) == a
 
 
-# ── Validation Tests ──
+def test_zero_is_the_identity_for_accrual_on_the_lattice_fields():
+    """zero() sits at the BOTTOM, so max leaves a alone.
 
-def test_tag_validation_rejects_invalid():
-    with pytest.raises(ValueError, match="b \\+ d \\+ u must"):
-        ProvenanceTag(belief=0.5, disbelief=0.5, uncertainty=0.5)
+    Built at the top — which is where it used to sit, carrying trust 1.0 and
+    decay 1.0 — accruing "no evidence" raised an argument to maximal trust
+    and perfect freshness.
+
+    Depth is the documented exception and is *not* covered here, because it
+    does not hold: accrual takes the shallowest path by `min`, whose
+    identity would have to be an unbounded depth, and no tag can carry one.
+    So accruing zero() still flattens depth. That is left for #14, which is
+    where depth accounting is settled — asserting it here would mean either
+    a false claim or a special case in the operator.
+    """
+    a = ProvenanceTag(pramana_type=PramanaType.SABDA,
+                      trust_score=0.8, decay_factor=0.9, derivation_depth=2)
+    for result in (ProvenanceTag.oplus(a, ProvenanceTag.zero()),
+                   ProvenanceTag.oplus(ProvenanceTag.zero(), a)):
+        assert result.pramana_type == a.pramana_type
+        assert result.trust_score == a.trust_score
+        assert result.decay_factor == a.decay_factor
 
 
-# ── Serialization Tests ──
+def test_accrual_against_zero_still_flattens_depth():
+    """The known gap above, asserted so it cannot regress unnoticed.
+
+    When #14 gives depth an identity this should start failing, and that is
+    the intent — the test names the wart rather than leaving it implicit.
+    """
+    a = ProvenanceTag(derivation_depth=2)
+    assert ProvenanceTag.oplus(a, ProvenanceTag.zero()).derivation_depth == 0
+
+
+# ── Arguments must state their status and provenance ──
+
+def test_argument_without_a_status_is_refused():
+    with pytest.raises(ValueError, match="without a status"):
+        Argument(id="A0", conclusion="p", top_rule=None,
+                 tag=ProvenanceTag())
+
+
+def test_argument_without_a_tag_is_refused():
+    with pytest.raises(ValueError, match="without a provenance tag"):
+        Argument(id="A0", conclusion="p", top_rule=None,
+                 status=EpistemicStatus.HYPOTHESIS)
+
+
+# ── Serialization ──
 
 def test_tag_roundtrip():
     tag = ProvenanceTag(
-        belief=0.7, disbelief=0.2, uncertainty=0.1,
         source_ids=frozenset(["src1", "src2"]),
         pramana_type=PramanaType.ANUMANA,
         trust_score=0.85, decay_factor=0.9, derivation_depth=2,
     )
-    d = tag.to_dict()
-    restored = ProvenanceTag.from_dict(d)
-    assert abs(restored.belief - tag.belief) < 1e-10
-    assert restored.pramana_type == tag.pramana_type
-    assert restored.source_ids == tag.source_ids
+    assert ProvenanceTag.from_dict(tag.to_dict()) == tag
+
+
+def test_serialized_tag_carries_no_opinion():
+    """The wire format is the API contract's other half.
+
+    A belief left in `to_dict` would keep the frontend's schema expecting
+    one, and a field that is always absent parses as a break rather than as
+    a removal.
+    """
+    d = ProvenanceTag(trust_score=0.5).to_dict()
+    assert set(d) == {
+        "source_ids", "pramana_type", "trust_score",
+        "decay_factor", "derivation_depth",
+    }

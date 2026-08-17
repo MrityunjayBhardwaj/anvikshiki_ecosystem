@@ -410,8 +410,9 @@ def main():
         subs = [s for s in arg.sub_arguments] if arg.sub_arguments else []
         print(f"  {aid}: {arg.conclusion}")
         print(f"    top_rule: {top_rule}, sub_args: {subs}")
-        print(f"    tag: b={arg.tag.belief:.3f}, d={arg.tag.disbelief:.3f}, "
-              f"u={arg.tag.uncertainty:.3f}")
+        print(f"    status: {arg.status.name}, "
+              f"trust={arg.tag.trust_score:.3f}, "
+              f"decay={arg.tag.decay_factor:.3f}")
         print(f"    pramana: {arg.tag.pramana_type.name}, "
               f"depth={arg.tag.derivation_depth}, "
               f"trust={arg.tag.trust_score:.3f}")
@@ -462,7 +463,7 @@ def main():
             results[conc] = {"status": status, "tag": tag, "arguments": args}
             print(f"  {conc}:")
             print(f"    Status: {status.value}")
-            print(f"    Belief: {tag.belief:.3f}, Uncertainty: {tag.uncertainty:.3f}")
+            print(f"    Trust: {tag.trust_score:.3f}, Decay: {tag.decay_factor:.3f}")
             print()
 
     # ── Stage 7: Provenance ──
@@ -491,9 +492,9 @@ def main():
         )
         uncertainty[conc] = uq
         print(f"  {conc}:")
-        print(f"    Total confidence: {uq['total_confidence']:.3f}")
+        print(f"    Status: {uq['epistemic']['status']}")
         print(f"    Epistemic: status={uq['epistemic']['status']}, "
-              f"belief={uq['epistemic'].get('belief', 'N/A')}")
+              f"contested={uq['aleatoric']['contested']}")
         print(f"    Aleatoric: {uq['aleatoric']}")
         print(f"    Inference: {uq['inference']}")
         print()
@@ -526,7 +527,7 @@ def main():
 
     accepted_str = "\n".join(
         f"- {conc}: {info['status'].value} "
-        f"(belief={info['tag'].belief:.2f}, "
+        f"(pramana={info['tag'].pramana_type.name}, "
         f"sources={sorted(info['tag'].source_ids)})"
         for conc, info in results.items()
         if info["status"] in (ES.ESTABLISHED, ES.HYPOTHESIS, ES.PROVISIONAL)
@@ -538,7 +539,7 @@ def main():
     ) or "No defeated conclusions."
 
     uq_str = "\n".join(
-        f"- {conc}: confidence={uq['total_confidence']:.2f}, "
+        f"- {conc}: {uq['epistemic']['status']}, "
         f"epistemic={uq['epistemic']['status']}"
         for conc, uq in uncertainty.items()
     )
@@ -590,7 +591,7 @@ def main():
         "response": response.response if response else "Synthesis failed",
         "sources": response.sources_cited if response else [],
         "uncertainty": {
-            conc: {"total_confidence": round(uq["total_confidence"], 3)}
+            conc: {"status": uq["epistemic"]["status"]}
             for conc, uq in uncertainty.items()
         },
         "provenance": provenance,

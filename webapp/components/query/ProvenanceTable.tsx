@@ -79,7 +79,7 @@ export function ProvenanceTable() {
               <TableHead className="text-[10px]">Conclusion</TableHead>
               <TableHead className="text-[10px] w-10">Pramāṇa</TableHead>
               <TableHead className="text-[10px] w-16">Label</TableHead>
-              <TableHead className="text-[10px] w-20">Belief</TableHead>
+              <TableHead className="text-[10px] w-24">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,9 +122,9 @@ export function ProvenanceTable() {
                           </p>
                         )}
                         <p className="font-mono text-[10px] text-muted-foreground mt-1">
-                          b={arg.tag.belief.toFixed(3)} d=
-                          {arg.tag.disbelief.toFixed(3)} u=
-                          {arg.tag.uncertainty.toFixed(3)}
+                          trust={arg.tag.trust_score.toFixed(3)} decay=
+                          {arg.tag.decay_factor.toFixed(3)} depth=
+                          {arg.tag.derivation_depth}
                         </p>
                       </TooltipContent>
                     </Tooltip>
@@ -149,16 +149,9 @@ export function ProvenanceTable() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="font-mono text-[10px] text-muted-foreground">
-                      {arg.tag.belief.toFixed(2)}
+                    <div className="font-mono text-[10px] uppercase text-muted-foreground">
+                      {arg.epistemic_status ?? "—"}
                     </div>
-                    <div
-                      className="h-0.5 rounded-full mt-0.5 bg-current"
-                      style={{
-                        width: `${arg.tag.belief * 100}%`,
-                        color: "var(--label-in)",
-                      }}
-                    />
                   </TableCell>
                 </TableRow>
               );

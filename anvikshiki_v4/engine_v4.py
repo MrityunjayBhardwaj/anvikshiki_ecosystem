@@ -265,7 +265,7 @@ class AnvikshikiEngineV4(dspy.Module):
         # STEP 8: Synthesize response
         accepted_str = "\n".join(
             f"- {conc}: {info['status'].value} "
-            f"(belief={info['tag'].belief:.2f}, "
+            f"(pramana={info['tag'].pramana_type.name}, "
             f"sources={sorted(info['tag'].source_ids)})"
             for conc, info in results.items()
             if info["status"] in (
@@ -281,8 +281,8 @@ class AnvikshikiEngineV4(dspy.Module):
         ) or "No defeated conclusions."
 
         uq_str = "\n".join(
-            f"- {conc}: confidence={uq['total_confidence']:.2f}, "
-            f"epistemic={uq['epistemic']['status']}"
+            f"- {conc}: {uq['epistemic']['status']}"
+            f"{', contested' if uq['aleatoric']['contested'] else ''}"
             for conc, uq in uncertainty.items()
         )
 
@@ -465,7 +465,7 @@ class AnvikshikiEngineV4(dspy.Module):
         # STEP 8: Synthesize
         accepted_str = "\n".join(
             f"- {conc}: {info['status'].value} "
-            f"(belief={info['tag'].belief:.2f}, "
+            f"(pramana={info['tag'].pramana_type.name}, "
             f"sources={sorted(info['tag'].source_ids)})"
             for conc, info in results.items()
             if info["status"] in (
@@ -481,8 +481,8 @@ class AnvikshikiEngineV4(dspy.Module):
         ) or "No defeated conclusions."
 
         uq_str = "\n".join(
-            f"- {conc}: confidence={uq['total_confidence']:.2f}, "
-            f"epistemic={uq['epistemic']['status']}"
+            f"- {conc}: {uq['epistemic']['status']}"
+            f"{', contested' if uq['aleatoric']['contested'] else ''}"
             for conc, uq in uncertainty.items()
         )
 

@@ -10,11 +10,9 @@ from anvikshiki_v4.contestation import ContestationManager
 def _simple_af():
     """AF with one accepted argument."""
     af = ArgumentationFramework()
-    af.add_argument(Argument(
-        id="A0", conclusion="p", top_rule=None,
+    af.add_argument(Argument(id="A0", conclusion="p", top_rule=None,
         premises=frozenset(["p"]), is_strict=False,
-        tag=ProvenanceTag(belief=0.7, disbelief=0.2, uncertainty=0.1,
-                          pramana_type=PramanaType.ANUMANA,
+        tag=ProvenanceTag(pramana_type=PramanaType.ANUMANA,
                           trust_score=0.8, decay_factor=0.9),
         status=EpistemicStatus.HYPOTHESIS,
     ))
@@ -39,11 +37,9 @@ def test_jalpa_returns_preferred():
 def test_vitanda_returns_vulnerabilities():
     cm = ContestationManager()
     af = _simple_af()
-    af.add_argument(Argument(
-        id="A1", conclusion="not_p", top_rule=None,
+    af.add_argument(Argument(id="A1", conclusion="not_p", top_rule=None,
         premises=frozenset(["not_p"]),
-        tag=ProvenanceTag(belief=0.6, disbelief=0.3, uncertainty=0.1,
-                          pramana_type=PramanaType.SABDA,
+        tag=ProvenanceTag(pramana_type=PramanaType.SABDA,
                           trust_score=0.7, decay_factor=0.9),
         status=EpistemicStatus.HYPOTHESIS,
     ))

@@ -30,10 +30,17 @@ class ProvenanceEntry(BaseModel):
 
 
 class UncertaintyEntry(BaseModel):
-    total_confidence: float
+    """The three components, reported separately.
+
+    `total_confidence` is gone with the arithmetic behind it: it was
+    belief × trust × decay, three quantities measuring different things
+    multiplied under weights nobody derived. The components fail for
+    different reasons and are shown as such.
+    """
+    conclusion: str
     epistemic: dict[str, Any]
-    aleatoric: float | None = None
-    model: float | None = None
+    aleatoric: dict[str, Any]
+    inference: dict[str, Any]
 
 
 class CoverageResult(BaseModel):
@@ -46,9 +53,6 @@ class CoverageResult(BaseModel):
 
 
 class ProvenanceTag(BaseModel):
-    belief: float
-    disbelief: float
-    uncertainty: float
     pramana_type: str
     source_ids: list[str]
     trust_score: float

@@ -14,10 +14,11 @@ export const RuleType = z.enum(["strict", "defeasible"]);
 
 // ── ProvenanceTag ──────────────────────────────────────────────────────────
 
+// Provenance metadata only. The belief/disbelief/uncertainty triple that used
+// to sit here is gone: an argument's grade is its epistemic status, computed
+// from the argumentation labelling over the lattice rather than read off a
+// belief product through fixed cutoffs.
 export const ProvenanceTagSchema = z.object({
-  belief: z.number(),
-  disbelief: z.number(),
-  uncertainty: z.number(),
   pramana_type: PramanaType,
   source_ids: z.array(z.string()),
   trust_score: z.number(),
@@ -58,16 +59,29 @@ export const ProvenanceEntrySchema = z.object({
   decay: z.number(),
 });
 
+// Three components, reported separately and never merged — they answer
+// different questions and fail for different reasons. `total_confidence` is
+// gone with the arithmetic behind it: it multiplied belief, trust and decay
+// under weights nobody derived.
 export const UncertaintyEntrySchema = z.object({
-  total_confidence: z.number(),
-  epistemic: z.object({ status: EpistemicStatus }),
-  // The engine sends the disbelief mass with the sentence explaining it, not a
-  // bare number. Described as it is rather than as it was assumed to be.
-  aleatoric: z.object({
-    disbelief: z.number(),
+  conclusion: z.string(),
+  epistemic: z.object({
+    status: EpistemicStatus,
     explanation: z.string(),
-  }).optional().nullable(),
-  model: z.number().optional().nullable(),
+  }),
+  // Domain-level disagreement is structural now: a conclusion is contested
+  // when surviving arguments defeat every argument for it.
+  aleatoric: z.object({
+    contested: z.boolean(),
+    undecided: z.boolean(),
+    explanation: z.string(),
+  }),
+  inference: z.object({
+    grounding_confidence: z.number(),
+    decay_factor: z.number(),
+    derivation_depth: z.number(),
+    explanation: z.string(),
+  }),
 });
 
 export const CoverageResultSchema = z.object({

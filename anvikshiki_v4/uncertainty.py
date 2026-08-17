@@ -1,7 +1,46 @@
 # anvikshiki_v4/uncertainty.py
-"""Three-way uncertainty decomposition from provenance tags."""
+"""Three-way uncertainty decomposition from an argument's status and tag.
 
-from .schema_v4 import ProvenanceTag, EpistemicStatus
+The three components answer different questions and fail for different
+reasons, so they are reported separately and never merged:
+
+    epistemic  — how strongly the argumentation supports the conclusion.
+                 The status computed from the labelling over the lattice.
+    aleatoric  — whether the domain itself disagrees. Structural: a
+                 conclusion is contested when its supporting arguments were
+                 defeated, which is a fact about the attack graph.
+    inference  — how the conclusion was reached: how confident the grounder
+                 was, how fresh the evidence is, how deep the derivation ran.
+
+There is deliberately no composite score. The previous `total_confidence`
+was `belief × trust × decay`, a product of three quantities measuring
+different things, and the weights that made it one number were asserted
+rather than derived. A caller that wants to trade these off should see the
+components and do it explicitly.
+
+The calibrated replacement for the epistemic component is a conformal
+prediction set with a coverage guarantee (#23), which needs labelled
+calibration data that does not exist yet. Until it does, the honest output
+is a lattice element, not a number.
+"""
+
+from .schema_v4 import EpistemicStatus, ProvenanceTag
+
+_EPISTEMIC_EXPLANATION = {
+    EpistemicStatus.ESTABLISHED:
+        "every argument reaching it survives, and none passed through a "
+        "weaker link than an established one",
+    EpistemicStatus.HYPOTHESIS:
+        "supported, but the derivation passes through a rule the knowledge "
+        "base records as a working hypothesis",
+    EpistemicStatus.PROVISIONAL:
+        "supported only through provisional rules",
+    EpistemicStatus.OPEN:
+        "the argumentation neither accepts nor defeats it — attackers and "
+        "defenders are mutually undecided",
+    EpistemicStatus.CONTESTED:
+        "every argument for it is defeated by an argument that survives",
+}
 
 
 def compute_uncertainty_v4(
@@ -10,34 +49,34 @@ def compute_uncertainty_v4(
     conclusion: str,
     epistemic_status: EpistemicStatus,
 ) -> dict:
-    """
-    Decompose uncertainty into three independent components.
-    All values derived from ProvenanceTag — no hand-tuned dictionaries.
-    Epistemic status is passed in (computed by argumentation layer).
-    """
+    """Decompose uncertainty into three independently reported components."""
+    status_name = (
+        epistemic_status.value if epistemic_status else "none"
+    )
+    contested = epistemic_status == EpistemicStatus.CONTESTED
+    undecided = epistemic_status == EpistemicStatus.OPEN
+
     return {
         "conclusion": conclusion,
         "epistemic": {
-            "status": epistemic_status.value if epistemic_status else "none",
-            "belief": tag.belief,
-            "uncertainty": tag.uncertainty,
+            "status": status_name,
             "explanation": (
-                f"'{conclusion}': high belief with low uncertainty "
-                "— well-established"
-                if tag.belief > 0.8 and tag.uncertainty <= 0.1
-                else f"'{conclusion}': moderate evidence "
-                "— working hypothesis"
-                if tag.belief > 0.5
-                else f"'{conclusion}': insufficient evidence"
+                f"'{conclusion}': {_EPISTEMIC_EXPLANATION[epistemic_status]}"
+                if epistemic_status
+                else f"'{conclusion}': no argument concludes this"
             ),
         },
         "aleatoric": {
-            "disbelief": tag.disbelief,
+            "contested": contested,
+            "undecided": undecided,
             "explanation": (
-                f"'{conclusion}': high disbelief indicates inherent "
-                "domain disagreement"
-                if tag.disbelief > 0.3
-                else f"'{conclusion}': low domain-level contestation"
+                f"'{conclusion}': the domain disagrees — surviving arguments "
+                "defeat every argument for this conclusion"
+                if contested
+                else f"'{conclusion}': attack and defence are unresolved "
+                "against each other"
+                if undecided
+                else f"'{conclusion}': no surviving argument contradicts it"
             ),
         },
         "inference": {
@@ -50,5 +89,4 @@ def compute_uncertainty_v4(
                 f"chain_depth={tag.derivation_depth}"
             ),
         },
-        "total_confidence": tag.strength,
     }
