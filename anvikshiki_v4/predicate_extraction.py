@@ -883,7 +883,10 @@ class StageEValidator:
         self,
         stage_d: StageDOutput,
     ) -> tuple[KnowledgeStore, ValidationResult]:
-        errors = ValidationResult()
+        # ran=True: this method is the validation, so its result carries
+        # evidence. A ValidationResult left at the default carries none and
+        # scores nothing.
+        errors = ValidationResult(ran=True)
         augmented = self.ks.model_copy(deep=True)
 
         all_proposed = stage_d.new_vyaptis + stage_d.refinement_vyaptis

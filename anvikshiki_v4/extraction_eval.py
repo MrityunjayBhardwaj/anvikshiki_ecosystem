@@ -281,7 +281,19 @@ def vyapti_completeness(stage_d: StageDOutput) -> float:
 
 
 def dag_validity(validation: ValidationResult) -> float:
-    """1.0 if no cycles, 0.0 if cycles exist."""
+    """1.0 if validation ran and found no cycles, 0.0 otherwise.
+
+    A validation that never ran scores 0.0 rather than 1.0. It used to return
+    `1.0 if not validation.cycle_errors else 0.0`, and an empty error list
+    means "no cycles found" whether or not anything looked — so a default
+    `ValidationResult()` scored a clean pass while its own `is_valid` field
+    said False, which the function never consulted.
+
+    That is unearned credit, and it was the only component that gave any: a
+    wholly empty run scored 0.1000 composite, every point of it from here.
+    """
+    if not validation.ran:
+        return 0.0
     return 1.0 if not validation.cycle_errors else 0.0
 
 
@@ -357,8 +369,14 @@ class ExtractionEvaluator:
         stage_a: StageAOutput,
         stage_d: StageDOutput,
         validation: ValidationResult,
-    ) -> dict[str, float]:
-        """Compute all metrics and composite score."""
+    ) -> dict[str, object]:
+        """Compute all metrics, the composite, and what went unmeasured.
+
+        Every value is a float except "unmeasured", which lists the components
+        whose input was absent. Their 0.0 is not a low score, it is the absence
+        of a score, and a composite assembled from both without saying so
+        reports missing inputs as poor quality.
+        """
         extracted = [c.name for c in stage_a.candidates]
         extracted_descriptions = {
             c.name: c.description for c in stage_a.candidates if c.description
@@ -390,8 +408,35 @@ class ExtractionEvaluator:
             self.WEIGHTS[k] * metrics[k] for k in self.WEIGHTS
         )
         metrics["composite"] = composite
+        metrics["unmeasured"] = self._unmeasured(stage_a, stage_d, validation)
 
         return metrics
+
+    @staticmethod
+    def _unmeasured(
+        stage_a: StageAOutput,
+        stage_d: StageDOutput,
+        validation: ValidationResult,
+    ) -> list[str]:
+        """Components whose input was absent, so their 0.0 means "not measured".
+
+        Every component scores 0.0 on absent input, which is the safe
+        direction — no unearned credit — but it makes "measured and bad"
+        indistinguishable from "never measured", and a composite assembled
+        from both reads as a quality figure when it is partly a report on
+        missing inputs. Naming them keeps the number honest without changing
+        it.
+        """
+        absent = []
+        if not stage_a.candidates:
+            absent += ["precision", "recall", "naming"]
+        if not (stage_d.new_vyaptis or stage_d.refinement_vyaptis):
+            absent.append("completeness")
+        if not validation.ran:
+            absent += ["dag_valid", "coverage"]
+        if stage_a.section_count == 0:
+            absent.append("zero_section")
+        return sorted(set(absent))
 
     def __call__(
         self,

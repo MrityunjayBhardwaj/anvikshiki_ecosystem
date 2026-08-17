@@ -149,8 +149,22 @@ class StageDOutput(BaseModel):
 
 
 class ValidationResult(BaseModel):
-    """Result of DAG and Datalog validation."""
+    """Result of DAG and Datalog validation.
 
+    `ran` exists because an empty `cycle_errors` list meant two different
+    things and nothing could tell them apart: validation ran and found no
+    cycles, or validation never ran. `dag_validity` read that empty list as a
+    clean pass and scored a default object 1.0 — an object whose own
+    `is_valid` said False.
+
+    Anything that performs validation sets `ran=True`. Anything that merely
+    constructs a result leaves it False and earns no credit.
+    """
+
+    ran: bool = Field(
+        default=False,
+        description="Whether validation was actually performed.",
+    )
     is_valid: bool = False
     cycle_errors: list[str] = Field(default_factory=list)
     orphan_predicates: list[str] = Field(default_factory=list)

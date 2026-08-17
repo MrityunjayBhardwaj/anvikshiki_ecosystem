@@ -44,6 +44,11 @@ class T3aRetriever:
 
         # Build FAISS index via DSPy
         self._retriever = None
+        # Degraded runs have to be distinguishable from healthy ones. When the
+        # embedding index cannot be built, retrieval silently drops to keyword
+        # overlap and every result looks the same as a working index's — so
+        # the reason is recorded here and reported by `degraded_reason`.
+        self._degraded_reason: Optional[str] = None
         if self._corpus:
             try:
                 import dspy
@@ -52,9 +57,27 @@ class T3aRetriever:
                     docs=self._corpus,
                     k=k,
                 )
-            except Exception:
-                # Graceful fallback: retrieval will return empty
-                pass
+            except Exception as exc:
+                self._degraded_reason = (
+                    f"embedding index unavailable ({type(exc).__name__}: "
+                    f"{str(exc)[:120]}) — retrieval is keyword overlap"
+                )
+        elif not chunks:
+            self._degraded_reason = "no chunks supplied — retrieval returns nothing"
+
+    @property
+    def degraded_reason(self) -> Optional[str]:
+        """Why retrieval is not running on embeddings, or None if it is.
+
+        A retriever that has fallen back to keyword overlap answers every query
+        and reports nothing, so a degraded run reads exactly like a healthy
+        one. Callers that record a trace should record this.
+        """
+        return self._degraded_reason
+
+    @property
+    def is_degraded(self) -> bool:
+        return self._degraded_reason is not None
 
     def retrieve(
         self,
@@ -101,7 +124,15 @@ class T3aRetriever:
 
             return retrieved_chunks[:num_results]
 
-        except Exception:
+        except Exception as exc:
+            # Record the first query-time failure too — the index built, so
+            # __init__ saw nothing wrong, and without this the degradation is
+            # invisible for the rest of the process's life.
+            if self._degraded_reason is None:
+                self._degraded_reason = (
+                    f"embedding query failed ({type(exc).__name__}: "
+                    f"{str(exc)[:120]}) — retrieval is keyword overlap"
+                )
             return self._fallback_retrieve(query, num_results, boost_sections)
 
     def retrieve_for_predicates(
