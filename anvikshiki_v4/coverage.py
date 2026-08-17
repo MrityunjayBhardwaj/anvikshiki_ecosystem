@@ -8,13 +8,46 @@ Three-layer predicate matching against base + fine-grained KB:
 
 Produces a routing decision: FULL / PARTIAL / DECLINE.
 Zero LLM calls — fully deterministic.
+
+── Policy on negation, decided rather than inherited ─────────
+
+A query asserting `not_X` against a knowledge base that knows `X` **counts as
+covered**, and its match is labelled `negated_*` rather than `exact`.
+
+*Why it matters as a policy.* This module asks whether the knowledge base has
+reasoning machinery for a concept, not whether the query makes the same claim.
+A base that reasons about value creation does have something to say about its
+absence — and `not_X` against a rule about `X` is exactly what raises a
+rebutting attack, which is the engine's most informative behaviour. Declining
+would refuse the queries it handles best.
+
+*Why the label matters anyway.* Reporting it as `exact` was wrong regardless of
+the policy. The strings differ, and they differ on the token that reverses the
+meaning, so the trace told a reader the query was found verbatim in the
+vocabulary when it was not.
+
+*The apparent contradiction with the token layer, stated so it is not mistaken
+for an oversight.* Layer 3 refuses `positive_unit_economics` against
+`negative_unit_economics` outright, while layer 1 accepts `not_value_creation`
+against `value_creation`. Both are intended, and they are different cases: the
+first is an accidental token collision between two unrelated predicates that
+happen to share three tokens out of four, where a match would route the query
+to a rule asserting the opposite of what was asked and nothing would announce
+it. The second is a deliberate polarity inversion of a predicate the base
+knows, which the argumentation layer is built to reason about — and which the
+match type now announces.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from .predicate_contrariness import match_veto
+from .predicate_contrariness import (
+    match_veto,
+    negation_differs,
+    normalize_negation,
+    predicate_name,
+)
 from .schema import KnowledgeStore
 
 
@@ -36,7 +69,12 @@ class CoverageResult(BaseModel):
     unmatched_predicates: list[str] = Field(default_factory=list)
     match_details: dict[str, str] = Field(
         default_factory=dict,
-        description="predicate -> match_type (exact/synonym/token)",
+        description=(
+            "predicate -> match_type: exact/synonym/token, each also in a "
+            "negated_* form meaning the vocabulary holds this predicate and "
+            "the query asserts its negation. See the module docstring for why "
+            "that still counts as covered."
+        ),
     )
     relevant_vyaptis: list[str] = Field(default_factory=list)
     decision: str = "DECLINE"  # FULL / PARTIAL / DECLINE
@@ -102,38 +140,16 @@ class SemanticCoverageAnalyzer:
         relevant_vyapti_ids: set[str] = set()
 
         for pred in grounded_predicates:
-            # Strip entity from predicate(entity) format
-            pred_name = pred.split("(")[0].strip() if "(" in pred else pred
-            # Strip not_ prefix for matching
-            base_name = pred_name[4:] if pred_name.startswith("not_") else pred_name
-
-            # Layer 1: Exact match
-            if base_name in self._vocab:
-                matched.append(pred)
-                details[pred] = "exact"
-                for vid in self._pred_to_vyaptis.get(base_name, []):
-                    relevant_vyapti_ids.add(vid)
+            hit = self._match(pred)
+            if hit is None:
+                unmatched.append(pred)
                 continue
 
-            # Layer 2: Synonym lookup
-            canonical = self._synonym_table.get(base_name)
-            if canonical and canonical in self._vocab:
-                matched.append(pred)
-                details[pred] = "synonym"
-                for vid in self._pred_to_vyaptis.get(canonical, []):
-                    relevant_vyapti_ids.add(vid)
-                continue
-
-            # Layer 3: Jaccard token overlap
-            closest, score = self._find_closest_predicate(base_name)
-            if closest and score >= TOKEN_OVERLAP_MIN:
-                matched.append(pred)
-                details[pred] = "token"
-                for vid in self._pred_to_vyaptis.get(closest, []):
-                    relevant_vyapti_ids.add(vid)
-                continue
-
-            unmatched.append(pred)
+            layer, kb_name, query_name = hit
+            matched.append(pred)
+            details[pred] = self._match_type(layer, query_name, kb_name)
+            for vid in self._pred_to_vyaptis.get(kb_name, []):
+                relevant_vyapti_ids.add(vid)
 
         total = len(matched) + len(unmatched)
         ratio = len(matched) / max(total, 1)
@@ -153,6 +169,72 @@ class SemanticCoverageAnalyzer:
             relevant_vyaptis=sorted(relevant_vyapti_ids),
             decision=decision,
         )
+
+    def _match(self, pred: str) -> tuple[str, str, str] | None:
+        """Find the KB predicate this query matches: (layer, kb_name, query).
+
+        Two forms are tried for every layer: the predicate **as written**, then
+        its affirmative form. The order matters twice over.
+
+        *As-written first*, because the vocabulary can hold a negated predicate
+        literally — `not_value_creation` is V11's consequent in the knowledge
+        base shipped here. Stripping before the lookup routed a query for that
+        predicate to the rules producing its affirmative and never surfaced the
+        rule whose conclusion it actually is.
+
+        *Layer-major*, because an exact match on either form must beat a
+        synonym on either, which must beat token overlap. Running all three
+        layers on the as-written form before trying the affirmative would let a
+        fuzzy token match on `not_X` outrank an exact match on `X`.
+
+        Double negation is eliminated first: `not_not_X` is `X`, and a
+        single-shot prefix strip left `not_X` — which in this knowledge base is
+        a real and *opposite* predicate, so a doubly-negated query matched the
+        rule concluding the negation of what it asked about.
+        """
+        normalized = normalize_negation(predicate_name(pred))
+        affirmative = (
+            normalized[4:] if normalized.startswith("not_") else normalized
+        )
+        # Deduplicated: for an affirmative query the two forms are the same,
+        # and looking twice would be wasted work rather than wrong.
+        forms = [normalized] if affirmative == normalized else [
+            normalized, affirmative
+        ]
+
+        for layer in ("exact", "synonym", "token"):
+            for form in forms:
+                kb_name = self._lookup(layer, form)
+                if kb_name:
+                    return (layer, kb_name, normalized)
+        return None
+
+    def _lookup(self, layer: str, name: str) -> str:
+        """The KB predicate this name matches at this layer, or "" for none."""
+        if layer == "exact":
+            return name if name in self._vocab else ""
+        if layer == "synonym":
+            canonical = self._synonym_table.get(name)
+            return canonical if canonical and canonical in self._vocab else ""
+        closest, score = self._find_closest_predicate(name)
+        return closest if closest and score >= TOKEN_OVERLAP_MIN else ""
+
+    @staticmethod
+    def _match_type(layer: str, query: str, matched: str) -> str:
+        """Which layer matched, and whether the polarity survived it.
+
+        Two facts, so two parts: `negated_exact` says the vocabulary contains
+        this predicate *and* the query asserts its negation. Collapsing them to
+        a bare `negated` would lose which layer fired, and reporting only the
+        layer is what made the trace claim an exact match on a string that
+        differed by the token reversing its meaning.
+
+        Determined by `negation_differs` rather than by remembering whether a
+        prefix was stripped, so the whole package answers this question in one
+        place — the same predicate the compiler uses to raise a rebutting
+        attack and the evaluator uses to refuse a match.
+        """
+        return f"negated_{layer}" if negation_differs(query, matched) else layer
 
     def _find_closest_predicate(self, concept: str) -> tuple[str, float]:
         """
