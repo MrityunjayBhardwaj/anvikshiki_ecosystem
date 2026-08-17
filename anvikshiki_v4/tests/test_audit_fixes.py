@@ -102,6 +102,10 @@ class TestAllArgumentsConstruction:
         v.confidence.existence = 0.9
         v.last_verified = None
         v.sources = []
+        # None is what a curated rule carries. A spec'd mock only answers for
+        # attributes set by hand, so the compiler reading a real field of
+        # Vyapti raises here rather than getting its default (#47).
+        v.augmentation_metadata = None
 
         ks = MagicMock(spec=KnowledgeStore)
         ks.vyaptis = {"V1": v}

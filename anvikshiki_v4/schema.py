@@ -39,10 +39,23 @@ class CausalStatus(str, Enum):
 
 
 class EpistemicStatus(str, Enum):
-    """Four epistemic values (plus BOTTOM in the Datalog engine)."""
+    """Five epistemic values (plus BOTTOM in the Datalog engine).
+
+    These are the statuses a rule can be *authored* with. They map onto the
+    reasoning lattice L in `lattice.from_kb`, and a rule's effective status
+    is that value met with the ceiling its origin allows
+    (`lattice.status_of_rule`).
+
+    PROVISIONAL was absent here until the origin ceiling needed somewhere to
+    land. It existed in the derived enum and was unreachable: premises enter
+    at the top of L and rules mapped from the four values below, none of
+    which is PROVISIONAL, so its branches in synthesis and uncertainty were
+    dead code.
+    """
 
     ESTABLISHED = "established"          # ✓ Strong evidence, consensus
     WORKING_HYPOTHESIS = "hypothesis"    # ~ Reasonable but contested
+    PROVISIONAL = "provisional"          # ⧗ Proposed, not yet validated
     GENUINELY_OPEN = "open"              # ? Unknown to the field
     ACTIVELY_CONTESTED = "contested"     # ⚡ Live scholarly debate
 
