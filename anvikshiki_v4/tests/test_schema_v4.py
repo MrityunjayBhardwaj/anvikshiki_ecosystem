@@ -23,12 +23,14 @@ from anvikshiki_v4.schema_v4 import (
 
 def test_tensor_is_associative():
     a = ProvenanceTag(trust_score=0.9, decay_factor=0.95, derivation_depth=1)
-    b = ProvenanceTag(trust_score=0.85, decay_factor=0.9, derivation_depth=1)
+    b = ProvenanceTag(trust_score=0.85, decay_factor=0.9, derivation_depth=2)
     c = ProvenanceTag(trust_score=0.95, decay_factor=0.92, derivation_depth=1)
     ab_c = ProvenanceTag.tensor(ProvenanceTag.tensor(a, b), c)
     a_bc = ProvenanceTag.tensor(a, ProvenanceTag.tensor(b, c))
     assert ab_c == a_bc
-    assert ab_c.derivation_depth == a_bc.derivation_depth == 3
+    # The deepest of the three, not their sum. Depths differ here so the
+    # assertion distinguishes max from min as well as from +.
+    assert ab_c.derivation_depth == a_bc.derivation_depth == 2
 
 
 def test_oplus_is_commutative():
@@ -41,12 +43,15 @@ def test_chaining_takes_the_weakest_link():
     a = ProvenanceTag(pramana_type=PramanaType.PRATYAKSA,
                       trust_score=0.8, decay_factor=0.9, derivation_depth=1)
     b = ProvenanceTag(pramana_type=PramanaType.SABDA,
-                      trust_score=0.85, decay_factor=0.95, derivation_depth=1)
+                      trust_score=0.85, decay_factor=0.95, derivation_depth=3)
     result = ProvenanceTag.tensor(a, b)
     assert result.pramana_type == PramanaType.SABDA   # min
     assert result.trust_score == 0.8                  # min
     assert result.decay_factor == 0.9                 # min
-    assert result.derivation_depth == 2               # sum
+    # max, because larger depth is the worse value — the weakest link for
+    # this field is the deeper one. It was + here, an axiom the compiler
+    # never reached, since every tag was built at 0 (#14).
+    assert result.derivation_depth == 3
 
 
 def test_accrual_takes_the_best_source():

@@ -56,8 +56,19 @@ class ProvenanceTag:
       oplus (parallel)    = join (∨) = max  — best-source principle:
           accruing independent arguments takes the strongest metadata.
 
-    Exception: derivation_depth uses + for tensor (chains add depth)
-    and min for oplus (parallel paths report the shallowest).
+    derivation_depth runs the other way round — max for tensor, min for
+    oplus — because deeper is worse: chaining carries the deepest link, and
+    accrual reports the shallowest surviving derivation. Both are still
+    idempotent, so the metadata laws hold for it without an exception.
+
+    Composition does not *increase* depth, and no longer claims to. The
+    docstring used to state "derivation_depth uses + for tensor (chains add
+    depth)", and the axiom was wrong twice over: every call site built tags
+    at 0 so 0 + 0 = 0 held forever, and summing is not what a derivation
+    depth is — a rule over two sub-arguments at depth 2 and 3 is 4 deep, not
+    9. Depth is the height of the derivation tree, `1 + max` over the
+    sub-arguments, and a tree height is not a binary operation on two tags.
+    The compiler sets it where the argument is built (#14).
 
     The Subjective Logic opinion — belief, disbelief, uncertainty, their
     sum-to-one invariant, the trust-discounting and cumulative-fusion
@@ -92,16 +103,16 @@ class ProvenanceTag:
         """⊗: Sequential composition (chaining through inference).
 
         Meet (∧) = min for pramana, trust, decay — weakest-link: chaining
-        cannot strengthen provenance.  derivation_depth uses + (chains
-        accumulate depth).  Associative, idempotent on the lattice fields,
-        with identity one().
+        cannot strengthen provenance.  derivation_depth carries the deeper of
+        the two, which is the weakest link for a field where larger is worse.
+        Associative, idempotent on every field, with identity one().
         """
         return ProvenanceTag(
             source_ids=a.source_ids | b.source_ids,
             pramana_type=PramanaType(min(a.pramana_type, b.pramana_type)),
             trust_score=min(a.trust_score, b.trust_score),
             decay_factor=min(a.decay_factor, b.decay_factor),
-            derivation_depth=a.derivation_depth + b.derivation_depth,
+            derivation_depth=max(a.derivation_depth, b.derivation_depth),
         )
 
     @staticmethod
@@ -136,6 +147,14 @@ class ProvenanceTag:
         it would have raised any argument it met to maximal trust and
         perfect freshness, which is an absence of evidence scoring as the
         best possible source.
+
+        It is not an identity for derivation_depth, because depth runs the
+        other way — `oplus` takes the shallowest, so accruing this tag would
+        report depth 0 and claim an asserted derivation exists. There is no
+        maximal int to put here instead, and no production path composes
+        this tag: `get_epistemic_status` returns it only for a conclusion no
+        argument reaches, where the status is None and there is nothing to
+        compose it with.
         """
         return ProvenanceTag(
             pramana_type=PramanaType.UPAMANA,

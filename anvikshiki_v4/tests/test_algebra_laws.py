@@ -2,14 +2,20 @@
 """Law tests for the epistemic lattice and the provenance metadata.
 
 These were written before the removal work, deliberately, and four of the
-laws in them failed. Three now pass, and they pass without a single
-assertion being rewritten — Part 1 was stated over *epistemic status* rather
-than over belief triples, and routed through four seam functions, so the
-subtraction changed only what `chain`, `accrue` and `status_of` do.
+laws in them failed. Three passed after it without a single assertion being
+rewritten — Part 1 was stated over *epistemic status* rather than over belief
+triples, and routed through four seam functions, so the subtraction changed
+only what `chain`, `accrue` and `status_of` do.
 
-What is left failing is depth accounting (#14), which the subtraction did
-not touch and was never going to: depth is metadata, and it survives the
-removal exactly as it was.
+The fourth was depth accounting (#14), and it did not survive contact. As
+stated it was a law about a *tag*, and it contradicted two laws that already
+held: `one()` is an element of the generated domain, so a demand that
+`tensor(t, t)` increase depth cannot coexist with `tensor(one, one) == one`.
+No operator satisfies all three. Depth turned out to belong to the argument
+rather than to the metadata travelling with it, so the law moved to Part 3,
+where a step is something that actually happened. Its generator was the other
+half — every tag was built at depth 0, and a single-valued axis cannot tell a
+broken operator from an operand that is a premise.
 
 Generation is a deterministic grid rather than `hypothesis`. This suite is a
 gate, and a gate that samples randomly reports a different result on
@@ -231,6 +237,11 @@ _SOURCE_SETS = (
     # defect in the old accrual discount stayed invisible.
     frozenset(),
 )
+# Depth used to be fixed at 0 for every generated tag, and a domain of one
+# value cannot distinguish an operator that fails to count a step from an
+# operand that is a premise. 0 is a premise, 1 a one-step derivation, 3 a
+# deeper one — enough for max, min and + to disagree with each other.
+_DEPTHS = (0, 1, 3)
 
 
 def tag_domain() -> list[ProvenanceTag]:
@@ -241,10 +252,10 @@ def tag_domain() -> list[ProvenanceTag]:
             pramana_type=pramana,
             trust_score=trust,
             decay_factor=decay,
-            derivation_depth=0,
+            derivation_depth=depth,
         )
-        for trust, decay, pramana, sources in itertools.product(
-            _TRUSTS, _DECAYS, _PRAMANAS, _SOURCE_SETS
+        for trust, decay, pramana, sources, depth in itertools.product(
+            _TRUSTS, _DECAYS, _PRAMANAS, _SOURCE_SETS, _DEPTHS
         )
     ]
 
@@ -253,8 +264,24 @@ def test_the_tag_domain_is_nonempty():
     domain = tag_domain()
     assert len(domain) == (
         len(_TRUSTS) * len(_DECAYS) * len(_PRAMANAS) * len(_SOURCE_SETS)
+        * len(_DEPTHS)
     )
     assert len(domain) >= 100
+
+
+def test_the_tag_domain_varies_every_axis():
+    """Including depth, which it did not.
+
+    An axis pinned to one value makes every law quantified over it weaker
+    than it reads, and silently: the count in the failure message still
+    reports the full denominator.
+    """
+    domain = tag_domain()
+    assert {t.derivation_depth for t in domain} == set(_DEPTHS)
+    assert {t.trust_score for t in domain} == set(_TRUSTS)
+    assert {t.decay_factor for t in domain} == set(_DECAYS)
+    assert {t.pramana_type for t in domain} == set(_PRAMANAS)
+    assert {t.source_ids for t in domain} == set(_SOURCE_SETS)
 
 
 def test_metadata_chaining_is_idempotent():
@@ -333,34 +360,55 @@ def test_zero_is_the_identity_for_accrual_on_the_lattice_fields():
     assert not violations, report(violations, len(domain))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="derivation_depth never increments (#14)",
-)
-def test_chaining_increases_derivation_depth():
-    """Depth accounting, untouched by the subtraction.
+def test_metadata_composition_is_idempotent_for_depth_too():
+    """Depth stopped being the exception, and this is where that is checked.
 
-    Every production call site builds tags at depth 0 and `tensor` adds, so
-    0 + 0 = 0 holds forever and nothing in the output distinguishes an
-    asserted fact from one derived through two rules. Depth is metadata: it
-    survived the removal exactly as it was, and #14 is where it is fixed.
+    A law demanding that `tensor(t, t)` *increase* depth used to sit here,
+    xfailed against #14. It could never have flipped. `one()` is an element
+    of the generated domain — trust 1.0, decay 1.0, PRATYAKSA, unsourced,
+    depth 0 — and the identity law two tests above pins
+    `tensor(one, one) == one`, so no operator satisfies both. Three laws,
+    jointly unsatisfiable, and the marker read as though a fix were pending.
+
+    The reason it was stated over a tag at all is that depth happened to be
+    stored on one. It is a property of the derivation, not of the metadata
+    travelling with it, so the law belongs in Part 3 — over what the compiler
+    builds, where a step is something that actually happened.
+
+    The generator is the other half of the story. It emitted
+    `derivation_depth=0` and nothing else, so the domain could not tell a
+    broken operator from an operand that is a premise. Same blind spot as the
+    unsourced-tag one, one level up: the defect was in what the domain failed
+    to produce. Depth is a generated axis now.
+    """
+    domain = tag_domain()
+    violations = [
+        f"{tag!r} → tensor {ProvenanceTag.tensor(tag, tag)!r} "
+        f"/ oplus {ProvenanceTag.oplus(tag, tag)!r}"
+        for tag in domain
+        if ProvenanceTag.tensor(tag, tag) != tag
+        or ProvenanceTag.oplus(tag, tag) != tag
+    ]
+    assert not violations, report(violations, len(domain))
+
+
+def test_chaining_carries_the_deeper_of_two_depths():
+    """Weakest link, for a field where larger is worse.
+
+    Composition does not invent a step. `max` is what makes the metadata
+    laws hold for depth without an exception, and `1 + max` — the part that
+    does count a step — happens where an argument is built.
     """
     domain = tag_domain()
     violations = []
-
-    for tag in domain:
-        accumulated = tag
-        previous = depth_of(accumulated)
-        for n in _RESTATEMENTS:
-            accumulated = ProvenanceTag.tensor(accumulated, tag)
-            if depth_of(accumulated) <= previous:
-                violations.append(
-                    f"chain of {n} left derivation_depth at "
-                    f"{depth_of(accumulated)} for {tag!r}"
-                )
-                break
-            previous = depth_of(accumulated)
-
+    for a, b in itertools.product(domain[::7], domain[::5]):
+        chained = ProvenanceTag.tensor(a, b)
+        expected = max(depth_of(a), depth_of(b))
+        if depth_of(chained) != expected:
+            violations.append(
+                f"{depth_of(a)} ⊗ {depth_of(b)} = {depth_of(chained)}, "
+                f"expected {expected}"
+            )
     assert not violations, report(violations, len(domain))
 
 
@@ -477,18 +525,14 @@ def test_a_conclusion_nothing_argues_has_no_status(compiled_af):
     assert args == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="derivation_depth never increments (#14)",
-)
 def test_derivation_depth_through_the_pipeline_counts_inference_steps(
     compiled_af,
 ):
     """A two-step derivation must not report the same depth as a premise.
 
-    The compiler builds every tag at depth 0 and composes them with an
-    operator that adds, so the field stays at 0 for every argument in the
-    framework — and nothing in the output distinguishes a fact that was
+    The compiler used to build every tag at depth 0 and compose them with an
+    operator that adds, so the field stayed at 0 for every argument in the
+    framework — and nothing in the output distinguished a fact that was
     asserted from one derived through two rules.
     """
     _, af = compiled_af
@@ -504,3 +548,59 @@ def test_derivation_depth_through_the_pipeline_counts_inference_steps(
     ]
 
     assert not violations, report(violations, len(derived))
+
+
+def _expected_depth(af, arg) -> int:
+    """1 + the deepest sub-argument, premises at 0.
+
+    Walked from the argument graph rather than read off the tag, so this
+    checks the compiler's answer against an independent recursion — the same
+    discipline `_meet_of_links` follows for status.
+    """
+    if arg.top_rule is None:
+        return 0
+    return 1 + max(
+        (_expected_depth(af, af.arguments[sub]) for sub in arg.sub_arguments),
+        default=0,
+    )
+
+
+def test_depth_through_the_pipeline_is_the_height_of_the_derivation(
+    compiled_af,
+):
+    """depth(a) = 1 + max{ depth(s) : s ∈ sub_args(a) }, for every argument.
+
+    Height, not a sum: a rule resting on two sub-arguments at depths 2 and 3
+    is 4 deep, not 9. The old axiom said + — and because every tag started at
+    0, no fixture ever made the two disagree.
+    """
+    _, af = compiled_af
+    violations = []
+    for arg in sorted(af.arguments.values(), key=lambda a: a.id):
+        expected = _expected_depth(af, arg)
+        if depth_of(arg.tag) != expected:
+            violations.append(
+                f"{arg.id} ({arg.top_rule or 'premise'} → {arg.conclusion}): "
+                f"height says {expected}, pipeline says {depth_of(arg.tag)}"
+            )
+    assert not violations, report(violations, len(af.arguments))
+
+
+def test_a_premise_is_depth_zero_and_a_chain_is_deeper(compiled_af):
+    """The distinction the field exists to make, asked concretely.
+
+    One step from an asserted premise is 1; the second step through V02 is 2.
+    Anything that reports the same number for all three has lost the only
+    thing in the output that separates an assertion from an inference.
+    """
+    _, af = compiled_af
+
+    def depth_for(conclusion: str) -> int:
+        args = [a for a in af.arguments.values()
+                if a.conclusion == conclusion]
+        assert args, f"nothing concludes {conclusion}"
+        return min(depth_of(a.tag) for a in args)
+
+    assert depth_for("concentrated_ownership") == 0     # asserted
+    assert depth_for("long_horizon_possible") == 1      # V01
+    assert depth_for("capability_building_possible") == 2   # V01 then V02
