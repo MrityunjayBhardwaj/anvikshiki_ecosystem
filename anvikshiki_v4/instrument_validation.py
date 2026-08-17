@@ -227,6 +227,45 @@ def read_decision_sheet(path: str | Path) -> list[MatcherDecision]:
     return [MatcherDecision(**d) for d in data.get("decisions", [])]
 
 
+def replay_mode(
+    decisions: list[MatcherDecision],
+    gold_descriptions: dict[str, str],
+    match_on: str,
+    threshold: float = 0.5,
+) -> list[MatcherDecision]:
+    """Re-run the matcher over judged pairs under a different match mode.
+
+    A human judges whether two predicates mean the same thing, which is a fact
+    about the pair and not about the matcher. So one set of judgments scores
+    every mode, and the modes are compared on identical ground rather than each
+    being judged against a sheet built to flatter it.
+
+    `human` is carried across unchanged; only the matcher's verdict is
+    recomputed. Where the recomputed verdict differs from the original, the
+    stored agree/disagree is reinterpreted against the new verdict — which is
+    why `human_says_match` is derived rather than stored.
+    """
+    replayed: list[MatcherDecision] = []
+    for d in decisions:
+        truth = d.human_says_match
+        score = _best_match_score(
+            d.candidate, {d.gold}, threshold,
+            match_on=match_on,
+            subject_description=d.candidate_description,
+            candidate_descriptions={d.gold: gold_descriptions.get(d.gold, "")},
+        )
+        says_match = score > 0
+        replayed.append(d.model_copy(update={
+            "matcher_says_match": says_match,
+            "score": round(score, 4),
+            "human": (
+                UNJUDGED if truth is None
+                else (AGREE if truth == says_match else DISAGREE)
+            ),
+        }))
+    return replayed
+
+
 def agreement(decisions: list[MatcherDecision]) -> AgreementReport:
     """Agreement between matcher and human, with Cohen's kappa.
 

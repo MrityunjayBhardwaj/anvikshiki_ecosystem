@@ -59,6 +59,20 @@ class StageAOutput(BaseModel):
     chapter_id: str = ""
     section_count: int = 0
     zero_predicate_sections: int = 0
+    failed_sections: int = Field(
+        default=0,
+        description=(
+            "Sections where extraction raised. Counted apart from "
+            "zero_predicate_sections: a section the model never answered for "
+            "and a section that genuinely holds no predicate are different "
+            "facts, and only the second is a statement about the prose. "
+            "Folding them together makes an outage look like a thin chapter."
+        ),
+    )
+    failures: list[str] = Field(
+        default_factory=list,
+        description="Why each failed section failed, for the run report.",
+    )
 
 
 # ─── Stage B: Hierarchical Decomposition ───────────────────────

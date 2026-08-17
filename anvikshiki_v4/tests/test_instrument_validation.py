@@ -159,3 +159,39 @@ def test_kappa_is_computed_when_the_raters_vary():
     assert report.cohens_kappa is not None
     assert -1.0 <= report.cohens_kappa <= 1.0
     assert report.observed_agreement == pytest.approx(4 / 6)
+
+
+# ── replaying one set of judgments across match modes ──
+
+def test_a_mode_replay_preserves_what_the_human_meant():
+    """The human judges the pair, not the matcher, so one sheet scores all modes.
+
+    A judgment is a fact about whether two predicates mean the same thing. If
+    the matcher's verdict flips under a different mode, agree/disagree has to
+    flip with it — otherwise switching modes silently rewrites what the human
+    said.
+    """
+    from anvikshiki_v4.instrument_validation import replay_mode
+
+    judged = MatcherDecision(
+        gold="high_retention_rate",
+        candidate="customers_stay_subscribed",
+        gold_description=GOLD_DESCRIPTIONS["high_retention_rate"],
+        candidate_description=GOLD_DESCRIPTIONS["high_retention_rate"],
+        matcher_says_match=False,
+        human=DISAGREE,        # human: these DO mean the same thing
+        kind="near_miss",
+    )
+    assert judged.human_says_match is True
+
+    replayed = replay_mode([judged], GOLD_DESCRIPTIONS, match_on="description")[0]
+    assert replayed.matcher_says_match is True     # descriptions catch it
+    assert replayed.human == AGREE                 # so they now agree
+    assert replayed.human_says_match is True       # and the human still says match
+
+
+def test_a_mode_replay_leaves_unjudged_rows_unjudged():
+    from anvikshiki_v4.instrument_validation import replay_mode
+
+    row = MatcherDecision(gold="value_creation", candidate="x", matcher_says_match=False)
+    assert replay_mode([row], GOLD_DESCRIPTIONS, match_on="either")[0].human == ""
