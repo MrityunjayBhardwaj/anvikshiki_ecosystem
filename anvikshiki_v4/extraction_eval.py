@@ -298,13 +298,26 @@ def dag_validity(validation: ValidationResult) -> float:
 
 
 def zero_section_rate(stage_a: StageAOutput) -> float:
-    """1.0 minus the fraction of sections that produced zero predicates.
+    """1.0 minus the fraction of *answered* sections that produced nothing.
 
     Low zero-section rate = good (we're extracting from most sections).
+
+    The denominator excludes sections we never got an answer for — ones that
+    raised, and ones the token budget cut off. Both yield no parseable
+    predicates, so counting them here scored our own configuration as a
+    property of the prose: the same chapter measured 2 zero-sections at
+    max_tokens=4096 and 0 at 16000, and this component carries 0.10 of the
+    composite, so a setting was lowering a quality score.
+
+    A section that was truncated *and* still parsed some predicates is
+    excluded too. It was read partially, and a partial reading is not
+    evidence about how much the section contained.
     """
-    if stage_a.section_count == 0:
+    unanswered = stage_a.failed_sections + stage_a.truncated_sections
+    answered = stage_a.section_count - unanswered
+    if answered <= 0:
         return 0.0
-    return 1.0 - (stage_a.zero_predicate_sections / stage_a.section_count)
+    return 1.0 - (stage_a.zero_predicate_sections / answered)
 
 
 # ─── Composite Evaluator ─────────────────────────────────────
@@ -435,6 +448,19 @@ class ExtractionEvaluator:
         if not validation.ran:
             absent += ["dag_valid", "coverage"]
         if stage_a.section_count == 0:
+            absent.append("zero_section")
+        elif stage_a.section_count <= (
+            stage_a.failed_sections + stage_a.truncated_sections
+        ):
+            # Sections existed but none of them was answered, so the rate has
+            # no denominator left and its 0.0 is an absence, not a low score.
+            absent.append("zero_section")
+        if not stage_a.truncation_checked:
+            # A third state, and the reason it has to be named: the run could
+            # not read finish_reason, so it cannot tell a section that holds
+            # no predicates from one whose answer it cut off. The figure is
+            # uninterpretable rather than low, which is exactly the
+            # distinction this list exists to preserve.
             absent.append("zero_section")
         return sorted(set(absent))
 

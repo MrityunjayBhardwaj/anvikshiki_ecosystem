@@ -102,6 +102,52 @@ def _split_into_sections(text: str, max_tokens: int = 512) -> list[str]:
     return sections
 
 
+def was_truncated(module: object) -> bool | None:
+    """Was the most recent completion cut off by the token budget?
+
+    Returns True for truncated, False for a complete answer, and **None for
+    "cannot tell"** — which is the point of this function. A too-small budget
+    produces a response that arrives and parses to nothing, indistinguishable
+    from a section that genuinely holds no predicates, so the caller has to be
+    able to record three outcomes rather than two.
+
+    `finish_reason == "length"` is the signal. It reaches us through the LM's
+    call history: `dspy/clients/base_lm.py:_process_lm_response` stores the raw
+    litellm response under `"response"` in each history entry. That history is
+    conditional — it returns early when `settings.disable_history` is set, and
+    `update_history` skips both the LM and per-module lists when
+    `max_history_size == 0` — so its absence must not be read as "nothing was
+    truncated".
+
+    Per-module history is preferred over the LM's: `update_history` appends to
+    `settings.caller_modules`, so a module's own list is scoped to its own
+    calls, where the shared LM history also holds every other module's.
+    """
+    for source in (getattr(module, "history", None), _lm_history()):
+        if not source:
+            continue
+        response = source[-1].get("response")
+        choices = getattr(response, "choices", None)
+        if not choices:
+            continue
+        reasons = [
+            getattr(choice, "finish_reason", None) for choice in choices
+        ]
+        if all(reason is None for reason in reasons):
+            continue
+        return any(reason == "length" for reason in reasons)
+    return None
+
+
+def _lm_history() -> list | None:
+    """The configured LM's call history, or None if there is none to read."""
+    try:
+        lm = dspy.settings.lm
+    except Exception:
+        return None
+    return getattr(lm, "history", None)
+
+
 def _detect_cycles(adj: dict[str, set[str]]) -> list[list[str]]:
     """Detect cycles in a predicate DAG using DFS."""
     WHITE, GRAY, BLACK = 0, 1, 2
@@ -388,6 +434,14 @@ class StageAExtractor(dspy.Module):
         zero_sections = 0
         failed_sections = 0
         failures: list[str] = []
+        truncated_sections = 0
+        truncations: list[str] = []
+        # True only while every response so far could be checked. One
+        # undeterminable section is enough to make the zero-section figure
+        # uninterpretable, so this falls to False and stays there — the
+        # conservative direction, since the alternative reads "we found no
+        # truncation" when the truth is "we could not look".
+        truncation_checked = True
 
         for i, section in enumerate(sections):
             if len(section.strip().split()) < 20:
@@ -410,10 +464,28 @@ class StageAExtractor(dspy.Module):
                 failures.append(f"section {i}: {type(exc).__name__}: {str(exc)[:160]}")
                 continue
 
+            truncated = was_truncated(self.extractor)
+            if truncated is None:
+                truncation_checked = False
+
             predicates = getattr(result, "predicates", None) or []
             descriptions = getattr(result, "descriptions", None) or []
             claim_types = getattr(result, "claim_types", None) or []
             related = getattr(result, "related_vyaptis", None) or []
+
+            if truncated:
+                # Recorded whether or not predicates came back. A cut-off
+                # answer that happened to parse is still a partial reading of
+                # the section, so the count says how much of the chapter was
+                # measured under a budget that was too small — the whole point
+                # of separating this from an empty section.
+                truncated_sections += 1
+                truncations.append(
+                    f"section {i}: answer cut off by the token budget "
+                    f"({len(predicates)} predicate(s) parsed before it ended)"
+                )
+                if not predicates:
+                    continue
 
             if not predicates:
                 zero_sections += 1
@@ -455,6 +527,9 @@ class StageAExtractor(dspy.Module):
             zero_predicate_sections=zero_sections,
             failed_sections=failed_sections,
             failures=failures,
+            truncated_sections=truncated_sections,
+            truncations=truncations,
+            truncation_checked=truncation_checked,
         )
 
     def _build_predicate_list(self) -> str:
@@ -1079,6 +1154,13 @@ class PredicateExtractionPipeline(dspy.Module):
             (augmented_ks, validation_result, stage_d_output)
         """
         # Stage A: Extract from each chapter
+        #
+        # Every field a chapter reports is carried up, not just the counts the
+        # first version of this loop happened to need. `failed_sections` and
+        # `failures` were already being dropped here, so a multi-chapter run
+        # reported no failures however many there were — the split that
+        # separates an outage from a thin chapter existed per chapter and was
+        # discarded at the point the run is actually reported from.
         all_stage_a = StageAOutput(candidates=[], chapter_id="all")
         for chapter_id, text in guide_text.items():
             chapter_result = self.stage_a(
@@ -1088,6 +1170,21 @@ class PredicateExtractionPipeline(dspy.Module):
             all_stage_a.section_count += chapter_result.section_count
             all_stage_a.zero_predicate_sections += (
                 chapter_result.zero_predicate_sections
+            )
+            all_stage_a.failed_sections += chapter_result.failed_sections
+            all_stage_a.failures.extend(
+                f"{chapter_id} {entry}" for entry in chapter_result.failures
+            )
+            all_stage_a.truncated_sections += (
+                chapter_result.truncated_sections
+            )
+            all_stage_a.truncations.extend(
+                f"{chapter_id} {entry}" for entry in chapter_result.truncations
+            )
+            # One unverifiable chapter makes the whole run unverifiable.
+            all_stage_a.truncation_checked = (
+                all_stage_a.truncation_checked
+                and chapter_result.truncation_checked
             )
 
         # Stage B: Hierarchical decomposition

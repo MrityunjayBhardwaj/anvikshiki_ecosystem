@@ -73,6 +73,35 @@ class StageAOutput(BaseModel):
         default_factory=list,
         description="Why each failed section failed, for the run report.",
     )
+    truncated_sections: int = Field(
+        default=0,
+        description=(
+            "Sections where the model's answer was cut off by the token "
+            "budget. Counted apart from zero_predicate_sections for the same "
+            "reason failed_sections is: an answer we stopped the model from "
+            "finishing yields no parseable predicates either, so a small "
+            "budget was being recorded as 'this section of the guide contains "
+            "no predicates' — a claim about our configuration, reported as a "
+            "claim about the prose. Unlike an exception, truncation does not "
+            "raise: the response arrives, it is simply incomplete."
+        ),
+    )
+    truncations: list[str] = Field(
+        default_factory=list,
+        description="Which sections were truncated, for the run report.",
+    )
+    truncation_checked: bool = Field(
+        default=True,
+        description=(
+            "Whether truncation could be detected at all. It is read from the "
+            "completion's finish_reason, which reaches us through the LM's "
+            "call history — and that history can be switched off "
+            "(`dspy.settings.disable_history`, `max_history_size=0`). When it "
+            "is off, this run cannot rule truncation out, which is a third "
+            "state and not the same as having found none. False makes the "
+            "zero-section figure uninterpretable rather than merely low."
+        ),
+    )
 
 
 # ─── Stage B: Hierarchical Decomposition ───────────────────────
