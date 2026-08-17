@@ -5,6 +5,7 @@ an argumentation framework over provenance semirings.
 """
 
 import math
+from dataclasses import replace
 from itertools import product as iter_product
 from datetime import datetime
 from .paths import resolve_repo_path
@@ -234,6 +235,29 @@ def _derive_rule_arguments(
             combined_tag = rule_tag
             for sub_arg in combo:
                 combined_tag = ProvenanceTag.tensor(combined_tag, sub_arg.tag)
+
+            # depth(a) = 1 + max{ depth(s) : s ∈ sub_args(a) }
+            #
+            # Set here rather than accumulated by the composition above,
+            # because depth is the height of the derivation tree and a tree
+            # height is not a binary operation on two tags. Applying this
+            # rule is the one step; how many antecedents it took does not
+            # make the derivation deeper. Well-founded: every sub-argument
+            # already exists when this runs, and the derivation graph is
+            # acyclic by construction (`existing_derivations` refuses to
+            # re-derive a rule from the same sub-arguments).
+            combined_tag = replace(
+                combined_tag,
+                # `default=0` is for a rule with no antecedents, which
+                # `iter_product()` yields as one empty combination. Firing it
+                # is still one inference step, so it lands at 1 — and without
+                # the default, max over an empty combo raises and a rule the
+                # compiler supports today stops compiling.
+                derivation_depth=1 + max(
+                    (sub_arg.tag.derivation_depth for sub_arg in combo),
+                    default=0,
+                ),
+            )
 
             # σ(a) = ⋀( status(top_rule), { σ(s) : s ∈ sub_args } )
             # Weakest link: an inference cannot conclude more strongly than
