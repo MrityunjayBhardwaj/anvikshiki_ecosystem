@@ -13,6 +13,9 @@ discarded at the point the items are rolled up, so the roll-up reports an
 absence the underlying data does not have.
 """
 
+import ast
+import json
+
 from anvikshiki_v4.extraction_schema import (
     CandidatePredicate,
     ClaimType,
@@ -274,3 +277,124 @@ def test_the_whole_path_from_candidate_to_stored_rule_keeps_the_span():
     assert stored is not None
     assert [p.quote for p in stored.provenance] == ["Burn rate doubled."]
     assert stored.provenance[0].chapter_id == "ch02"
+
+
+def test_provenance_survives_being_written_to_a_knowledge_base_and_read_back():
+    """The knowledge base is the durable artifact; a tier reads it later.
+
+    Serialisation is pydantic's, so this holds by construction — which is
+    exactly why it is worth pinning. A field that fails to round-trip would
+    make every rule look unsourced again on the next load, and that reads as
+    a fact about the rules.
+    """
+    ks = KnowledgeStore(domain_type=DomainType.CRAFT)
+    ks.vyaptis["V90"] = Vyapti(
+        id="V90", name="a rule", statement="s",
+        causal_status="empirical",
+        confidence={"existence": 0.5, "formulation": 0.5, "evidence": "observational"},
+        epistemic_status="hypothesis",
+        provenance=[Provenance(
+            chapter_id="ch02", quote="Burn rate doubled.",
+            quote_found_in_source=True,
+        )],
+        provenance_attached=True,
+    )
+
+    reloaded = KnowledgeStore(**json.loads(ks.model_dump_json()))
+    rule = reloaded.vyaptis["V90"]
+    assert rule.provenance_attached is True
+    assert [p.quote for p in rule.provenance] == ["Burn rate doubled."]
+    assert rule.provenance[0].quote_found_in_source is True
+
+
+# ── the guarantee, asserted rather than intended ──
+
+def _construction_sites(class_name: str, only_file: str | None = None):
+    """Every `X(...)` call in the package, with its keywords."""
+    from pathlib import Path
+
+    import anvikshiki_v4
+
+    package = Path(anvikshiki_v4.__file__).parent
+    found = []
+    paths = sorted(package.glob("*.py"))
+    if only_file:
+        paths = [p for p in paths if p.name == only_file]
+    for path in paths:
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Both `X(...)` and `module.X(...)`, so switching to the
+            # qualified form does not make this check vacuous.
+            name = (
+                func.id if isinstance(func, ast.Name)
+                else func.attr if isinstance(func, ast.Attribute)
+                else None
+            )
+            if name != class_name:
+                continue
+            found.append((
+                f"{path.name}:{node.lineno}",
+                {kw.arg for kw in node.keywords},
+                node.keywords,
+            ))
+    return found
+
+
+def test_no_path_turns_a_proposal_into_a_rule_without_carrying_provenance():
+    """A source-level check, because a third conversion is what would break this.
+
+    Two paths convert a `ProposedVyapti` into a `Vyapti` today — the automatic
+    Stage E merge and the human-approval path. Both were dropping provenance.
+    If a third appears, the record dies again and nothing at runtime would say
+    so: the rule would simply look unsourced, which is indistinguishable from
+    a rule that genuinely has no source.
+
+    `kb_augmentation` is correctly excluded by the rule rather than by a name:
+    it builds from the model's parametric knowledge, reads from no proposal,
+    and has no source document to point at.
+    """
+    converting, missing = [], []
+    for site, kwargs, keywords in _construction_sites("Vyapti"):
+        reads_a_proposal = any(
+            isinstance(kw.value, ast.Attribute)
+            and isinstance(kw.value.value, ast.Name)
+            and kw.value.value.id == "proposed"
+            for kw in keywords
+        )
+        if not reads_a_proposal:
+            continue
+        converting.append(site)
+        if not {"provenance", "provenance_attached"} <= kwargs:
+            missing.append(site)
+
+    # The denominator. A scan that matched nothing would pass in silence.
+    assert len(converting) >= 2, (
+        f"the scan found only {len(converting)} proposal-to-rule "
+        f"conversion(s) ({converting}) — it has stopped matching how they "
+        f"are written"
+    )
+    assert not missing, (
+        f"{len(missing)} conversion(s) drop the candidate's provenance:\n"
+        + "\n".join(f"  - {site}" for site in missing)
+    )
+
+
+def test_every_stage_d_construction_records_whether_it_looked():
+    """`provenance_attached` is what separates an absence from an omission.
+
+    A new Stage D branch that forgets it would produce rules reading as
+    'nobody ever tried', which is the state this whole fix exists to end. The
+    count is asserted so the scan cannot pass by matching nothing.
+    """
+    sites = _construction_sites("ProposedVyapti", only_file="predicate_extraction.py")
+    assert len(sites) == 2, (
+        f"expected the two Stage D construction sites, found {len(sites)}: "
+        f"{[s for s, _, _ in sites]}"
+    )
+    silent = [site for site, kwargs, _ in sites if "provenance_attached" not in kwargs]
+    assert not silent, (
+        f"{len(silent)} Stage D construction(s) do not record whether they "
+        f"looked for provenance:\n" + "\n".join(f"  - {site}" for site in silent)
+    )
