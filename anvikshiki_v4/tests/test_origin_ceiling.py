@@ -288,3 +288,94 @@ def test_the_generated_rule_is_still_reasoned_with():
     derived = [a for a in af.arguments.values() if a.top_rule == "V01"]
     assert derived, "the capped rule stopped producing an argument at all"
     assert derived[0].conclusion == "q"
+
+
+# ── The ceiling only binds what carries an origin ────────────
+#
+# Absence of `augmentation_metadata` has to mean curated, because every
+# hand-authored knowledge base in the tree leaves it unset. That makes an
+# unstamped rule an *uncapped* one, so the failure direction is the bad one:
+# a machine proposal that skipped the stamping step arrives with no bound and
+# looks exactly like something a person wrote. These assert that the two
+# extraction paths stamp at construction rather than relying on a later pass
+# that a caller can bypass (#51).
+
+def test_a_reviewer_approved_rule_carries_its_origin():
+    from anvikshiki_v4.extraction_hitl import HITLReviewer
+    from anvikshiki_v4.extraction_schema import ProposedVyapti
+
+    proposed = ProposedVyapti(
+        id="V99",
+        name="approved_rule",
+        statement="p implies q",
+        causal_status="empirical",
+        epistemic_status="established",
+        confidence_existence=1.0,
+        confidence_formulation=1.0,
+        evidence_type="theoretical",
+        antecedents=["p"],
+        consequent="q",
+    )
+    vyapti = HITLReviewer._proposed_to_vyapti(proposed)
+
+    assert vyapti is not None, (
+        "conversion returned None — the constructor raised and the handler "
+        "swallowed it, which would silently drop every approved rule"
+    )
+    assert vyapti.augmentation_metadata is not None, (
+        "an approved rule with no origin is treated as curated, and curated "
+        "is uncapped"
+    )
+    assert (vyapti.augmentation_metadata.origin
+            is AugmentationOrigin.HITL_PROMOTED)
+    # Authored ESTABLISHED, capped by review.
+    assert status_of_rule(vyapti) is EpistemicStatus.HYPOTHESIS
+
+
+def test_no_extraction_path_builds_a_vyapti_without_an_origin():
+    """A source-level check, because the runtime paths need an LLM.
+
+    Both extraction sites construct `Vyapti(...)` directly. If a third
+    appears without an origin, the ceiling stops binding whatever it
+    produces, and nothing at runtime would say so.
+    """
+    import ast
+    from pathlib import Path
+
+    import anvikshiki_v4
+
+    package = Path(anvikshiki_v4.__file__).parent
+    examined, unstamped = [], []
+    for path in sorted(package.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            # Both `Vyapti(...)` and `schema.Vyapti(...)`, so switching to
+            # the qualified form does not make this check vacuous.
+            name = (
+                func.id if isinstance(func, ast.Name)
+                else func.attr if isinstance(func, ast.Attribute)
+                else None
+            )
+            if name != "Vyapti":
+                continue
+            site = f"{path.name}:{node.lineno}"
+            examined.append(site)
+            if "augmentation_metadata" not in {kw.arg for kw in node.keywords}:
+                unstamped.append(site)
+
+    # The denominator. A scan that matched nothing would pass silently, and a
+    # law with no denominator is not a law — three sites build a Vyapti today
+    # (the extraction pipeline, the reviewer, and KB augmentation).
+    assert len(examined) >= 3, (
+        f"the scan found only {len(examined)} Vyapti construction(s) "
+        f"({examined}) — it has stopped matching how they are written"
+    )
+
+    assert not unstamped, (
+        f"{len(unstamped)} Vyapti construction(s) set no origin, so the "
+        f"ceiling cannot bound them:\n"
+        + "\n".join(f"  - {site}" for site in unstamped)
+    )

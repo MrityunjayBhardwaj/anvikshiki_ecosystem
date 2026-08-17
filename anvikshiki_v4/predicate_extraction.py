@@ -38,6 +38,8 @@ from .extraction_schema import (
     ValidationResult,
 )
 from .schema import (
+    AugmentationMetadata,
+    AugmentationOrigin,
     CausalStatus,
     Confidence,
     DecayRisk,
@@ -954,6 +956,17 @@ class StageEValidator:
                     sources=proposed.sources,
                     antecedents=proposed.antecedents,
                     consequent=proposed.consequent,
+                    # Stamped here, not by a later pass. Absence of this
+                    # metadata means curated, and curated is uncapped by the
+                    # origin ceiling — so a rule that leaves this pipeline
+                    # unstamped is a machine proposal with no bound on the
+                    # status it can carry into a conclusion. `compile_t2b`
+                    # replaces this object to add chapter ids and the parent
+                    # link; the origin it sets is the same one.
+                    augmentation_metadata=AugmentationMetadata(
+                        origin=AugmentationOrigin.GUIDE_EXTRACTED,
+                        parent_vyapti_id=proposed.parent_vyapti or None,
+                    ),
                 )
                 augmented.vyaptis[proposed.id] = vyapti
             except Exception as e:
