@@ -18,6 +18,13 @@ that arithmetic, and these tests go with it — they are here because a law
 suite that only described the target design could not tell you what the
 current one actually does.
 
+**Part 3** asks the same questions of the real compiler rather than of tags
+composed by hand. This is the part that answers the standing objection: a
+law broken on a dataclass in isolation may simply never be reached by the
+running pipeline, and if it is not, the removal loses its motivation. It is
+reached — on the shipped sample knowledge base, three of four arguments come
+out a lattice level below the meet of their own links.
+
 Generation is a deterministic grid rather than `hypothesis`. This suite is a
 gate, and a gate that samples randomly reports a different result on
 different runs; every counterexample below is reproducible by construction,
@@ -33,6 +40,7 @@ from anvikshiki_v4.schema_v4 import (
     PramanaType,
     ProvenanceTag,
 )
+from anvikshiki_v4.t2_compiler_v4 import compile_t2, load_knowledge_store
 
 
 # ── The lattice order ────────────────────────────────────────
@@ -432,3 +440,130 @@ def test_accrual_is_commutative():
         assert left.belief == pytest.approx(right.belief, abs=1e-12)
         assert left.disbelief == pytest.approx(right.disbelief, abs=1e-12)
         assert left.uncertainty == pytest.approx(right.uncertainty, abs=1e-12)
+
+
+# ═════════════════════════════════════════════════════════════
+# Part 3 — The same laws, through the real compiler.
+#
+# Everything above composes tags directly. That is how the
+# restatement defect was first observed, and it is also the
+# standing objection to it: a law broken on a dataclass in
+# isolation may never be reached by the running pipeline, and if
+# it is not, the subtraction loses its empirical motivation.
+#
+# These two close that gap. They build the argumentation
+# framework from the shipped sample knowledge base and ask the
+# same questions of what comes out.
+# ═════════════════════════════════════════════════════════════
+
+_SAMPLE_KB = "anvikshiki_v4/data/sample_architecture.yaml"
+
+# The knowledge base's four statuses, into the lattice L.
+_KB_STATUS = {
+    "established": EpistemicStatus.ESTABLISHED,
+    "hypothesis": EpistemicStatus.HYPOTHESIS,
+    "open": EpistemicStatus.OPEN,
+    "contested": EpistemicStatus.CONTESTED,
+}
+
+
+@pytest.fixture
+def compiled_af():
+    """The sample KB compiled from one query fact.
+
+    V01 (established): concentrated_ownership → long_horizon_possible
+    V02 (hypothesis):  long_horizon_possible  → capability_building_possible
+
+    So the framework carries a premise, two one-step derivations and one
+    two-step derivation — enough to ask what chaining does to a status and
+    to a depth without inventing a fixture the pipeline would never build.
+    """
+    ks = load_knowledge_store(_SAMPLE_KB)
+    facts = [{
+        "predicate": "concentrated_ownership",
+        "confidence": 0.9,
+        "sources": ["q1"],
+    }]
+    return ks, compile_t2(ks, facts)
+
+
+def _meet_of_links(ks, af, arg) -> EpistemicStatus:
+    """The status the target design assigns: meet over the derivation.
+
+    Premise arguments are taken at whatever status the system assigns them
+    today, deliberately. Where a premise's status should come from is #12's
+    question, and this law does not need an answer to it — it asks only
+    whether *chaining* preserves what it was handed.
+    """
+    if arg.top_rule is None:
+        return status_of(arg.tag)
+
+    links = [_KB_STATUS[ks.vyaptis[arg.top_rule].epistemic_status.value]]
+    links += [
+        _meet_of_links(ks, af, af.arguments[sub])
+        for sub in arg.sub_arguments
+    ]
+    return min(links, key=rank)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="status is thresholded from a belief product, not met over L (#12)",
+)
+def test_status_through_the_pipeline_is_the_meet_of_its_links(compiled_af):
+    """Weakest link, asked of the compiler rather than of a dataclass.
+
+    An argument's status should be the weakest status in its derivation —
+    no better, and no worse. Today it is read off a belief product through
+    fixed cutoffs, so it lands *below* the meet: one step through an
+    established rule from an established premise reports HYPOTHESIS where
+    the lattice says ESTABLISHED, and the two-step derivation reports
+    PROVISIONAL where the lattice says HYPOTHESIS.
+
+    This is the law whose failure the design document asks for by name. If
+    it held today, the restatement defect would be unreachable through the
+    real pipeline and the subtraction would lose its empirical motivation.
+    """
+    ks, af = compiled_af
+    assert len(af.arguments) >= 4, "the fixture stopped exercising a chain"
+
+    violations = []
+    for arg in sorted(af.arguments.values(), key=lambda a: a.id):
+        expected = _meet_of_links(ks, af, arg)
+        actual = status_of(arg.tag)
+        if actual is not expected:
+            violations.append(
+                f"{arg.id} ({arg.top_rule or 'premise'} → {arg.conclusion}): "
+                f"lattice says {expected.name}, pipeline says {actual.name}"
+            )
+
+    assert not violations, report(violations, len(af.arguments))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="derivation_depth never increments (#14)",
+)
+def test_derivation_depth_through_the_pipeline_counts_inference_steps(
+    compiled_af,
+):
+    """A two-step derivation must not report the same depth as a premise.
+
+    The compiler builds every tag at depth 0 and composes them with an
+    operator that adds, so the field stays at 0 for every argument in the
+    framework — and nothing in the output distinguishes a fact that was
+    asserted from one derived through two rules.
+    """
+    _, af = compiled_af
+
+    derived = [a for a in af.arguments.values() if a.top_rule is not None]
+    assert derived, "the fixture stopped exercising a derivation"
+
+    violations = [
+        f"{a.id} ({a.top_rule} → {a.conclusion}) reports depth "
+        f"{depth_of(a.tag)}, the same as a premise"
+        for a in sorted(derived, key=lambda a: a.id)
+        if depth_of(a.tag) == 0
+    ]
+
+    assert not violations, report(violations, len(derived))
