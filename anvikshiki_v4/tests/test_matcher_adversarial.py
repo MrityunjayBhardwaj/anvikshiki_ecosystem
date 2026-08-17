@@ -82,6 +82,23 @@ def test_similarity_alone_would_still_admit_these(a, b, why):
     )
 
 
+def test_a_text_carrying_both_sides_of_a_pair_is_not_its_own_opposite():
+    """Found by the gold fixture, which contains exactly this.
+
+    "Customer retention rate is high (low churn)" holds high and low, and
+    retention and churn. Checking pair membership across the two texts without
+    first removing what they share made that description oppose itself, so it
+    matched nothing — including an identical copy of itself. Opposition has to
+    come from the tokens that distinguish the two.
+    """
+    both_sides = "Customer retention rate is high (low churn)"
+    assert match_veto(both_sides, both_sides) is None
+    assert _best_match_score("high_retention_rate", {"high_retention_rate"}) == 1.0
+
+    # and the pair is still opposed when the tokens really do distinguish them
+    assert match_veto("high_retention_rate", "high_churn_rate")
+
+
 def test_an_inverted_extractor_no_longer_scores_perfectly():
     """The audit's decisive experiment, kept as a regression.
 

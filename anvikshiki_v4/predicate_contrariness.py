@@ -35,6 +35,8 @@ empirical question nobody has answered yet.
 
 from __future__ import annotations
 
+import re
+
 NEGATION_PREFIX = "not_"
 
 # Morphological and generic polarity oppositions. A pair here means: if one
@@ -81,8 +83,17 @@ RELATIONAL_TOKENS: frozenset[str] = frozenset({
 })
 
 
-def _tokens(name: str) -> list[str]:
-    return [t for t in name.lower().replace("-", "_").split("_") if t]
+# Words that negate a natural-language description. Names carry negation
+# structurally, as a `not_` prefix; prose carries it lexically.
+NEGATION_WORDS: frozenset[str] = frozenset({
+    "not", "no", "never", "without", "lacks", "lacking", "absent",
+    "absence", "fails", "failing", "cannot", "neither", "nor", "false",
+})
+
+
+def _tokens(text: str) -> list[str]:
+    """Split a predicate name or a description into comparable word tokens."""
+    return [t for t in re.split(r"[^a-z0-9]+", text.lower()) if t]
 
 
 def normalize_negation(name: str) -> str:
@@ -118,15 +129,22 @@ def polarity_opposed(
 ) -> frozenset[str] | None:
     """The opposing token pair the two names disagree on, if any.
 
-    Only fires when one name carries one side and the other carries the other
-    side, so `high_retention` against `high_churn` is opposed while
-    `high_retention` against `retention_rate` is not.
+    The opposing tokens must be ones that actually *distinguish* the two
+    texts, so shared tokens are removed first. Otherwise a text carrying both
+    sides of a pair — "retention rate is high (low churn)" holds high/low and
+    retention/churn — reports itself as its own opposite, and descriptions
+    that name a quantity alongside its complement never match anything,
+    including themselves.
+
+    So `high_retention` against `high_churn` is opposed on retention/churn,
+    while `high_retention` against `retention_rate` is not opposed at all.
     """
     tokens_a, tokens_b = set(_tokens(a)), set(_tokens(b))
+    only_a, only_b = tokens_a - tokens_b, tokens_b - tokens_a
     for pair in (*POLARITY_PAIRS, *DOMAIN_ANTONYMS, *extra_token_pairs):
         left, right = tuple(pair)
-        if (left in tokens_a and right in tokens_b) or (
-            right in tokens_a and left in tokens_b
+        if (left in only_a and right in only_b) or (
+            right in only_a and left in only_b
         ):
             return pair
     return None
@@ -186,6 +204,35 @@ def match_veto(
 
     if relational_order_differs(na, nb):
         return "argument order: same relation, operands reversed"
+
+    return None
+
+
+def text_veto(a: str, b: str) -> str | None:
+    """Why two natural-language descriptions must not be matched.
+
+    The description counterpart of `match_veto`. Names carry negation
+    structurally as a `not_` prefix; prose carries it lexically, so
+    "value is created" and "value is not created" share every token that
+    matters and differ only by the word that reverses them — the same defect
+    the name matcher had, in a form where it is easier to hit.
+
+    Argument order is not checked here. In a name, token position encodes the
+    relation; in a sentence it does not, and reading order off prose would
+    reject paraphrases for no reason.
+    """
+    tokens_a, tokens_b = set(_tokens(a)), set(_tokens(b))
+    if not tokens_a or not tokens_b:
+        return None
+
+    neg_a = bool(tokens_a & NEGATION_WORDS)
+    neg_b = bool(tokens_b & NEGATION_WORDS)
+    if neg_a != neg_b:
+        return "negation: one description negates and the other does not"
+
+    opposed = polarity_opposed(a, b)
+    if opposed is not None:
+        return f"polarity: disagree on {'/'.join(sorted(opposed))}"
 
     return None
 
