@@ -14,6 +14,14 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+# `Provenance` lives in extraction_schema because extraction is what builds
+# these records, and nothing in extraction_schema imports this module, so this
+# direction introduces no cycle. It is the wrong way round conceptually — a
+# claim's source location is not an extraction-specific idea, and `Vyapti`
+# below is its consumer — but moving the class is churn that belongs in its
+# own change, not inside a bug fix.
+from .extraction_schema import Provenance
+
 
 # ─── Domain Taxonomy ──────────────────────────────────────────
 
@@ -121,6 +129,34 @@ class Vyapti(BaseModel):
     decay_condition: Optional[str] = None
     last_verified: Optional[datetime] = None
     sources: list[str] = Field(default_factory=list)
+    provenance: list[Provenance] = Field(
+        default_factory=list,
+        description=(
+            "Where this rule's claim was found, as checkable records rather "
+            "than the bare strings in `sources`. The two are not "
+            "substitutes: a string names a source, while a record locates a "
+            "span inside one and says whether the words were actually there. "
+            "A citation tier that wants to distinguish 'identifier resolves "
+            "and the span was found' from 'identifier resolves, claim "
+            "unchecked' cannot read the first out of `sources` at all, "
+            "because the question it asks is about a quote and `sources` has "
+            "nowhere to put one.\n\n"
+            "Empty on hand-authored rules, which is correct — they cite "
+            "literature rather than a located span — and `augmentation_"
+            "metadata` already distinguishes those from extracted ones."
+        ),
+    )
+    provenance_attached: bool = Field(
+        default=False,
+        description=(
+            "Whether anything ever tried to put provenance on this rule. "
+            "Carried through from the proposal rather than recomputed, so an "
+            "empty list on an extracted rule can be read as 'the contributing "
+            "candidates had no record' instead of 'the pipeline dropped it' — "
+            "which is what every extracted rule silently was until this was "
+            "threaded through."
+        ),
+    )
 
     # Datalog-compilable fields
     antecedents: list[str] = Field(default_factory=list, description="Predicate names required")

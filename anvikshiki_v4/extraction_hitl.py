@@ -275,6 +275,12 @@ class HITLReviewer:
                 epistemic_status=es,
                 decay_risk=dr,
                 sources=proposed.sources,
+                # A human approving a proposal does not make the source
+                # location stop mattering — if anything a promoted rule is the
+                # one most likely to be cited later, so the same record has to
+                # travel with it as on the automatic path.
+                provenance=proposed.provenance,
+                provenance_attached=proposed.provenance_attached,
                 antecedents=proposed.antecedents,
                 consequent=proposed.consequent,
                 augmentation_metadata=AugmentationMetadata(
