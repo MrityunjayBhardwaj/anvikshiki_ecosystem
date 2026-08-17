@@ -52,6 +52,26 @@ Unjudged rows are counted and excluded, never treated as agreement.
 
 All three (`name`, `description`, `either`) are scored against the same human judgments. `match_on` currently defaults to `name`; **the default changes only if the human judgments say a different mode agrees better.** This is registered now so the choice is not made by whichever produces the more flattering extraction number afterwards.
 
+#### Amendment, 2026-08-17: the mode that builds the sample, registered before judging
+
+The clause above governs which mode's **verdicts** are adopted. It does not cover a second thing the mode also decides: **which pairs land on the sheet at all.** `replay_mode` re-scores every mode against the same judgments, so the verdicts are compared on identical ground — but the sample is whatever the *building* mode surfaced, and no mode can be credited or blamed for pairs it was never shown. That gap was unstated here and is closed now.
+
+**The sheet is built under `either`. The verdict question stays open to the judgments, exactly as registered above.**
+
+The reason is that `name` cannot construct the recall half. Near misses are meant to be the *nearest* candidates to a gold predicate nothing matched — that half exists because a review built on extractor output can only find false positives, and recall is made of the other kind. Measured on the 24 candidates from ch02:
+
+| | `name` | `either` |
+|---|---|---|
+| near-miss rows | 33 | 33 |
+| rows scoring exactly 0.0 | 21 | 0 |
+| golds whose three "nearest" candidates all score 0.0 | **6 of 11** | 0 of 11 |
+
+For those six gold predicates the three offered candidates are identical — `accelerated_failure`, `cash_burn_accelerating`, `cohort_based_ltv_model` — because every candidate ties at zero name overlap and the tie is broken alphabetically. Eighteen of the thirty-three recall rows therefore ask a human about pairs selected by spelling. Under `either`, descriptions break those ties and every row is a real nearest neighbour.
+
+Two things this amendment deliberately does **not** do. It does not claim `either` agrees better with human judgment — that is unknown until the sheet is judged, and it remains the registered criterion. And it is not a choice made after seeing which mode flatters a number: no figure has been reported from any mode, and κ has not been computed, because nothing has been judged. What was observed is a property of the *sample construction*, visible without a single human verdict.
+
+The degeneracy is filed as a bug in its own right; if it is fixed, `name` becomes able to build a usable sample and this amendment stops applying to future sheets.
+
 ### Kill criterion for the instrument
 
 κ below **0.6** means matcher and human do not agree well enough for the matcher's verdicts to stand in for judgment, and **no extraction number is reported from it**. That would be a repeat of the previous verdict, and it would be reported as the finding rather than worked around.
