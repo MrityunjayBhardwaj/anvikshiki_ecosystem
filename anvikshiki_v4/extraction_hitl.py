@@ -97,7 +97,19 @@ def render_vyapti_diff(v: ProposedVyapti, index: int, total: int) -> str:
 
 
 def render_validation_summary(validation: ValidationResult) -> str:
-    """Render validation results as a summary block."""
+    """Render validation results as a summary block.
+
+    Says so when validation never ran, rather than printing "Valid: False"
+    beside a 0.0% coverage ratio, which reads like a failed check instead of
+    an absent one. A reviewer deciding what to accept needs to know which.
+    """
+    if not validation.ran:
+        return (
+            "Validation Summary:\n"
+            "  NOT RUN — no DAG or Datalog validation was performed for this\n"
+            "  review, so nothing below has been checked."
+        )
+
     lines = [
         "Validation Summary:",
         f"  Valid: {validation.is_valid}",
@@ -354,7 +366,11 @@ def main() -> None:
         ],
     )
 
-    validation = ValidationResult(is_valid=True)
+    # This entry point reviews proposals from a file and runs no validation of
+    # its own, so it must not claim any. It used to hardcode is_valid=True,
+    # which told the reviewer the DAG had been checked when nothing had looked
+    # at it. Left at the default, the summary below reports it as not run.
+    validation = ValidationResult()
 
     reviewer = HITLReviewer(original_ks, original_ks, stage_d, validation)
     approved = reviewer.review_interactive()

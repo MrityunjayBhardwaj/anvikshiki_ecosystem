@@ -384,6 +384,8 @@ class StageAExtractor(dspy.Module):
 
         all_candidates: list[CandidatePredicate] = []
         zero_sections = 0
+        failed_sections = 0
+        failures: list[str] = []
 
         for i, section in enumerate(sections):
             if len(section.strip().split()) < 20:
@@ -396,8 +398,14 @@ class StageAExtractor(dspy.Module):
                     existing_predicates=existing,
                     domain_context=domain_ctx,
                 )
-            except Exception:
-                zero_sections += 1
+            except Exception as exc:
+                # Counted apart from zero_sections. A section the model never
+                # answered for and a section that genuinely holds no predicate
+                # were being recorded as the same event, so an outage read as
+                # a thin chapter and depressed zero_section_rate as if the
+                # prose were at fault.
+                failed_sections += 1
+                failures.append(f"section {i}: {type(exc).__name__}: {str(exc)[:160]}")
                 continue
 
             predicates = getattr(result, "predicates", None) or []
@@ -443,6 +451,8 @@ class StageAExtractor(dspy.Module):
             chapter_id=chapter_id,
             section_count=len(sections),
             zero_predicate_sections=zero_sections,
+            failed_sections=failed_sections,
+            failures=failures,
         )
 
     def _build_predicate_list(self) -> str:
@@ -883,7 +893,10 @@ class StageEValidator:
         self,
         stage_d: StageDOutput,
     ) -> tuple[KnowledgeStore, ValidationResult]:
-        errors = ValidationResult()
+        # ran=True: this method is the validation, so its result carries
+        # evidence. A ValidationResult left at the default carries none and
+        # scores nothing.
+        errors = ValidationResult(ran=True)
         augmented = self.ks.model_copy(deep=True)
 
         all_proposed = stage_d.new_vyaptis + stage_d.refinement_vyaptis
