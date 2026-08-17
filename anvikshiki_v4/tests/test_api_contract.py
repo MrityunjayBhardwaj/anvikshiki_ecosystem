@@ -242,3 +242,51 @@ def test_uncertainty_entry_matches_its_declared_shape(result):
                 assert isinstance(value, dict), (
                     f"{conc}.{field} is {type(value).__name__}, declared an object"
                 )
+
+
+def test_argument_reports_its_own_status_alongside_its_conclusions():
+    """Two arguments for one conclusion can sit at different lattice points.
+
+    `epistemic_status` is the conclusion's and is shared by every argument
+    reaching it; `status` is the argument's own. Collapsing them would
+    render the argument that won the join and the weaker one that lost it
+    identically — and the difference between them is the explanation for
+    where the conclusion landed.
+
+    Built by hand rather than compiled from a knowledge base, because
+    whether any particular KB happens to contain two rules of differing
+    status concluding the same predicate is an accident of that KB. The
+    serializer has to carry the distinction either way.
+    """
+    from anvikshiki_v4.argumentation import ArgumentationFramework
+    from anvikshiki_v4.engine_v4 import af_view
+    from anvikshiki_v4.schema_v4 import Argument, ProvenanceTag
+
+    af = ArgumentationFramework()
+    for aid, status in (("A0", EpistemicStatus.ESTABLISHED),
+                        ("A1", EpistemicStatus.HYPOTHESIS)):
+        af.add_argument(Argument(
+            id=aid, conclusion="p", top_rule=None,
+            premises=frozenset(["p"]), is_strict=False,
+            tag=ProvenanceTag(pramana_type=PramanaType.ANUMANA),
+            status=status,
+        ))
+    af.compute_grounded()
+
+    conclusion_status, _, args = af.get_epistemic_status("p")
+    assert len(args) == 2
+    # The join takes the better of the two.
+    assert conclusion_status == EpistemicStatus.ESTABLISHED
+
+    nodes = af_view(af, {"p": conclusion_status})["arguments"]
+    assert set(nodes) == {"A0", "A1"}
+
+    for node in nodes.values():
+        assert node["epistemic_status"] == "established", (
+            "epistemic_status is the conclusion's and is shared"
+        )
+    assert nodes["A0"]["status"] == "established"
+    assert nodes["A1"]["status"] == "hypothesis", (
+        "the weaker argument reports the conclusion's status instead of its "
+        "own, so the view cannot show why the join landed where it did"
+    )

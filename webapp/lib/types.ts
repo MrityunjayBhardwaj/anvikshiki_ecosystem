@@ -34,7 +34,12 @@ export const ArgumentNodeSchema = z.object({
   conclusion: z.string(),
   rule_type: RuleType,
   label: Label,
+  // The conclusion's status, which every argument concluding it shares.
   epistemic_status: EpistemicStatus.nullable(),
+  // This argument's own place in the lattice: the meet of its top rule and
+  // its sub-arguments. Equal to the above only for the argument that won
+  // the join — where they differ is where the explanation lives.
+  status: EpistemicStatus,
   tag: ProvenanceTagSchema,
   premises: z.array(z.string()),
   vyapti_id: z.string().optional().nullable(),

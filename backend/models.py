@@ -66,7 +66,8 @@ class ArgumentNode(BaseModel):
     conclusion: str
     rule_type: str
     label: str
-    epistemic_status: str | None
+    epistemic_status: str | None   # the conclusion's, shared by its arguments
+    status: str                    # this argument's own place in the lattice
     tag: ProvenanceTag
     premises: list[str]
     vyapti_id: str | None = None

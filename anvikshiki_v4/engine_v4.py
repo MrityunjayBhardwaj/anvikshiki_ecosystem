@@ -106,9 +106,11 @@ def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
     `rule_type`, `top_rule` as `vyapti_id`, and each attack is given a stable
     id, since attacks are a list with no identity of their own.
 
-    `status_by_conclusion` supplies each argument's epistemic status. It is
-    derived per conclusion, so every argument concluding X reports X's status,
-    and None when the conclusion has none.
+    `status_by_conclusion` supplies `epistemic_status`, which is the
+    *conclusion's* — every argument concluding X reports X's, and None when
+    the conclusion has none. Each argument additionally reports `status`, its
+    own place in the lattice, which differs whenever the join over a
+    conclusion's surviving arguments picked a different one.
     """
     if af is None:
         return {"arguments": {}, "attacks": [], "labels": {}}
@@ -126,6 +128,13 @@ def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
                 status_by_conclusion[a.conclusion].value
                 if a.conclusion in status_by_conclusion else None
             ),
+            # This argument's own place in the lattice — the meet of its top
+            # rule and its sub-arguments. Distinct from `epistemic_status`
+            # above, which is the conclusion's, and equal to it only for the
+            # argument that won the join. Two arguments for one conclusion
+            # can differ here, and that difference is the explanation for
+            # why the conclusion landed where it did.
+            "status": a.status.value,
             "tag": a.tag.to_dict(),
             "premises": sorted(a.premises),
             "vyapti_id": a.top_rule,
