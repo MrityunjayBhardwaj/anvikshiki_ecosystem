@@ -32,6 +32,8 @@ from .extraction_schema import (
     ValidationResult,
 )
 from .schema import (
+    AugmentationMetadata,
+    AugmentationOrigin,
     CausalStatus,
     Confidence,
     DecayRisk,
@@ -234,7 +236,14 @@ class HITLReviewer:
 
     @staticmethod
     def _proposed_to_vyapti(proposed: ProposedVyapti) -> Optional[Vyapti]:
-        """Convert ProposedVyapti to schema.Vyapti."""
+        """Convert ProposedVyapti to schema.Vyapti.
+
+        The origin is stamped here rather than by a later pass. Absence of
+        `augmentation_metadata` means curated, and curated is uncapped, so a
+        rule that leaves this function unstamped is a machine proposal the
+        origin ceiling cannot bound. `apply_decisions` calls this only for
+        ACCEPT and MODIFY, which is what HITL_PROMOTED means.
+        """
         try:
             cs = CausalStatus(proposed.causal_status)
         except ValueError:
@@ -268,6 +277,10 @@ class HITLReviewer:
                 sources=proposed.sources,
                 antecedents=proposed.antecedents,
                 consequent=proposed.consequent,
+                augmentation_metadata=AugmentationMetadata(
+                    origin=AugmentationOrigin.HITL_PROMOTED,
+                    parent_vyapti_id=proposed.parent_vyapti or None,
+                ),
             )
         except Exception:
             return None
