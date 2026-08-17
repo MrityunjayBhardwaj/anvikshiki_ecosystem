@@ -103,6 +103,26 @@ def normalize_negation(name: str) -> str:
     return name
 
 
+def affirmative(name: str) -> str:
+    """The unnegated form of a predicate name. not_X → X, X → X.
+
+    Distinct from `get_contrary`, which flips the polarity in both directions.
+    This one only ever removes negation, which is what a caller wants when it
+    is about to *fall back* from the name as written to the concept underneath:
+    for an already-affirmative name the two forms coincide, so the caller can
+    compare them to see whether a second lookup is even worth doing.
+
+    Double negation is eliminated first. A single-shot prefix strip on
+    `not_not_X` leaves `not_X`, which in the knowledge base shipped here is a
+    real and *opposite* predicate — the exact route by which a doubly-negated
+    query matched the rule concluding the negation of what it asked about.
+    """
+    norm = normalize_negation(name)
+    return norm[len(NEGATION_PREFIX):] if norm.startswith(
+        NEGATION_PREFIX
+    ) else norm
+
+
 def get_contrary(name: str) -> str:
     """The contrary of a predicate name. not_X → X, X → not_X."""
     norm = normalize_negation(name)
