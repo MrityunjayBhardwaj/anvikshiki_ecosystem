@@ -108,6 +108,19 @@ class Provenance(BaseModel):
             "before the rename keep loading."
         ),
     )
+    quote_found_in_source: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether the quote was found verbatim in the text it was read "
+            "from. Three states, and the third is the point: None means "
+            "nobody checked — either no quote was given or no source was in "
+            "hand — while False means someone looked and the words were not "
+            "there. Collapsing None into False would report every unchecked "
+            "record as a fabrication; collapsing it into True would let an "
+            "unchecked quote stand as a verified citation, which is the "
+            "direction that flatters us."
+        ),
+    )
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
     @field_validator("content_sha256")
@@ -205,6 +218,46 @@ class StageAOutput(BaseModel):
     truncations: list[str] = Field(
         default_factory=list,
         description="Which sections were truncated, for the run report.",
+    )
+    quotes_checked: bool = Field(
+        default=False,
+        description=(
+            "Whether spans were checked against their sections at all. "
+            "Defaults to False, unlike `truncation_checked`, because the "
+            "conservative direction is the other way round here: a run "
+            "predating span capture checked nothing, and its "
+            "`quoteless_candidates` of 0 would otherwise read as '0 "
+            "candidates lacked a quote' when in truth every one of them did. "
+            "The counters below mean nothing unless this is True."
+        ),
+    )
+    quoteless_candidates: int = Field(
+        default=0,
+        description=(
+            "Candidates the model returned no quote for. Counted apart from "
+            "the ones whose quote could not be found, because 'declined to "
+            "cite' and 'cited something that is not there' are different "
+            "facts about the model and only the second is evidence of "
+            "fabrication."
+        ),
+    )
+    unverified_quote_candidates: int = Field(
+        default=0,
+        description=(
+            "Candidates whose quote was checked against the section and not "
+            "found verbatim. The predicate is kept, not dropped: dropping "
+            "here would remove the very thing the rate is meant to measure, "
+            "and the validation gate is where a drop belongs."
+        ),
+    )
+    quote_failures: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Which candidates failed and how — 'absent' versus 'punctuation' "
+            "versus 'too short to discriminate'. A bare count cannot separate "
+            "a model that invents sentences from one that types curly "
+            "apostrophes, and those call for opposite responses."
+        ),
     )
     truncation_checked: bool = Field(
         default=True,
