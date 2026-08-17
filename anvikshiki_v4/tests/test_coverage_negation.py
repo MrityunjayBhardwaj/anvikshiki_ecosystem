@@ -101,6 +101,27 @@ def test_the_label_says_which_layer_matched_as_well_as_the_polarity(analyzer):
             == "negated_synonym")
 
 
+def test_the_token_layer_gets_a_negated_label_too(analyzer):
+    """All three layers are reachable in negated form, so none is dead code.
+
+    A label the code can produce but no input can reach is a claim about
+    behaviour nothing verifies.
+    """
+    from anvikshiki_v4.schema import DomainType, KnowledgeStore
+
+    ks = KnowledgeStore(
+        domain_type=DomainType.CRAFT,
+        vyaptis={"V01": _vyapti(
+            "V01", ["binding_constraint_identified"], "value_creation"
+        )},
+    )
+    fuzzy = SemanticCoverageAnalyzer(ks)
+    result = fuzzy.analyze(["not_binding_constraint_found"])
+    assert (result.match_details["not_binding_constraint_found"]
+            == "negated_token")
+    assert result.relevant_vyaptis == ["V01"]
+
+
 def test_a_negated_query_with_an_entity_argument_is_labelled_too(analyzer):
     """The entity is stripped before the polarity is read, not after."""
     result = analyzer.analyze(["not_value_creation(acme_corp)"])
@@ -339,7 +360,7 @@ def test_an_exact_match_on_either_form_beats_token_overlap(two_sided):
     ), "an exact match on the affirmative lost to a fuzzier layer"
 
 
-def test_the_real_knowledge_base_exercises_this(two_sided):
+def test_the_real_knowledge_base_exercises_this():
     """Guard against the fixture drifting away from the shipped data.
 
     This defect was found on `business_expert.yaml`, not on a fixture. If that
