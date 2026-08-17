@@ -91,6 +91,66 @@ def _synthesis_reward(
     return min(1.0, score)
 
 
+# ── Argumentation view for consumers ──
+
+def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
+    """Serialisable view of the argumentation framework: arguments, attacks, labels.
+
+    The graph is the explanation — a consumer that receives a response without
+    it has the engine's answer and none of its reasoning. Every return path
+    therefore carries this view, empty rather than absent when no framework was
+    built, because "no arguments" and "the field never arrived" are different
+    facts and only one of them is true on a decline.
+
+    Shapes match the API contract exactly: `is_strict` is reported as
+    `rule_type`, `top_rule` as `vyapti_id`, and each attack is given a stable
+    id, since attacks are a list with no identity of their own.
+
+    `status_by_conclusion` supplies each argument's epistemic status. It is
+    derived per conclusion, so every argument concluding X reports X's status,
+    and None when the conclusion has none.
+    """
+    if af is None:
+        return {"arguments": {}, "attacks": [], "labels": {}}
+
+    status_by_conclusion = status_by_conclusion or {}
+    labels = af.labels
+
+    arguments = {
+        aid: {
+            "id": aid,
+            "conclusion": a.conclusion,
+            "rule_type": "strict" if a.is_strict else "defeasible",
+            "label": labels.get(aid, Label.UNDECIDED).value,
+            "epistemic_status": (
+                status_by_conclusion[a.conclusion].value
+                if a.conclusion in status_by_conclusion else None
+            ),
+            "tag": a.tag.to_dict(),
+            "premises": sorted(a.premises),
+            "vyapti_id": a.top_rule,
+        }
+        for aid, a in af.arguments.items()
+    }
+
+    attacks = [
+        {
+            "id": f"ATK{i:04d}",
+            "attacker": atk.attacker,
+            "target": atk.target,
+            "attack_type": atk.attack_type,
+            "hetvabhasa": atk.hetvabhasa,
+        }
+        for i, atk in enumerate(af.attacks)
+    ]
+
+    return {
+        "arguments": arguments,
+        "attacks": attacks,
+        "labels": {aid: lbl.value for aid, lbl in labels.items()},
+    }
+
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -131,7 +191,7 @@ class AnvikshikiEngineV4(dspy.Module):
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
                 violations=[], grounding_confidence=grounding.confidence,
-                extension_size=0,
+                extension_size=0, **af_view(),
             )
 
         # STEP 2: Build argumentation framework
@@ -245,6 +305,7 @@ class AnvikshikiEngineV4(dspy.Module):
                 1 for lbl in labels.values() if lbl == Label.IN
             ),
             contestation=contestation_analysis,
+            **af_view(af, {c: i["status"] for c, i in results.items()}),
         )
 
     def forward_with_coverage(
@@ -272,6 +333,7 @@ class AnvikshikiEngineV4(dspy.Module):
                 sources=[], uncertainty={}, provenance={},
                 violations=[], grounding_confidence=grounding.confidence,
                 extension_size=0, coverage=None, augmentation=None,
+                contestation=None, **af_view(),
             )
 
         # STEP 2: Coverage analysis
@@ -318,6 +380,7 @@ class AnvikshikiEngineV4(dspy.Module):
                     violations=[], grounding_confidence=grounding.confidence,
                     extension_size=0, coverage=coverage.model_dump(),
                     augmentation=augmentation,
+                    contestation=None, **af_view(),
                 )
 
         # STEP 4: Build argumentation framework with active KB
@@ -444,6 +507,7 @@ class AnvikshikiEngineV4(dspy.Module):
             contestation=contestation_analysis,
             coverage=coverage.model_dump(),
             augmentation=augmentation,
+            **af_view(af, {c: i["status"] for c, i in results.items()}),
         )
 
 
@@ -477,4 +541,7 @@ class AnvikshikiEngineV4Phase1(dspy.Module):
             grounding_confidence=grounding.confidence,
             extension_size=0,
             contestation=None,
+            coverage=None,
+            augmentation=None,
+            **af_view(),
         )
