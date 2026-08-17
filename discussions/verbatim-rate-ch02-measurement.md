@@ -141,9 +141,12 @@ section failed, so nothing scripting it can read "wrote the report" as
   real span from the section — attached to a claim it does not support. That is
   the wider parallel-list defect and it is unfixed. There is a test asserting
   this blind spot exists, which fails the day something closes it.
-- **The run is not pinned to a chapter hash on the reading side.** The output
-  records `chapter_sha256`, but nothing re-checks it — the same gap as #72 one
-  directory over.
+- **Two notions of "verbatim" appear on the same page.** The verdict table
+  scores the markup quote as `markup` and reports `absent: 0 / 24`. The
+  threshold sweep's "of those, verbatim in source" column uses the strict
+  check, which counts that same quote as not found — so at T=80 the sweep
+  reads `9 / 10` where the table implies `10 / 10`. One artifact, two answers,
+  and the sweep is the more conservative of them. Filed separately.
 - **`traces/` is gitignored**, so the Stage A output behind these numbers has no
   git backup. The run is cheap to repeat (7 calls) but will not reproduce
   byte-for-byte.

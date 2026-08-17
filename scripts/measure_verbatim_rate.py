@@ -386,11 +386,13 @@ def main() -> int:
     args = ap.parse_args()
 
     # The output must not land in the directory whose contents a pending
-    # decision sheet pins by hash. Asserted rather than intended.
-    assert PROTECTED.parent not in (STAGE_A_OUT.parent, REPORT_OUT.parent), (
-        f"refusing to write into {PROTECTED.parent}, which holds artifacts "
-        "pinned by the decision sheet awaiting judgment"
-    )
+    # decision sheet pins by hash. Not an `assert`: `python -O` strips those,
+    # and a guard that disappears under an optimisation flag is not a guard.
+    if PROTECTED.parent in (STAGE_A_OUT.parent, REPORT_OUT.parent):
+        raise SystemExit(
+            f"refusing to write into {PROTECTED.parent}, which holds artifacts "
+            "pinned by the decision sheet awaiting judgment"
+        )
     protected_before = sha256_of(PROTECTED) if PROTECTED.exists() else None
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -403,7 +405,29 @@ def main() -> int:
         out = StageAOutput.model_validate(blob["stage_a"])
         model = blob.get("model", "unknown")
         max_tokens = blob.get("section_max_tokens", 2000)
-        print(f"re-analysing {STAGE_A_OUT.relative_to(REPO_ROOT)} — no calls made\n")
+
+        # Every verdict below is recomputed against sections re-derived from
+        # the chapter *on disk now*. If it has moved since the run, the quotes
+        # are being checked against text they were never taken from and the
+        # whole report is quietly about a different document. Recording the
+        # hash and not checking it is the appearance of a guarantee.
+        recorded = blob.get("chapter_sha256", "")
+        actual = sha256_of(CHAPTER)
+        if not recorded:
+            print("WARNING: this run recorded no chapter hash, so it cannot be "
+                  "confirmed that the chapter is the one it was measured "
+                  "against.\n")
+        elif recorded != actual:
+            raise SystemExit(
+                f"refusing to re-analyse: {CHAPTER.relative_to(REPO_ROOT)} has "
+                f"changed since the run.\n"
+                f"  recorded {recorded[:16]}…\n"
+                f"  on disk  {actual[:16]}…\n"
+                "Every verdict would be recomputed against text the quotes "
+                "were not taken from. Re-run without --from-cache."
+            )
+        print(f"re-analysing {STAGE_A_OUT.relative_to(REPO_ROOT)} — no calls made")
+        print(f"chapter hash matches the run: {actual[:16]}…\n")
     else:
         out, model, max_tokens = run_stage_a()
         STAGE_A_OUT.write_text(
