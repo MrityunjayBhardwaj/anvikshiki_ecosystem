@@ -37,6 +37,7 @@ from anvikshiki_v4.span_verification import (
     MIN_DISCRIMINATING_LENGTH,
     diagnose,
     fold_punctuation,
+    is_discriminating,
     normalise_whitespace,
     quote_appears_in,
 )
@@ -340,6 +341,29 @@ def test_an_unverified_quote_does_not_become_the_statement():
     assert _statement_from_stage_d(
         "A span that is not in the chapter.", False
     ) == "a paraphrase the model wrote"
+
+
+def test_a_found_but_too_short_quote_does_not_become_the_statement():
+    """Found and usable are different questions, and one flag answered both.
+
+    `"economics."` genuinely occurs in the chapter, so `quote_found_in_source`
+    is True for it — the honest verdict — and on that flag alone a
+    ten-character fragment became the rule's statement. Caught by probing the
+    change rather than by reading it.
+    """
+    from anvikshiki_v4.span_verification import is_discriminating
+
+    assert not is_discriminating("economics.")
+    assert _statement_from_stage_d(
+        "economics.", True
+    ) == "a paraphrase the model wrote"
+
+
+def test_a_long_enough_verified_quote_still_wins():
+    """The guard must not swallow the case it exists to allow."""
+    span = "Growth multiplies whatever unit economics you already have."
+    assert is_discriminating(span)
+    assert _statement_from_stage_d(span, True) == span
 
 
 def test_an_unchecked_quote_does_not_become_the_statement_either():

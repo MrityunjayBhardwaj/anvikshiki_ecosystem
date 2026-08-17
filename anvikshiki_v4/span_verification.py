@@ -96,6 +96,18 @@ def quote_appears_in(quote: str, source: str) -> bool:
     return normalise_whitespace(quote) in normalise_whitespace(source)
 
 
+def is_discriminating(quote: str) -> bool:
+    """Whether the quote is long enough that finding it means something.
+
+    Separate from whether it was found, because the two answer different
+    questions and conflating them has already gone wrong once: `"economics."`
+    genuinely occurs in the chapter, so "found" is the honest verdict, but it
+    is useless as a citation and must not stand as a rule's statement. A caller
+    deciding whether to *trust* a span needs both answers.
+    """
+    return len(normalise_whitespace(quote)) >= MIN_DISCRIMINATING_LENGTH
+
+
 def diagnose(quote: str, source: str) -> str:
     """Why the quote was not found, or "" when it was.
 
@@ -117,9 +129,7 @@ def diagnose(quote: str, source: str) -> str:
         return "empty"
 
     if quote_appears_in(quote, source):
-        if len(normalise_whitespace(quote)) < MIN_DISCRIMINATING_LENGTH:
-            return "too short to discriminate"
-        return ""
+        return "" if is_discriminating(quote) else "too short to discriminate"
 
     if normalise_whitespace(fold_punctuation(quote)) in normalise_whitespace(
         fold_punctuation(source)

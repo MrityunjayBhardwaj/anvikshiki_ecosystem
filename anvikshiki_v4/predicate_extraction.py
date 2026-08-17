@@ -37,7 +37,7 @@ from .extraction_schema import (
     SynonymCluster,
     ValidationResult,
 )
-from .span_verification import diagnose
+from .span_verification import diagnose, is_discriminating
 from .schema import (
     AugmentationMetadata,
     AugmentationOrigin,
@@ -989,17 +989,22 @@ class StageDConstructor(dspy.Module):
                 ProposedVyapti(
                     id=vid,
                     name=candidate.description[:80] if candidate.description else candidate.name,
-                    # Only a *verified* quote is preferred to the description.
-                    # The old `quote or description` was harmless while quotes
-                    # were never captured; now that they are, it would promote
-                    # an unverified span — a sentence the model produced and
-                    # the section does not contain — into the rule's statement,
-                    # where it would read as the source's own words. The
-                    # fallback still happens, but the provenance records that
-                    # it did, so it is not silent.
+                    # Only a verified *and discriminating* quote is preferred
+                    # to the description. The old `quote or description` was
+                    # harmless while quotes were never captured; now that they
+                    # are, it would promote a sentence the section does not
+                    # contain into the rule's statement, where it reads as the
+                    # source's own words.
+                    #
+                    # Both conditions are needed, and the second is easy to
+                    # miss: `"economics."` really does occur in the chapter, so
+                    # `quote_found_in_source` is True for it, and on that flag
+                    # alone a ten-character fragment became the statement.
+                    # Found and usable are different questions.
                     statement=(
                         candidate.provenance.quote
-                        if candidate.provenance.quote_found_in_source
+                        if (candidate.provenance.quote_found_in_source
+                            and is_discriminating(candidate.provenance.quote))
                         else candidate.description
                     ),
                     causal_status="empirical",
