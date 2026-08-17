@@ -369,10 +369,12 @@ def test_a_half_written_provenance_block_fails_loudly(tmp_path):
     """A block missing its identity fields must not quietly describe a run."""
     import yaml
 
+    from pydantic import ValidationError
+
     path = tmp_path / "partial.yaml"
     path.write_text(yaml.safe_dump({
         "provenance": {"matcher": {"match_on": "either"}},
         "decisions": [],
     }))
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         read_decision_sheet(path)

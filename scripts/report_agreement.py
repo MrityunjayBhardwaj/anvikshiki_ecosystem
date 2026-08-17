@@ -72,7 +72,13 @@ def main() -> int:
 
     reports = {}
     for mode in ("name", "description", "either"):
-        replayed = replay_mode(decisions, gold.descriptions, match_on=mode)
+        # The sheet's own threshold, not this script's default. Recording a
+        # parameter and then replaying under a different one would put the
+        # figures back out of correspondence with the sheet they describe.
+        replayed = replay_mode(
+            decisions, gold.descriptions,
+            match_on=mode, threshold=p.matcher.threshold,
+        )
         reports[mode] = agreement(replayed)
 
     for mode, r in reports.items():
