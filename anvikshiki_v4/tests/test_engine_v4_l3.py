@@ -699,6 +699,10 @@ class TestEdgeCases:
 #   1. Gemini (cloud):
 #      GOOGLE_API_KEY=... pytest -m integration anvikshiki_v4/tests/test_engine_v4_l3.py
 #
+#      The model defaults to gemini-2.0-flash, which Google has retired; point
+#      these at a live one without editing this file:
+#      GEMINI_MODEL=gemini-2.5-flash pytest -m integration ...
+#
 #   2. Local MLX model (OpenAI-compatible server):
 #      # Terminal 1 — start the server:
 #      cd ~/Documents/local_llm && source .venv/bin/activate
@@ -710,9 +714,13 @@ class TestEdgeCases:
 #        pytest -m integration anvikshiki_v4/tests/test_engine_v4_l3.py
 
 GEMINI_KEY = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 LOCAL_URL = os.environ.get("LOCAL_LLM_URL")  # e.g. http://localhost:8080/v1
 LOCAL_MODEL = os.environ.get("LOCAL_LLM_MODEL", "mlx-community/Llama-3.2-3B-Instruct-4bit")
 LLM_AVAILABLE = bool(GEMINI_KEY or LOCAL_URL)
+
+# The environment these read is pinned by the repo-root conftest.py, not by
+# litellm's import-time load_dotenv() — see that file for why it matters.
 
 
 def _check_local_server(url: str) -> bool:
@@ -724,6 +732,28 @@ def _check_local_server(url: str) -> bool:
             return True
     except Exception:
         return False
+
+
+def _require_reachable(lm, label: str) -> None:
+    """Skip — rather than fail — when the configured model does not exist.
+
+    A retired or misspelled model name says nothing about the pipeline under
+    test. Reporting it as a test failure makes an absent instrument look like a
+    broken engine, which is the same confusion the local-server branch below
+    already avoids by skipping when the server is unreachable. This gives the
+    cloud branch that discipline too.
+
+    Deliberately narrow: only "this model does not exist" (HTTP 404) skips.
+    Auth rejection, exhausted quota, timeouts and malformed responses all
+    propagate, because those are results the suite should be reporting.
+    """
+    try:
+        lm("ping")
+    except Exception as exc:
+        if getattr(exc, "status_code", None) == 404:
+            detail = str(exc).splitlines()[0][:200]
+            pytest.skip(f"{label} is unavailable, not broken: {detail}")
+        raise
 
 
 @pytest.fixture(scope="module")
@@ -749,7 +779,9 @@ def live_lm():
         return lm
 
     if GEMINI_KEY:
-        lm = dspy.LM("gemini/gemini-2.0-flash", api_key=GEMINI_KEY)
+        label = f"gemini/{GEMINI_MODEL}"
+        lm = dspy.LM(label, api_key=GEMINI_KEY)
+        _require_reachable(lm, label)
         dspy.configure(lm=lm)
         return lm
 

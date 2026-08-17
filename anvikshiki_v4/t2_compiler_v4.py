@@ -4,15 +4,23 @@ T2 Compiler v4: Compile verified architecture into
 an argumentation framework over provenance semirings.
 """
 
+import errno
 import math
+import os
 from itertools import product as iter_product
 from datetime import datetime
+from pathlib import Path
 from .schema import KnowledgeStore, CausalStatus
 from .schema_v4 import (
     Argument, Attack, ProvenanceTag, PramanaType
 )
 from .argumentation import ArgumentationFramework
 from .engine_params import CompilerParams, DEFAULT_PARAMS
+
+# Fixed anchor for repo-relative data paths: this file lives at
+# <repo>/anvikshiki_v4/t2_compiler_v4.py, so the repo root is two levels up.
+# Anchored to __file__ rather than the working directory, which is mutable.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ── Tag Construction ──
 
@@ -394,8 +402,31 @@ def _derive_attacks(
 
 
 def load_knowledge_store(path: str) -> KnowledgeStore:
-    """Load KnowledgeStore from YAML file."""
+    """Load KnowledgeStore from YAML file.
+
+    Callers throughout the tree pass repo-relative literals such as
+    "anvikshiki_v4/data/business_expert.yaml". Those resolve against the current
+    working directory, so the same call succeeds or raises depending on where
+    the process was started — the suite reported 263 passed from the repo root
+    and 73 file-not-found errors from anywhere else.
+
+    Resolution order, so no call that works today changes behaviour:
+      1. the path as given (absolute, or relative to cwd)
+      2. the same path relative to the repo root, which is fixed at import time
+         by this module's own location
+      3. neither exists → the original FileNotFoundError, naming the path the
+         caller actually asked for
+    """
     import yaml
-    with open(path) as f:
+    candidate = Path(path)
+    if not candidate.exists():
+        anchored = _REPO_ROOT / path
+        if anchored.exists():
+            candidate = anchored
+        else:
+            raise FileNotFoundError(
+                errno.ENOENT, os.strerror(errno.ENOENT), str(path)
+            )
+    with open(candidate) as f:
         data = yaml.safe_load(f)
     return KnowledgeStore(**data)
