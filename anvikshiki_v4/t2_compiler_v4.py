@@ -14,6 +14,12 @@ from .schema_v4 import (
 )
 from .argumentation import ArgumentationFramework
 from .engine_params import CompilerParams, DEFAULT_PARAMS
+from .predicate_contrariness import (
+    are_contrary,
+    get_contrary,
+    normalize_negation,
+    predicate_name,
+)
 
 # ── Tag Construction ──
 
@@ -29,50 +35,16 @@ PRAMANA_MAP = {
 _DEFAULT_COMPILER = DEFAULT_PARAMS.compiler
 
 
-def _predicate_name(pred: str) -> str:
-    """Extract predicate name from 'pred(entity)' format.
+# Contrariness lives in predicate_contrariness.py, which the evaluator and
+# coverage routing read too. It was defined here alone while the evaluator
+# scored `value_creation` against `not_value_creation` as a match — one package
+# holding two opposite beliefs about the same pair of strings, with the
+# engine's own semantics on the losing side. These names are kept so call sites
+# read the same; the behaviour is unchanged.
 
-    'binding_constraint_identified(acme_corp)' → 'binding_constraint_identified'
-    'positive_unit_economics' → 'positive_unit_economics'
-    (Fixes audit III-01)
-    """
-    paren = pred.find("(")
-    return pred[:paren] if paren >= 0 else pred
-
-
-def _normalize_negation(conclusion: str) -> str:
-    """Normalize by eliminating double negations: not_not_X → X."""
-    while conclusion.startswith("not_not_"):
-        conclusion = conclusion[8:]
-    return conclusion
-
-
-def _get_contrary(conclusion: str) -> str:
-    """Compute the contrary of a conclusion, handling double negation.
-
-    not_not_X → contrary of X → not_X
-    not_X → X
-    X → not_X
-    """
-    norm = _normalize_negation(conclusion)
-    if norm.startswith("not_"):
-        return norm[4:]          # not_X → X
-    else:
-        return f"not_{norm}"     # X → not_X
-
-
-# Module-level cache for domain contrariness index (built once per compile)
-_domain_contrary_index: set[tuple[str, str]] = set()
-
-
-def _build_domain_contrary_index(ks: KnowledgeStore) -> set[tuple[str, str]]:
-    """Build a fast lookup set from KnowledgeStore.contrariness_pairs."""
-    index = set()
-    for pair in ks.contrariness_pairs:
-        if len(pair) == 2:
-            index.add((pair[0], pair[1]))
-            index.add((pair[1], pair[0]))
-    return index
+_predicate_name = predicate_name
+_normalize_negation = normalize_negation
+_get_contrary = get_contrary
 
 
 def _are_contrary(a: str, b: str, ks: KnowledgeStore | None = None) -> bool:
@@ -82,19 +54,7 @@ def _are_contrary(a: str, b: str, ks: KnowledgeStore | None = None) -> bool:
     1. Syntactic: not_ prefix negation (with double-negation elimination)
     2. Domain: KnowledgeStore.contrariness_pairs lookup
     """
-    # Strip entity arguments for comparison
-    na = _normalize_negation(_predicate_name(a))
-    nb = _normalize_negation(_predicate_name(b))
-
-    # Layer 1: syntactic negation
-    if _get_contrary(na) == nb:
-        return True
-
-    # Layer 2: domain-specific pairs
-    if ks is not None and (na, nb) in _build_domain_contrary_index(ks):
-        return True
-
-    return False
+    return are_contrary(a, b, ks)
 
 
 def _build_rule_tag(

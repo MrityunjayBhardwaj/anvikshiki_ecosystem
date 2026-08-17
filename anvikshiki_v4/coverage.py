@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from .predicate_contrariness import match_veto
 from .schema import KnowledgeStore
 
 
@@ -157,6 +158,13 @@ class SemanticCoverageAnalyzer:
         """
         Jaccard token overlap between concept and KB predicates.
         Split on underscores to get tokens.
+
+        A KB predicate that contradicts the concept is skipped outright,
+        whatever it scores. Token overlap cannot see negation or argument
+        order: `positive_unit_economics` and `negative_unit_economics` score
+        0.5 against this layer's 0.4 threshold, so coverage would report a
+        match on a predicate's own negation and route the query to a vyāpti
+        asserting the opposite of what was asked.
         """
         concept_tokens = set(concept.lower().replace("-", "_").split("_"))
         concept_tokens.discard("")
@@ -168,6 +176,9 @@ class SemanticCoverageAnalyzer:
         best_score = 0.0
 
         for pred in self._vocab:
+            if match_veto(concept, pred, knowledge_store=self.ks):
+                continue
+
             pred_tokens = set(pred.lower().split("_"))
             pred_tokens.discard("")
 

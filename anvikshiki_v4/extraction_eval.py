@@ -2,8 +2,15 @@
 Evaluation metrics and MIPROv2 optimization for the Predicate Extraction Pipeline.
 
 Composite metric combining precision, recall, naming quality, vyapti completeness,
-DAG validity, coverage ratio, and zero-section rate. Uses BERTScore for soft
-predicate matching.
+DAG validity, coverage ratio, and zero-section rate.
+
+Soft predicate matching is Jaccard token overlap under a contrariness veto. It
+is not BERTScore, and never was — this docstring and the design doc both
+claimed BERTScore for a semantic matcher that has no implementation anywhere in
+the package, which meant the crude path was described everywhere as the
+fallback from something that was never built. Whether a semantic encoder is
+needed here is an empirical question for instrument validation, not an
+assumption to restate in a docstring.
 
 Usage:
     from anvikshiki_v4.extraction_eval import (
@@ -28,6 +35,7 @@ from .extraction_schema import (
     StageDOutput,
     ValidationResult,
 )
+from .predicate_contrariness import match_veto
 from .predicate_extraction import (
     SNAKE_CASE_RE,
     PredicateExtractionPipeline,
@@ -43,8 +51,9 @@ from .schema import KnowledgeStore
 def _token_overlap(a: str, b: str) -> float:
     """Cheap token-overlap similarity (Jaccard on underscore-split tokens).
 
-    Used as BERTScore fallback when sentence-transformers is unavailable.
-    Catches cases like 'ltv_above_cac' ~ 'ltv_exceeds_cac'.
+    Catches cases like 'ltv_above_cac' ~ 'ltv_exceeds_cac'. It is also blind to
+    negation and to argument order, which is why every use of it goes through
+    the veto in `_best_match_score` rather than through this function alone.
     """
     tokens_a = set(a.split("_"))
     tokens_b = set(b.split("_"))
@@ -59,12 +68,22 @@ def _best_match_score(
     predicted: str,
     gold_set: set[str],
     threshold: float = 0.5,
+    knowledge_store=None,
 ) -> float:
-    """Return the best soft-match score for a predicted predicate against gold."""
+    """Best soft-match score for a predicted predicate against gold, or 0.0.
+
+    A candidate that contradicts the gold predicate scores 0.0 no matter how
+    many tokens it shares with it. Token overlap cannot see negation or
+    argument order — `ltv_exceeds_cac` against `cac_exceeds_ltv` scores a
+    perfect 1.000 — so no threshold excludes those pairs and the refusal has to
+    sit above the score rather than inside it.
+    """
     if predicted in gold_set:
         return 1.0
     best = 0.0
     for gold in gold_set:
+        if match_veto(predicted, gold, knowledge_store=knowledge_store):
+            continue
         score = _token_overlap(predicted, gold)
         if score > best:
             best = score
