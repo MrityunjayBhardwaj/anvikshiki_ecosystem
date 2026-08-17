@@ -29,9 +29,14 @@ The laws this is built to satisfy are stated in
 `anvikshiki_v4/tests/test_algebra_laws.py`.
 """
 
+from typing import TYPE_CHECKING
+
 from .schema import AugmentationOrigin
 from .schema import EpistemicStatus as KBEpistemicStatus
 from .schema_v4 import EpistemicStatus
+
+if TYPE_CHECKING:
+    from .schema import Vyapti
 
 # Weakest first. Index in this tuple is the element's rank in L.
 STATUS_ORDER: tuple[EpistemicStatus, ...] = (
@@ -135,7 +140,9 @@ def from_kb(status: KBEpistemicStatus) -> EpistemicStatus:
         ) from None
 
 
-def ceiling_for_origin(origin) -> EpistemicStatus:
+def ceiling_for_origin(
+    origin: AugmentationOrigin | None,
+) -> EpistemicStatus:
     """The highest status a rule of this origin may reach.
 
     `None` means curated: `Vyapti.augmentation_metadata` is optional and
@@ -155,7 +162,7 @@ def ceiling_for_origin(origin) -> EpistemicStatus:
         ) from None
 
 
-def status_of_rule(vyapti) -> EpistemicStatus:
+def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
     """A rule's effective status: what it was authored as, capped by origin.
 
     ⋀( from_kb(vyapti.epistemic_status), ceiling_for_origin(origin) )

@@ -430,9 +430,42 @@ _SAMPLE_KB = "anvikshiki_v4/data/sample_architecture.yaml"
 _KB_STATUS = {
     "established": EpistemicStatus.ESTABLISHED,
     "hypothesis": EpistemicStatus.HYPOTHESIS,
+    "provisional": EpistemicStatus.PROVISIONAL,
     "open": EpistemicStatus.OPEN,
     "contested": EpistemicStatus.CONTESTED,
 }
+
+# The origin ceiling, restated rather than imported, so `_meet_of_links`
+# stays an independent walk of the formula instead of asking the code under
+# test what it thinks. Every knowledge base in the tree is curated and this
+# map is a no-op against them — but a helper that ignored the ceiling would
+# report a false failure the moment a fixture gained a generated rule, and
+# blame the compiler for it.
+_ORIGIN_CEILING = {
+    None: EpistemicStatus.ESTABLISHED,
+    "curated": EpistemicStatus.ESTABLISHED,
+    "guide_extracted": EpistemicStatus.HYPOTHESIS,
+    "hitl_promoted": EpistemicStatus.HYPOTHESIS,
+    "web_sourced": EpistemicStatus.PROVISIONAL,
+    "llm_parametric": EpistemicStatus.PROVISIONAL,
+}
+
+
+def test_both_mirrored_maps_cover_what_the_code_defines():
+    """A restated formula that has fallen behind reports a false failure.
+
+    These two maps duplicate `lattice._FROM_KB` and `lattice._ORIGIN_CEILING`
+    on purpose — an independent walk is only independent if it does not
+    import the thing it checks. The cost is that they can go stale, so the
+    staleness is what is asserted, not the values.
+    """
+    from anvikshiki_v4.schema import AugmentationOrigin
+    from anvikshiki_v4.schema import EpistemicStatus as KBEpistemicStatus
+
+    assert {s.value for s in KBEpistemicStatus} == set(_KB_STATUS)
+    assert {o.value for o in AugmentationOrigin} | {None} == set(
+        _ORIGIN_CEILING
+    )
 
 
 @pytest.fixture
@@ -465,7 +498,17 @@ def _meet_of_links(ks, af, arg) -> EpistemicStatus:
     if arg.top_rule is None:
         return arg.status
 
-    links = [_KB_STATUS[ks.vyaptis[arg.top_rule].epistemic_status.value]]
+    rule = ks.vyaptis[arg.top_rule]
+    origin = (
+        rule.augmentation_metadata.origin.value
+        if rule.augmentation_metadata is not None
+        else None
+    )
+    # The rule enters as its authored status met with its origin's ceiling.
+    links = [
+        _KB_STATUS[rule.epistemic_status.value],
+        _ORIGIN_CEILING[origin],
+    ]
     links += [
         _meet_of_links(ks, af, af.arguments[sub])
         for sub in arg.sub_arguments
