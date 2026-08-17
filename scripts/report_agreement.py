@@ -37,18 +37,56 @@ def main() -> int:
     if not SHEET.exists():
         raise SystemExit(f"no sheet at {SHEET} — run run_instrument_validation.py first")
 
-    decisions = read_decision_sheet(SHEET)
+    loaded = read_decision_sheet(SHEET)
+    decisions = loaded.decisions
     gold = load_gold()
 
     print(f"sheet: {SHEET.relative_to(REPO_ROOT)}  ({len(decisions)} rows)\n")
 
+    if loaded.provenance is None:
+        print("This sheet records none of the parameters it was built with.")
+        print()
+        print("The registered protocol requires the model, the candidate count")
+        print("and the match mode to be reported alongside every figure, and")
+        print("this sheet cannot supply them. It also cannot say which of the")
+        print("three modes below chose its rows — and the mode that built the")
+        print("sheet decides the SAMPLE, while replaying only re-decides the")
+        print("verdict. So the three blocks would not be the equal comparison")
+        print("they appear to be.")
+        print()
+        print("Rebuild it with scripts/run_instrument_validation.py before")
+        print("judging. No figure is reported from a sheet of unknown origin.")
+        return 1
+
+    p = loaded.provenance
+    print("built with")
+    _line("match_on", f"{p.matcher.match_on}   ← chose which rows are on the sheet")
+    _line("threshold", p.matcher.threshold)
+    _line("near misses per gold", p.matcher.near_misses_per_gold)
+    _line("extraction model", p.extraction_model)
+    _line("candidates / gold", f"{p.candidate_count} / {p.gold_count}")
+    _line("matched / near miss", f"{p.matched_rows} / {p.near_miss_rows}")
+    _line("code version", p.git_commit)
+    _line("built at", p.built_at)
+    print()
+
     reports = {}
     for mode in ("name", "description", "either"):
-        replayed = replay_mode(decisions, gold.descriptions, match_on=mode)
+        # The sheet's own threshold, not this script's default. Recording a
+        # parameter and then replaying under a different one would put the
+        # figures back out of correspondence with the sheet they describe.
+        replayed = replay_mode(
+            decisions, gold.descriptions,
+            match_on=mode, threshold=p.matcher.threshold,
+        )
         reports[mode] = agreement(replayed)
 
     for mode, r in reports.items():
-        print(f"── match_on = {mode} " + "─" * (44 - len(mode)))
+        # Naming the builder matters because the modes are not on equal footing:
+        # replaying re-decides the verdict for each pair, but the pairs
+        # themselves were chosen by whichever mode built the sheet.
+        built = "  ← built this sheet" if mode == p.matcher.match_on else ""
+        print(f"── match_on = {mode} " + "─" * (44 - len(mode)) + built)
         _line("judged / unjudged", f"{r.judged} / {r.unjudged}")
         if not r.judged:
             print("  nothing judged — no agreement to report\n")
