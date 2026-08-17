@@ -234,11 +234,29 @@ class StageAOutput(BaseModel):
     quoteless_candidates: int = Field(
         default=0,
         description=(
-            "Candidates the model returned no quote for. Counted apart from "
-            "the ones whose quote could not be found, because 'declined to "
-            "cite' and 'cited something that is not there' are different "
+            "Candidates the model returned an empty quote for. Counted apart "
+            "from the ones whose quote could not be found, because 'declined "
+            "to cite' and 'cited something that is not there' are different "
             "facts about the model and only the second is evidence of "
-            "fabrication."
+            "fabrication. Counts only positions the model actually answered — "
+            "see `unquoted_by_short_list` for the ones it never reached."
+        ),
+    )
+    unquoted_by_short_list: int = Field(
+        default=0,
+        description=(
+            "Candidates that got no quote because the `quotes` list came back "
+            "shorter than the `predicates` list, so the index fell off the end "
+            "and padded with an empty string. This is our zip running out, not "
+            "the model declining to cite, and folding the two together makes "
+            "the quoteless rate a statement about our plumbing wearing the "
+            "signature of a statement about the model. Separated so the "
+            "headline figure can be read.\n\n"
+            "It does not detect a *missing middle* element, which shifts every "
+            "quote after it onto the wrong predicate while leaving the lengths "
+            "equal — a shifted quote still passes the verbatim check, because "
+            "it is a real span attached to the wrong claim. That is the wider "
+            "defect and it is tracked separately."
         ),
     )
     unverified_quote_candidates: int = Field(
