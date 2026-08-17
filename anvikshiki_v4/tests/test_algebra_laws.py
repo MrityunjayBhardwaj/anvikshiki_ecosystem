@@ -104,7 +104,16 @@ _DISBELIEF_SHARES = (0.0, 0.5, 1.0)   # share of the remainder given to disbelie
 _TRUSTS = (0.3, 1.0)
 _DECAYS = (0.5, 1.0)
 _PRAMANAS = (PramanaType.UPAMANA, PramanaType.PRATYAKSA)
-_SOURCE_SETS = (frozenset({"s1"}), frozenset({"s1", "s2"}))
+_SOURCE_SETS = (
+    frozenset({"s1"}),
+    frozenset({"s1", "s2"}),
+    # The pipeline's default. `compile_t2` builds a query fact's tag with
+    # `frozenset(fact.get("sources", []))`, so a fact that arrives without a
+    # sources key carries no source ids at all — and the accrual discount
+    # keys on source overlap. A domain of only well-sourced tags would never
+    # exercise the branch where that discount does not fire.
+    frozenset(),
+)
 
 _RESTATEMENTS = range(2, 6)   # how many times evidence is restated
 
@@ -223,6 +232,41 @@ def test_restating_evidence_never_lowers_status_across_accrual():
                     f"of {tag!r}"
                 )
                 break
+
+    assert not violations, report(violations, len(domain))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="the accrual discount does not fire on unsourced tags; see #44",
+)
+def test_accruing_evidence_against_itself_changes_nothing():
+    """Accrual idempotence, stated over every field rather than over status.
+
+    The status-level law above cannot catch this one. Double-counting only
+    ever raises belief, and a rising belief never *lowers* status — so the
+    defect passes a monotonicity check and is visible only as a change where
+    there should be none.
+
+    Idempotence holds today by way of a source-overlap discount: accruing a
+    tag against itself is a full overlap, so the fusion is interpolated all
+    the way to a plain average of two identical tags. When both tags carry
+    no source ids the ratio is 0, the discount never fires, and cumulative
+    fusion double-counts one piece of evidence — which is the thing the
+    discount was added to prevent.
+
+    Under the target design this is `max(s, s) = s` and needs no discount,
+    no source bookkeeping and no special case.
+    """
+    domain = tag_domain()
+    violations = []
+
+    for tag in domain:
+        accrued = accrue(tag, tag)
+        if accrued.belief != pytest.approx(tag.belief, abs=1e-9):
+            violations.append(
+                f"belief {tag.belief:.4f} → {accrued.belief:.4f} for {tag!r}"
+            )
 
     assert not violations, report(violations, len(domain))
 
