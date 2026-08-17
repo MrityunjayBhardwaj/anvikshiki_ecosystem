@@ -74,5 +74,7 @@ def test_build_rule_tag(sample_ks):
     v = sample_ks.vyaptis["V01"]
     tag = _build_rule_tag(v, sample_ks)
     assert tag.pramana_type == PramanaType.ANUMANA  # EMPIRICAL → ANUMANA
-    assert tag.belief == pytest.approx(0.95)  # ESTABLISHED
+    # The rule's epistemic status is not baked into its tag any more — it
+    # enters the reasoning as a lattice element where the argument is built.
+    assert not hasattr(tag, "belief")
     assert tag.trust_score == pytest.approx(0.9 * 0.85)

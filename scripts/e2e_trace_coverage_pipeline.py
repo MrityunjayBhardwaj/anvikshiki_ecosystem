@@ -303,10 +303,10 @@ def main():
         neg = " [NEGATED]" if arg.conclusion.startswith("not_") else ""
         rule_info = f"via {arg.top_rule}" if arg.top_rule else "[premise]"
         tag = arg.tag
-        belief = f"b={tag.belief:.3f}"
+        status_str = f"status={arg.status.name}"
         depth = f"depth={tag.derivation_depth}"
         sources = f"sources={sorted(tag.source_ids)}"
-        print(f"  {aid}: {arg.conclusion} {rule_info} ({belief}, {depth}, {sources}){neg}")
+        print(f"  {aid}: {arg.conclusion} {rule_info} ({status_str}, {depth}, {sources}){neg}")
 
     print(f"\nAttacks: {len(af_1.attacks)}")
     for atk in af_1.attacks:
@@ -338,9 +338,8 @@ def main():
             results_1[conc] = {"status": status, "tag": tag, "arguments": args}
             print(f"  {conc}:")
             print(f"    status: {status.value}")
-            print(f"    belief: {tag.belief:.4f}")
-            print(f"    disbelief: {tag.disbelief:.4f}")
-            print(f"    uncertainty: {tag.uncertainty:.4f}")
+            print(f"    from: {len(args)} argument(s) "
+                  f"{sorted(a.status.name for a in args)}")
             print(f"    derivation_depth: {tag.derivation_depth}")
             print(f"    sources: {sorted(tag.source_ids)}")
 
@@ -360,7 +359,7 @@ def main():
             conc, info["status"],
         )
         print(f"  {conc}:")
-        print(f"    total_confidence: {uq['total_confidence']:.4f}")
+        print(f"    status: {uq['epistemic']['status']}")
         print(f"    epistemic: {uq['epistemic']}")
         print(f"    aleatory: {uq.get('aleatory', 'N/A')}")
 
@@ -437,8 +436,8 @@ def main():
     print(f"Arguments: {len(af_2.arguments)}")
     for aid, arg in sorted(af_2.arguments.items()):
         tag = arg.tag
-        belief = f"b={tag.belief:.3f}"
-        print(f"  {aid}: {arg.conclusion} {'[premise]' if not arg.top_rule else f'via {arg.top_rule}'} ({belief})")
+        status_str = f"status={arg.status.name}"
+        print(f"  {aid}: {arg.conclusion} {'[premise]' if not arg.top_rule else f'via {arg.top_rule}'} ({status_str})")
     print(f"Attacks: {len(af_2.attacks)}")
 
     # ──────────────────────────────────────────────────────────
@@ -547,13 +546,13 @@ def main():
     print(f"Arguments: {len(af_3.arguments)}")
     for aid, arg in sorted(af_3.arguments.items()):
         tag = arg.tag
-        belief = f"b={tag.belief:.3f}"
+        status_str = f"status={arg.status.name}"
         depth = f"depth={tag.derivation_depth}"
         origin = ""
         v = merged_ks.vyaptis.get(arg.top_rule or "")
         if v and v.augmentation_metadata:
             origin = f" [{v.augmentation_metadata.origin.value}]"
-        print(f"  {aid}: {arg.conclusion} {'[premise]' if not arg.top_rule else f'via {arg.top_rule}'} ({belief}, {depth}){origin}")
+        print(f"  {aid}: {arg.conclusion} {'[premise]' if not arg.top_rule else f'via {arg.top_rule}'} ({status_str}, {depth}){origin}")
     print(f"Attacks: {len(af_3.attacks)}")
     for atk in af_3.attacks:
         print(f"  {atk.attacker} → {atk.target} ({atk.attack_type})")
@@ -575,7 +574,8 @@ def main():
         if status is not None:
             print(f"  {conc}:")
             print(f"    status: {status.value}")
-            print(f"    belief: {tag.belief:.4f}")
+            print(f"    from: {len(args)} argument(s) "
+                  f"{sorted(a.status.name for a in args)}")
             print(f"    derivation_depth: {tag.derivation_depth}")
             origin_info = ""
             if tag.derivation_depth > 0:

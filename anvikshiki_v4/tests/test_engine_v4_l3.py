@@ -53,8 +53,7 @@ class MockGrounding:
         self._sources = sources or []
 
     def __call__(self, query):
-        return GroundingResult(
-            predicates=self._predicates,
+        return GroundingResult(predicates=self._predicates,
             confidence=self._confidence,
             disputed=[],
             warnings=[],
@@ -66,8 +65,7 @@ class MockGroundingLowConfidence:
     """Mock grounding that triggers clarification_needed."""
 
     def __call__(self, query):
-        return GroundingResult(
-            predicates=["ambiguous_predicate"],
+        return GroundingResult(predicates=["ambiguous_predicate"],
             confidence=0.2,
             disputed=["ambiguous_predicate"],
             warnings=["Grounding confidence too low"],
@@ -106,8 +104,7 @@ def make_mock_synthesizer():
             "epistemic status of the underlying rules."
         )
 
-        return dspy.Prediction(
-            response=" ".join(response_parts),
+        return dspy.Prediction(response=" ".join(response_parts),
             sources_cited=["R01", "R02"],
         )
 
@@ -125,18 +122,15 @@ class TestFullPipelineVada:
 
     def test_basic_pipeline_output_schema(self, business_ks):
         """forward() returns all required output fields."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
 
         )
         engine.synthesizer = make_mock_synthesizer()
 
-        result = engine.forward(
-            query="Should a startup focus on unit economics?",
+        result = engine.forward(query="Should a startup focus on unit economics?",
             retrieved_chunks=["Unit economics measures per-unit profitability."],
         )
 
@@ -152,17 +146,14 @@ class TestFullPipelineVada:
 
     def test_response_is_nonempty_string(self, business_ks):
         """Synthesis produces a non-empty response."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
 
-        result = engine.forward(
-            query="Is unit economics critical?",
+        result = engine.forward(query="Is unit economics critical?",
             retrieved_chunks=["Revenue exceeds costs per unit."],
         )
 
@@ -171,17 +162,14 @@ class TestFullPipelineVada:
 
     def test_extension_size_positive(self, business_ks):
         """AF produces IN-labeled arguments from valid predicates."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
 
-        result = engine.forward(
-            query="test query",
+        result = engine.forward(query="test query",
             retrieved_chunks=["test"],
         )
 
@@ -189,12 +177,10 @@ class TestFullPipelineVada:
 
     def test_grounding_confidence_propagates(self, business_ks):
         """Engine propagates grounding confidence to output."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics"],
+        grounding = MockGrounding(predicates=["positive_unit_economics"],
             confidence=0.77,
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -204,11 +190,9 @@ class TestFullPipelineVada:
 
     def test_contestation_analysis_present(self, business_ks):
         """Contestation analysis reports vāda results."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics"],
+        grounding = MockGrounding(predicates=["positive_unit_economics"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -220,11 +204,9 @@ class TestFullPipelineVada:
 
     def test_provenance_has_all_conclusions(self, business_ks):
         """Provenance dict covers every non-internal conclusion."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -241,11 +223,9 @@ class TestFullPipelineVada:
 
     def test_uncertainty_decomposition_present(self, business_ks):
         """UQ dict has epistemic, aleatoric, inference for each conclusion."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -256,20 +236,19 @@ class TestFullPipelineVada:
             assert "epistemic" in uq
             assert "aleatoric" in uq
             assert "inference" in uq
-            assert "total_confidence" in uq
-            assert uq["total_confidence"] > 0
+            # No composite: the three components are reported and not merged
+            assert "total_confidence" not in uq
+            assert uq["epistemic"]["status"]
 
     def test_chain_derivation_in_pipeline(self, business_ks):
         """V01 + V08 chain fires: unit_economics → value_creation → long_term_value."""
-        grounding = MockGrounding(
-            predicates=[
+        grounding = MockGrounding(predicates=[
                 "positive_unit_economics",
                 "growing_market",
                 "binding_constraint_identified",
             ],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -287,8 +266,7 @@ class TestClarificationEarlyReturn:
     def test_low_confidence_returns_clarification(self, business_ks):
         """When grounding confidence is too low, engine returns clarification."""
         grounding = MockGroundingLowConfidence()
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         # No need to mock synthesizer — it shouldn't be called
@@ -306,12 +284,10 @@ class TestClarificationEarlyReturn:
     def test_clarification_does_not_call_synthesizer(self, business_ks):
         """Synthesizer is never called when clarification is needed."""
         grounding = MockGroundingLowConfidence()
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
-        engine.synthesizer = MagicMock(
-            side_effect=AssertionError("Should not be called")
+        engine.synthesizer = MagicMock(side_effect=AssertionError("Should not be called")
         )
 
         # Should not raise — synthesizer shouldn't be invoked
@@ -325,15 +301,13 @@ class TestViolationsCollection:
     def test_scope_exclusion_creates_violation(self, business_ks):
         """Scope exclusion triggers violation in output."""
         # subsidized_entity triggers V01 scope exclusion
-        grounding = MockGrounding(
-            predicates=[
+        grounding = MockGrounding(predicates=[
                 "positive_unit_economics",
                 "growing_market",
                 "subsidized_entity",
             ],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -350,15 +324,13 @@ class TestViolationsCollection:
 
     def test_violations_have_required_fields(self, business_ks):
         """Each violation entry has all required fields."""
-        grounding = MockGrounding(
-            predicates=[
+        grounding = MockGrounding(predicates=[
                 "positive_unit_economics",
                 "growing_market",
                 "subsidized_entity",
             ],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -378,11 +350,9 @@ class TestSynthesizerIntegration:
 
     def test_synthesizer_receives_accepted_arguments(self, business_ks):
         """Synthesizer input includes accepted conclusions with epistemic status."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
@@ -390,8 +360,7 @@ class TestSynthesizerIntegration:
 
         def capture_synthesizer(**kwargs):
             captured_kwargs.update(kwargs)
-            return dspy.Prediction(
-                response="Test response with hypothesis and evidence suggests.",
+            return dspy.Prediction(response="Test response with hypothesis and evidence suggests.",
                 sources_cited=["R01"],
             )
 
@@ -408,8 +377,7 @@ class TestSynthesizerIntegration:
     def test_synthesizer_gets_truncated_chunks(self, business_ks):
         """At most 5 chunks are passed to the synthesizer."""
         grounding = MockGrounding(predicates=["positive_unit_economics"])
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
@@ -417,8 +385,7 @@ class TestSynthesizerIntegration:
 
         def capture(**kwargs):
             captured_kwargs.update(kwargs)
-            return dspy.Prediction(
-                response="Test response with moderate uncertainty.",
+            return dspy.Prediction(response="Test response with moderate uncertainty.",
                 sources_cited=[],
             )
 
@@ -438,23 +405,19 @@ class TestPhase1Pipeline:
 
     def test_phase1_output_schema(self, business_ks):
         """Phase 1 returns compatible output schema."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics"],
+        grounding = MockGrounding(predicates=["positive_unit_economics"],
         )
-        engine = AnvikshikiEngineV4Phase1(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4Phase1(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
-        mock_response = dspy.Prediction(
-            response="Phase 1 response about unit economics with hypothesis.",
+        mock_response = dspy.Prediction(response="Phase 1 response about unit economics with hypothesis.",
             sources_cited=["R01"],
             reasoning="Step by step reasoning...",
         )
         engine.reasoner = MagicMock(return_value=mock_response)
 
-        result = engine.forward(
-            query="Phase 1 test",
+        result = engine.forward(query="Phase 1 test",
             retrieved_chunks=["Unit economics is important."],
         )
 
@@ -471,13 +434,11 @@ class TestPhase1Pipeline:
     def test_phase1_no_argumentation(self, business_ks):
         """Phase 1 has empty AF-related fields."""
         grounding = MockGrounding(predicates=["positive_unit_economics"])
-        engine = AnvikshikiEngineV4Phase1(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4Phase1(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
-        mock_response = dspy.Prediction(
-            response="Simple response with evidence suggests...",
+        mock_response = dspy.Prediction(response="Simple response with evidence suggests...",
             sources_cited=[],
         )
         engine.reasoner = MagicMock(return_value=mock_response)
@@ -492,17 +453,14 @@ class TestPhase1Pipeline:
 
     def test_phase1_grounding_confidence(self, business_ks):
         """Phase 1 propagates grounding confidence."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics"],
+        grounding = MockGrounding(predicates=["positive_unit_economics"],
             confidence=0.65,
         )
-        engine = AnvikshikiEngineV4Phase1(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4Phase1(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
-        mock_response = dspy.Prediction(
-            response="Response text.", sources_cited=[],
+        mock_response = dspy.Prediction(response="Response text.", sources_cited=[],
         )
         engine.reasoner = MagicMock(return_value=mock_response)
 
@@ -520,8 +478,7 @@ class TestSynthesisReward:
 
     def test_perfect_response_scores_high(self):
         """Response with all quality signals scores near 1.0."""
-        pred = dspy.Prediction(
-            response=(
+        pred = dspy.Prediction(response=(
                 "The evidence suggests that this is an established "
                 "conclusion, however there are important caveats about "
                 "the hypothesis regarding market uncertainty."
@@ -545,15 +502,13 @@ class TestSynthesisReward:
 
     def test_overconfident_response_penalized(self):
         """Response with 'certainly' loses 0.15."""
-        pred_good = dspy.Prediction(
-            response=(
+        pred_good = dspy.Prediction(response=(
                 "The evidence suggests this is an established hypothesis "
                 "with moderate uncertainty in the reasoning chain."
             ),
             sources_cited=["R01"],
         )
-        pred_bad = dspy.Prediction(
-            response=(
+        pred_bad = dspy.Prediction(response=(
                 "This is certainly an established hypothesis "
                 "with moderate uncertainty in the reasoning chain."
             ),
@@ -569,12 +524,10 @@ class TestSynthesisReward:
 
     def test_hedging_language_rewarded(self):
         """Response with epistemic hedges gets 0.2 bonus."""
-        pred_hedged = dspy.Prediction(
-            response="The evidence suggests this is a provisional conclusion. " * 3,
+        pred_hedged = dspy.Prediction(response="The evidence suggests this is a provisional conclusion. " * 3,
             sources_cited=["R01"],
         )
-        pred_no_hedge = dspy.Prediction(
-            response="This is a finding about market dynamics and revenue. " * 3,
+        pred_no_hedge = dspy.Prediction(response="This is a finding about market dynamics and revenue. " * 3,
             sources_cited=["R01"],
         )
         args = {
@@ -587,8 +540,7 @@ class TestSynthesisReward:
 
     def test_no_accepted_conclusions_penalized(self):
         """'No accepted conclusions' in input costs 0.15."""
-        pred = dspy.Prediction(
-            response="The evidence suggests moderate hypothesis uncertainty.",
+        pred = dspy.Prediction(response="The evidence suggests moderate hypothesis uncertainty.",
             sources_cited=["R01"],
         )
         args_good = {
@@ -615,8 +567,7 @@ class TestEdgeCases:
     def test_empty_predicates(self, business_ks):
         """Empty predicate list still produces valid output."""
         grounding = MockGrounding(predicates=[])
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -631,8 +582,7 @@ class TestEdgeCases:
     def test_single_predicate(self, business_ks):
         """Single predicate produces premise argument only."""
         grounding = MockGrounding(predicates=["positive_unit_economics"])
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -643,8 +593,7 @@ class TestEdgeCases:
     def test_unknown_predicate(self, business_ks):
         """Unknown predicate doesn't crash, just doesn't fire rules."""
         grounding = MockGrounding(predicates=["totally_unknown_predicate"])
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -659,8 +608,7 @@ class TestEdgeCases:
     def test_empty_retrieved_chunks(self, business_ks):
         """Empty chunks list doesn't crash."""
         grounding = MockGrounding(predicates=["positive_unit_economics"])
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -670,15 +618,13 @@ class TestEdgeCases:
 
     def test_conflicting_predicates(self, business_ks):
         """Both a predicate and its exclusion present → undercutting attack."""
-        grounding = MockGrounding(
-            predicates=[
+        grounding = MockGrounding(predicates=[
                 "positive_unit_economics",
                 "growing_market",
                 "subsidized_entity",  # Exclusion for V01
             ],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
         engine.synthesizer = make_mock_synthesizer()
@@ -770,8 +716,7 @@ def live_lm():
                 f"Start it with: HF_HOME=\"$PWD/hf_cache\" "
                 f"mlx_lm.server --model {LOCAL_MODEL}"
             )
-        lm = dspy.LM(
-            model=f"openai/{LOCAL_MODEL}",
+        lm = dspy.LM(model=f"openai/{LOCAL_MODEL}",
             api_base=LOCAL_URL,
             api_key="local",  # MLX server doesn't need a real key
         )
@@ -796,14 +741,12 @@ class TestLivePipeline:
     def test_full_e2e_vada(self, live_lm, business_ks):
         """Full pipeline: real grounding + real synthesis."""
         grounding = GroundingPipeline(knowledge_store=business_ks)
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
 
         )
 
-        result = engine.forward(
-            query="I have a startup with positive unit economics, what's my business model?",
+        result = engine.forward(query="I have a startup with positive unit economics, what's my business model?",
             retrieved_chunks=[
                 "Positive unit economics means revenue per customer exceeds "
                 "cost to serve that customer, indicating a sustainable business model.",
@@ -817,13 +760,11 @@ class TestLivePipeline:
     def test_full_e2e_phase1(self, live_lm, business_ks):
         """Phase 1 (LLM-only) with real LLM."""
         grounding = GroundingPipeline(knowledge_store=business_ks)
-        engine = AnvikshikiEngineV4Phase1(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4Phase1(knowledge_store=business_ks,
             grounding_pipeline=grounding,
         )
 
-        result = engine.forward(
-            query="Should a startup focus on profitability or growth?",
+        result = engine.forward(query="Should a startup focus on profitability or growth?",
             retrieved_chunks=["Growth vs profitability is a core strategy tension."],
         )
 
@@ -834,8 +775,7 @@ class TestLivePipeline:
     def test_grounding_pipeline_standalone(self, live_lm, business_ks):
         """Grounding pipeline produces valid predicates from natural language."""
         grounding = GroundingPipeline(knowledge_store=business_ks)
-        result = grounding(
-            query="A startup with good unit economics in a growing market"
+        result = grounding(query="A startup with good unit economics in a growing market"
         )
 
         assert isinstance(result.predicates, list)
@@ -845,17 +785,14 @@ class TestLivePipeline:
 
     def test_synthesis_contains_epistemic_hedging(self, live_lm, business_ks):
         """Real LLM synthesis should produce epistemically calibrated language."""
-        grounding = MockGrounding(
-            predicates=["positive_unit_economics", "growing_market"],
+        grounding = MockGrounding(predicates=["positive_unit_economics", "growing_market"],
         )
-        engine = AnvikshikiEngineV4(
-            knowledge_store=business_ks,
+        engine = AnvikshikiEngineV4(knowledge_store=business_ks,
             grounding_pipeline=grounding,
 
         )
         # Use real synthesizer (no mock) — this is the LLM test
-        result = engine.forward(
-            query="What business model should I pursue?",
+        result = engine.forward(query="What business model should I pursue?",
             retrieved_chunks=[
                 "Revenue models include subscription, API pricing, "
                 "and enterprise licensing.",
@@ -870,8 +807,7 @@ class TestLivePipeline:
                 "accepted_arguments": "value_creation: established",
                 "defeated_arguments": "",
             },
-            dspy.Prediction(
-                response=result.response,
+            dspy.Prediction(response=result.response,
                 sources_cited=result.sources or [],
             ),
         )

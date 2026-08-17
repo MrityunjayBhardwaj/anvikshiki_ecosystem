@@ -7,16 +7,16 @@ from anvikshiki_v4.argumentation import ArgumentationFramework
 
 
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
-              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False):
+              trust=0.8, decay=0.9, depth=1, strict=False,
+              status=EpistemicStatus.HYPOTHESIS):
     return Argument(
         id=aid, conclusion=conclusion, top_rule=None,
         premises=frozenset([conclusion]), is_strict=strict,
         tag=ProvenanceTag(
-            belief=belief, disbelief=round(1-belief-0.1, 2),
-            uncertainty=0.1,
             pramana_type=pramana, trust_score=trust,
             decay_factor=decay, derivation_depth=depth,
         ),
+        status=status,
     )
 
 
@@ -35,8 +35,8 @@ def test_single_unattacked():
 
 def test_single_attack_defeat():
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.8))
-    af.add_argument(_make_arg("A1", "q", belief=0.6))
+    af.add_argument(_make_arg("A0", "p"))
+    af.add_argument(_make_arg("A1", "q"))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
     labels = af.compute_grounded()
     assert labels["A0"] == Label.IN
@@ -46,9 +46,9 @@ def test_single_attack_defeat():
 def test_defense():
     """A0 attacks A1, A1 attacks A2 → A0 IN, A1 OUT, A2 IN (defended)."""
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.8))
-    af.add_argument(_make_arg("A1", "q", belief=0.7))
-    af.add_argument(_make_arg("A2", "r", belief=0.6))
+    af.add_argument(_make_arg("A0", "p"))
+    af.add_argument(_make_arg("A1", "q"))
+    af.add_argument(_make_arg("A2", "r"))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
     af.add_attack(Attack("A1", "A2", "rebutting", "viruddha"))
     labels = af.compute_grounded()
@@ -60,8 +60,8 @@ def test_defense():
 def test_odd_cycle_undecided():
     """A0 ↔ A1 with equal strength → both UNDECIDED (satpratipakṣa)."""
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.7))
-    af.add_argument(_make_arg("A1", "not_p", belief=0.7))
+    af.add_argument(_make_arg("A0", "p"))
+    af.add_argument(_make_arg("A1", "not_p"))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     labels = af.compute_grounded()
@@ -72,10 +72,8 @@ def test_odd_cycle_undecided():
 def test_pramana_preference():
     """PRATYAKSA attacker defeats SABDA target regardless of belief."""
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA,
-                              belief=0.5))
-    af.add_argument(_make_arg("A1", "q", pramana=PramanaType.SABDA,
-                              belief=0.9))
+    af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA))
+    af.add_argument(_make_arg("A1", "q", pramana=PramanaType.SABDA))
     af.add_attack(Attack("A0", "A1", "undermining", "asiddha"))
     labels = af.compute_grounded()
     assert labels["A0"] == Label.IN
@@ -83,10 +81,18 @@ def test_pramana_preference():
 
 
 def test_equal_pramana_strength_wins():
-    """Same pramāṇa, higher strength wins."""
+    """Same pramāṇa, higher status wins.
+
+    Strength is a place in the lattice now rather than a product of floats,
+    so the preference this exercises is stated as ESTABLISHED over
+    HYPOTHESIS. The relation being tested is unchanged — an argument defeats
+    a rival it is not strictly less preferred than.
+    """
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.8, trust=0.9))
-    af.add_argument(_make_arg("A1", "not_p", belief=0.5, trust=0.7))
+    af.add_argument(_make_arg("A0", "p", trust=0.9,
+                              status=EpistemicStatus.ESTABLISHED))
+    af.add_argument(_make_arg("A1", "not_p", trust=0.7,
+                              status=EpistemicStatus.HYPOTHESIS))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     labels = af.compute_grounded()
@@ -95,9 +101,10 @@ def test_equal_pramana_strength_wins():
 
 
 def test_epistemic_status_established():
+    """An accepted ESTABLISHED argument carries its status to the conclusion."""
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.9,
-                              pramana=PramanaType.PRATYAKSA))
+    af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA,
+                              status=EpistemicStatus.ESTABLISHED))
     af.compute_grounded()
     status, tag, args = af.get_epistemic_status("p")
     assert status == EpistemicStatus.ESTABLISHED
@@ -106,26 +113,37 @@ def test_epistemic_status_established():
 def test_epistemic_status_contested():
     """All arguments for conclusion are OUT → CONTESTED."""
     af = ArgumentationFramework()
-    af.add_argument(_make_arg("A0", "p", belief=0.6))
+    af.add_argument(_make_arg("A0", "p"))
     af.add_argument(_make_arg("A1", "attacker",
-                              pramana=PramanaType.PRATYAKSA, belief=0.9))
+                              pramana=PramanaType.PRATYAKSA))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     af.compute_grounded()
     status, tag, args = af.get_epistemic_status("p")
     assert status == EpistemicStatus.CONTESTED
 
 
-def test_oplus_accumulation():
-    """Multiple IN arguments for same conclusion → combined belief > individual."""
+def test_accrual_takes_the_best_argument():
+    """Multiple IN arguments for one conclusion → the join of their statuses.
+
+    This used to assert that three arguments fused to a belief higher than
+    any one of them. That was the double-counting the source-overlap
+    discount then had to correct for. Accrual is max now: three HYPOTHESIS
+    arguments leave a conclusion at HYPOTHESIS, and one ESTABLISHED among
+    them carries it.
+    """
     af = ArgumentationFramework()
     for i in range(3):
         af.add_argument(_make_arg(
-            f"A{i}", "p", belief=0.5,
-            trust=0.8, decay=0.9, depth=1,
-        ))
+            f"A{i}", "p", trust=0.8, decay=0.9, depth=1))
     af.compute_grounded()
     status, tag, args = af.get_epistemic_status("p")
-    assert tag.belief > 0.5
+    assert len(args) == 3
+    assert status == EpistemicStatus.HYPOTHESIS
+
+    af.add_argument(_make_arg("A3", "p", status=EpistemicStatus.ESTABLISHED))
+    af.compute_grounded()
+    status, tag, args = af.get_epistemic_status("p")
+    assert status == EpistemicStatus.ESTABLISHED
 
 
 def test_grounded_is_conflict_free():

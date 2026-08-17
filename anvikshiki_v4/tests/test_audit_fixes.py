@@ -20,22 +20,18 @@ from anvikshiki_v4.t2_compiler_v4 import (
 
 
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
-              belief=0.7, disbelief=None, uncertainty=None,
               trust=0.8, decay=0.9, depth=1, strict=False,
-              source_ids=frozenset()):
-    if disbelief is None:
-        disbelief = max(0.0, round(1 - belief - 0.1, 4))
-    if uncertainty is None:
-        uncertainty = round(1.0 - belief - disbelief, 4)
+              source_ids=frozenset(),
+              status=EpistemicStatus.HYPOTHESIS):
     return Argument(
         id=aid, conclusion=conclusion, top_rule=None,
         premises=frozenset([conclusion]), is_strict=strict,
         tag=ProvenanceTag(
-            belief=belief, disbelief=disbelief, uncertainty=uncertainty,
             pramana_type=pramana, trust_score=trust,
             decay_factor=decay, derivation_depth=depth,
             source_ids=source_ids,
         ),
+        status=status,
     )
 
 
@@ -43,102 +39,41 @@ def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
 # WS1: Josang SL deduction — disbelief/uncertainty attenuate
 # ══════════════════════════════════════════════════════════════
 
-class TestJosangTensorAttenuation:
-    """Disbelief and uncertainty should ATTENUATE through chains, not grow."""
+class TestMetadataLatticeComposition:
+    """What survives of the two composition operators.
 
-    def test_disbelief_attenuates_through_chain(self):
-        """10-step chain with d=0.1 each → final d < 0.3 (was 0.65 with noisy-OR)."""
-        tag = ProvenanceTag(belief=0.8, disbelief=0.1, uncertainty=0.1)
-        result = tag
-        for _ in range(9):
-            result = ProvenanceTag.tensor(result, tag)
-        assert result.disbelief < 0.3, (
-            f"Disbelief should attenuate, got {result.disbelief:.3f}"
-        )
+    The tests that used to live here checked Jøsang trust discounting and
+    cumulative fusion — that disbelief attenuated through a chain, that
+    belief stayed nonzero at depth 20, that overlapping sources were
+    discounted so restated evidence did not compound. All of it is gone
+    with the opinion it operated on.
 
-    def test_uncertainty_accumulates_correctly(self):
-        """Trust discounting: uncertainty grows through chains (correct behavior).
+    What the operators still do is compose provenance metadata, by min
+    along a chain and max across accrual. Those are the laws now, and
+    `test_algebra_laws.py` states them over a generated domain; these two
+    keep the specific behaviours the audit originally asked for.
+    """
 
-        Each uncertain link adds to total ignorance about the conclusion.
-        u_result = a.d + a.u + a.b * b.u — uncertainty absorbs both the
-        source's disbelief and uncertainty plus the rule's uncertainty.
-        This is NOT a bug — it correctly reflects accumulated ignorance.
-        The key fix is that DISBELIEF attenuates (not grows).
+    def test_chaining_takes_the_weakest_trust(self):
+        a = ProvenanceTag(trust_score=0.9, decay_factor=0.9)
+        b = ProvenanceTag(trust_score=0.5, decay_factor=0.8)
+        result = ProvenanceTag.tensor(a, b)
+        assert result.trust_score == 0.5
+        assert result.decay_factor == 0.8
+
+    def test_accrual_takes_the_best_trust(self):
+        """max, not noisy-OR: two sources at 0.5 and 0.7 give 0.7, not 0.85.
+
+        The source-overlap discount this class used to test is gone too. It
+        existed to stop cumulative fusion double-counting one argument
+        restated, and it silently failed to fire when neither tag carried a
+        source id. max needs no discount — accruing a tag against itself
+        returns it, whatever its provenance says.
         """
-        tag = ProvenanceTag(belief=0.8, disbelief=0.1, uncertainty=0.1)
-        result = tag
-        for _ in range(9):
-            result = ProvenanceTag.tensor(result, tag)
-        # Uncertainty grows (correct): absorbed from disbelief + uncertainty
-        assert result.uncertainty > 0.5
-        # b + d + u = 1.0 preserved exactly
-        assert abs(result.belief + result.disbelief + result.uncertainty - 1.0) < 1e-10
-
-    def test_chain_depth_20_still_nonzero(self):
-        """After 20 steps, belief should still be > 0 (not collapsed to zero).
-
-        Trust discounting: b = 0.8^20 ≈ 0.012.  This is low but nonzero,
-        which is correct — long chains legitimately lose confidence.
-        """
-        tag = ProvenanceTag(belief=0.8, disbelief=0.1, uncertainty=0.1)
-        result = tag
-        for _ in range(19):
-            result = ProvenanceTag.tensor(result, tag)
-        assert result.belief > 0.005, (
-            f"Belief should be nonzero at depth 20, got {result.belief:.4f}"
-        )
-        # Disbelief should be tiny (attenuated through chain)
-        assert result.disbelief < 0.01
-
-
-class TestSourceOverlapInOplus:
-    """Overlapping sources → discounted fusion (not full cumulative)."""
-
-    def test_independent_sources_full_fusion(self):
-        """No overlap → standard cumulative fusion."""
-        a = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=frozenset(["src_a"]))
-        b = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=frozenset(["src_b"]))
-        result = ProvenanceTag.oplus(a, b)
-        assert result.belief > 0.6  # Fusion strengthens
-
-    def test_identical_sources_averaging(self):
-        """Full overlap → simple averaging (no double-counting)."""
-        a = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=frozenset(["shared"]))
-        b = ProvenanceTag(belief=0.8, disbelief=0.1, uncertainty=0.1,
-                          source_ids=frozenset(["shared"]))
-        result = ProvenanceTag.oplus(a, b)
-        # With full overlap, should be close to average (0.7), not fused higher
-        assert result.belief == pytest.approx(0.7, abs=0.05)
-
-    def test_partial_overlap_intermediate(self):
-        """Partial overlap → between full fusion and averaging."""
-        shared = frozenset(["shared"])
-        a = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=shared | frozenset(["a_only"]))
-        b = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=shared | frozenset(["b_only"]))
-
-        independent = ProvenanceTag.oplus(
-            ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=frozenset(["x"])),
-            ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          source_ids=frozenset(["y"])),
-        )
-        result = ProvenanceTag.oplus(a, b)
-        # Partial overlap → less boost than fully independent
-        assert result.belief <= independent.belief + 0.01
-
-    def test_oplus_trust_uses_max(self):
-        """trust_score in oplus should use max (lattice), not noisy-OR."""
-        a = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          trust_score=0.5)
-        b = ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3,
-                          trust_score=0.7)
-        result = ProvenanceTag.oplus(a, b)
-        assert result.trust_score == 0.7  # max, not noisy-OR (0.85)
+        a = ProvenanceTag(trust_score=0.5, source_ids=frozenset(["src_a"]))
+        b = ProvenanceTag(trust_score=0.7, source_ids=frozenset(["src_b"]))
+        assert ProvenanceTag.oplus(a, b).trust_score == 0.7
+        assert ProvenanceTag.oplus(a, a) == a
 
 
 # ══════════════════════════════════════════════════════════════
@@ -172,8 +107,8 @@ class TestAllArgumentsConstruction:
         ks.vyaptis = {"V1": v}
 
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9))
-        af.add_argument(_make_arg("A1", "p", belief=0.6))
+        af.add_argument(_make_arg("A0", "p"))
+        af.add_argument(_make_arg("A1", "p"))
 
         _derive_rule_arguments(af, ks)
 
@@ -281,8 +216,8 @@ class TestLabelBasedEpistemicStatus:
     def test_undecided_is_open(self):
         """UNDECIDED arguments → OPEN status (not threshold-derived)."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9))  # Would be ESTABLISHED by threshold
-        af.add_argument(_make_arg("A1", "not_p", belief=0.9))
+        af.add_argument(_make_arg("A0", "p"))  # Would be ESTABLISHED by threshold
+        af.add_argument(_make_arg("A1", "not_p"))
         af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
         af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
         af.compute_grounded()
@@ -294,9 +229,9 @@ class TestLabelBasedEpistemicStatus:
     def test_all_out_is_contested(self):
         """All OUT arguments → CONTESTED status."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.6))
+        af.add_argument(_make_arg("A0", "p"))
         af.add_argument(_make_arg("A1", "attacker",
-                                  pramana=PramanaType.PRATYAKSA, belief=0.9))
+                                  pramana=PramanaType.PRATYAKSA))
         af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
         af.compute_grounded()
 
@@ -304,10 +239,14 @@ class TestLabelBasedEpistemicStatus:
         assert status == EpistemicStatus.CONTESTED
 
     def test_in_strong_is_established(self):
-        """IN with strong tag → ESTABLISHED."""
+        """IN with an ESTABLISHED argument → ESTABLISHED.
+
+        Previously "IN with a strong tag": the label still gates the
+        outcome, and what it is joined with is now a lattice element rather
+        than a belief read through a cutoff.
+        """
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9,
-                                  disbelief=0.05, uncertainty=0.05))
+        af.add_argument(_make_arg("A0", "p", status=EpistemicStatus.ESTABLISHED))
         af.compute_grounded()
 
         status, tag, args = af.get_epistemic_status("p")

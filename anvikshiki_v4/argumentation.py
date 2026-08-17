@@ -14,6 +14,7 @@ from typing import Optional
 from .schema_v4 import (
     Argument, Attack, Label, ProvenanceTag, EpistemicStatus
 )
+from .lattice import join, rank
 
 
 @dataclass
@@ -146,8 +147,10 @@ class ArgumentationFramework:
             return True   # Attacker wins — strictly more preferred
 
         # Same pramāṇa — attack succeeds if attacker is at least as strong
-        # (ASPIC+: defeat iff attacker is not strictly less preferred)
-        return attacker.tag.strength >= target.tag.strength
+        # (ASPIC+: defeat iff attacker is not strictly less preferred).
+        # Strength is the argument's place in L, not a product of floats:
+        # the comparison this needs is an ordering, and L is already one.
+        return rank(attacker.status) >= rank(target.status)
 
     # ── Epistemic Status Derivation ──
 
@@ -157,14 +160,17 @@ class ArgumentationFramework:
         """
         Derive epistemic status for a conclusion from the extension.
 
-        Status derives primarily from LABELS (IN/OUT/UNDECIDED), with
-        tag quality used only for within-IN disambiguation.  (Fixes I-01)
+        The labelling decides the outcome and the lattice decides the
+        grade — no thresholds anywhere:
 
-        - IN + strong tag  → ESTABLISHED
-        - IN + moderate tag → HYPOTHESIS
-        - IN + weak tag    → PROVISIONAL
-        - UNDECIDED        → OPEN
-        - All OUT          → CONTESTED (with heuristic preferred check)
+            none                 → None (nothing concludes this)
+            every argument OUT   → CONTESTED
+            some UNDECIDED, none IN → OPEN
+            otherwise            → ⋁ { σ(a) : label(a) = IN }
+
+        The join is what makes accrual idempotent: restating support for a
+        conclusion takes the maximum over the same value, which is that
+        value. Nothing has to be discounted for it to hold.
 
         Returns (EpistemicStatus | None, combined ProvenanceTag, relevant arguments).
         """
@@ -189,8 +195,8 @@ class ArgumentationFramework:
             combined = accepted[0].tag
             for a in accepted[1:]:
                 combined = ProvenanceTag.oplus(combined, a.tag)
-            # Within-IN disambiguation by tag quality
-            status = combined.epistemic_status()
+            # Accrual over the surviving arguments: the best one carries it.
+            status = join([a.status for a in accepted])
             return (status, combined, accepted)
 
         if undecided:
@@ -397,8 +403,14 @@ class ArgumentationFramework:
         attack_target: str,
         attack_type: str,
         hetvabhasa: str,
+        status: EpistemicStatus = EpistemicStatus.HYPOTHESIS,
     ) -> str:
         """Add a user-supplied counter-argument and its attack.
+
+        `status` defaults to HYPOTHESIS rather than to the top of L: a
+        contestation is a claim offered against the framework, and letting
+        an assertion enter as ESTABLISHED would let it outrank curated
+        knowledge by virtue of having been typed.
 
         Returns the new argument ID.
         """
@@ -410,6 +422,7 @@ class ArgumentationFramework:
             premises=frozenset([conclusion]),
             is_strict=False,
             tag=tag,
+            status=status,
         ))
         self.add_attack(Attack(
             attacker=arg_id,

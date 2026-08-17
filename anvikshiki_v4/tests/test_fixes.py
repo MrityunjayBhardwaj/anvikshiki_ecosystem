@@ -1,5 +1,6 @@
 # tests/test_fixes.py
 """Tests for all critical analysis fixes — ASPIC+ compliance, bug fixes."""
+import pytest
 from anvikshiki_v4.schema_v4 import (
     Argument, Attack, Label, ProvenanceTag, PramanaType, EpistemicStatus
 )
@@ -10,16 +11,16 @@ from anvikshiki_v4.uncertainty import compute_uncertainty_v4
 
 
 def _make_arg(aid, conclusion, pramana=PramanaType.ANUMANA,
-              belief=0.7, trust=0.8, decay=0.9, depth=1, strict=False):
+              trust=0.8, decay=0.9, depth=1, strict=False,
+              status=EpistemicStatus.HYPOTHESIS):
     return Argument(
         id=aid, conclusion=conclusion, top_rule=None,
         premises=frozenset([conclusion]), is_strict=strict,
         tag=ProvenanceTag(
-            belief=belief, disbelief=max(0.0, round(1-belief-0.1, 4)),
-            uncertainty=round(1.0 - belief - max(0.0, round(1-belief-0.1, 4)), 4),
             pramana_type=pramana, trust_score=trust,
             decay_factor=decay, derivation_depth=depth,
         ),
+        status=status,
     )
 
 
@@ -34,10 +35,10 @@ class TestUndercuttingBypassesPreference:
         """UPAMANA undercutter defeats PRATYAKSA target — no preference check."""
         af = ArgumentationFramework()
         af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA,
-                                  belief=0.95, trust=0.95))
+                                  trust=0.95))
         af.add_argument(_make_arg("A1", "_undercut_rule",
                                   pramana=PramanaType.UPAMANA,
-                                  belief=0.3, trust=0.5))
+                                  trust=0.5))
         af.add_attack(Attack("A1", "A0", "undercutting", "savyabhicara"))
         labels = af.compute_grounded()
         assert labels["A1"] == Label.IN
@@ -46,11 +47,9 @@ class TestUndercuttingBypassesPreference:
     def test_undermining_still_uses_preference(self):
         """Undermining attack from weak to strong → target survives."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA,
-                                  belief=0.9))
+        af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA))
         af.add_argument(_make_arg("A1", "_stale_A0",
-                                  pramana=PramanaType.UPAMANA,
-                                  belief=0.3))
+                                  pramana=PramanaType.UPAMANA))
         af.add_attack(Attack("A1", "A0", "undermining", "asiddha"))
         labels = af.compute_grounded()
         # UPAMANA underminer cannot defeat PRATYAKSA target
@@ -69,9 +68,9 @@ class TestStrictArgumentProtection:
         """A strict argument should not be defeated by a rebutting attack."""
         af = ArgumentationFramework()
         # A0 is strict with HIGHER strength than A1
-        af.add_argument(_make_arg("A0", "p", belief=0.9, trust=0.95,
+        af.add_argument(_make_arg("A0", "p", trust=0.95,
                                   strict=True))
-        af.add_argument(_make_arg("A1", "not_p", belief=0.8, trust=0.8))
+        af.add_argument(_make_arg("A1", "not_p", trust=0.8))
         af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
         af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
         labels = af.compute_grounded()
@@ -83,10 +82,9 @@ class TestStrictArgumentProtection:
     def test_strict_arg_vulnerable_to_undermining(self):
         """Strict args can still be undermined (premise attack)."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.6, strict=True))
+        af.add_argument(_make_arg("A0", "p", strict=True))
         af.add_argument(_make_arg("A1", "_stale_A0",
-                                  pramana=PramanaType.PRATYAKSA,
-                                  belief=0.9))
+                                  pramana=PramanaType.PRATYAKSA))
         af.add_attack(Attack("A1", "A0", "undermining", "asiddha"))
         labels = af.compute_grounded()
         # Undermining bypasses strict protection — attacks the premise
@@ -95,10 +93,9 @@ class TestStrictArgumentProtection:
     def test_strict_arg_vulnerable_to_undercutting(self):
         """Undercutting always succeeds, even against strict args."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9, strict=True))
+        af.add_argument(_make_arg("A0", "p", strict=True))
         af.add_argument(_make_arg("A1", "_undercut",
-                                  pramana=PramanaType.UPAMANA,
-                                  belief=0.3))
+                                  pramana=PramanaType.UPAMANA))
         af.add_attack(Attack("A1", "A0", "undercutting", "savyabhicara"))
         labels = af.compute_grounded()
         assert labels["A0"] == Label.OUT
@@ -108,37 +105,50 @@ class TestStrictArgumentProtection:
 # FIX 3: Contestation — negative disbelief
 # ══════════════════════════════════════════════════════════════
 
-class TestContestationDisbeliefClamping:
-    """apply_contestation must not produce negative disbelief."""
+class TestContestationCarriesAStatus:
+    """A contestation states its strength on the lattice.
 
-    def test_high_belief_no_negative_disbelief(self):
-        """belief=0.95 should not produce disbelief=-0.05."""
+    This class used to check that a high belief did not produce a negative
+    disbelief through `1 - belief - 0.1`. There is no triple to go negative
+    now — a contestation names a lattice element, and an unknown one is
+    refused rather than coerced.
+    """
+
+    def test_default_is_hypothesis_not_established(self):
+        """An assertion must not enter at the top of the lattice.
+
+        Otherwise anything a user types outranks curated knowledge purely
+        by having been typed.
+        """
         cm = ContestationManager()
         af = ArgumentationFramework()
         af.add_argument(_make_arg("A0", "p"))
         new_id = cm.apply_contestation(af, "asiddha", "A0", {
             "conclusion": "_stale_A0",
-            "belief": 0.95,
             "pramana_type": "PRATYAKSA",
         })
-        new_arg = af.arguments[new_id]
-        assert new_arg.tag.disbelief >= 0.0
-        assert abs(new_arg.tag.belief + new_arg.tag.disbelief
-                    + new_arg.tag.uncertainty - 1.0) < 0.05
+        assert af.arguments[new_id].status == EpistemicStatus.HYPOTHESIS
 
-    def test_belief_one_no_crash(self):
-        """belief=1.0 should produce valid tag with d=0, u=0."""
+    def test_explicit_status_is_honoured(self):
         cm = ContestationManager()
         af = ArgumentationFramework()
         af.add_argument(_make_arg("A0", "p"))
         new_id = cm.apply_contestation(af, "asiddha", "A0", {
             "conclusion": "_stale_A0",
-            "belief": 1.0,
+            "status": "established",
             "pramana_type": "PRATYAKSA",
         })
-        new_arg = af.arguments[new_id]
-        assert new_arg.tag.disbelief >= 0.0
-        assert new_arg.tag.uncertainty >= 0.0
+        assert af.arguments[new_id].status == EpistemicStatus.ESTABLISHED
+
+    def test_unknown_status_is_refused(self):
+        cm = ContestationManager()
+        af = ArgumentationFramework()
+        af.add_argument(_make_arg("A0", "p"))
+        with pytest.raises(ValueError):
+            cm.apply_contestation(af, "asiddha", "A0", {
+                "conclusion": "_stale_A0",
+                "status": "extremely_sure",
+            })
 
 
 # ══════════════════════════════════════════════════════════════
@@ -150,8 +160,8 @@ class TestVitandaLabelsPreservation:
 
     def test_labels_restored_after_vitanda(self):
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.8))
-        af.add_argument(_make_arg("A1", "not_p", belief=0.7))
+        af.add_argument(_make_arg("A0", "p"))
+        af.add_argument(_make_arg("A1", "not_p"))
         af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
         af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
 
@@ -206,23 +216,35 @@ class TestContrarinessFunction:
 # ══════════════════════════════════════════════════════════════
 
 class TestUncertaintyFixes:
-    """uncertainty.py now uses conclusion param and consistent thresholds."""
+    """uncertainty.py reports three components and no composite."""
 
     def test_conclusion_in_output(self):
-        tag = ProvenanceTag(belief=0.9, disbelief=0.05, uncertainty=0.05,
-                            trust_score=0.9, decay_factor=0.95,
+        tag = ProvenanceTag(trust_score=0.9, decay_factor=0.95,
                             derivation_depth=1)
         result = compute_uncertainty_v4(
             tag, 0.9, "my_conclusion", EpistemicStatus.ESTABLISHED)
         assert result["conclusion"] == "my_conclusion"
         assert "my_conclusion" in result["epistemic"]["explanation"]
 
-    def test_threshold_boundary_established(self):
-        """Tag with uncertainty=0.1 exactly should say well-established."""
-        tag = ProvenanceTag(belief=0.85, disbelief=0.05, uncertainty=0.1)
+    def test_status_is_reported_as_itself(self):
+        """No threshold sits between the status and what is reported."""
+        tag = ProvenanceTag(trust_score=0.9, decay_factor=0.95)
+        for status in EpistemicStatus:
+            result = compute_uncertainty_v4(tag, 0.9, "p", status)
+            assert result["epistemic"]["status"] == status.value
+
+    def test_no_composite_score(self):
+        """The three components are not multiplied back into one number.
+
+        `total_confidence` was belief x trust x decay under weights nobody
+        derived. Its absence is the point, so it is asserted.
+        """
+        tag = ProvenanceTag(trust_score=0.9, decay_factor=0.95)
         result = compute_uncertainty_v4(
             tag, 0.9, "p", EpistemicStatus.ESTABLISHED)
-        assert "well-established" in result["epistemic"]["explanation"]
+        assert "total_confidence" not in result
+        assert set(result) == {
+            "conclusion", "epistemic", "aleatoric", "inference"}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -235,8 +257,8 @@ class TestPreferredWithNewDefeats:
     def test_preferred_includes_grounded(self):
         """Grounded extension is a subset of every preferred extension."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.8))
-        af.add_argument(_make_arg("A1", "q", belief=0.6))
+        af.add_argument(_make_arg("A0", "p"))
+        af.add_argument(_make_arg("A1", "q"))
         af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
         preferred = af.compute_preferred(timeout_seconds=5.0)
         grounded = af.compute_grounded()
@@ -248,10 +270,8 @@ class TestPreferredWithNewDefeats:
     def test_preferred_with_undercutting(self):
         """Undercutting attack in preferred semantics still bypasses preference."""
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA,
-                                  belief=0.95))
-        af.add_argument(_make_arg("A1", "_uc", pramana=PramanaType.UPAMANA,
-                                  belief=0.3))
+        af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA))
+        af.add_argument(_make_arg("A1", "_uc", pramana=PramanaType.UPAMANA))
         af.add_attack(Attack("A1", "A0", "undercutting", "savyabhicara"))
         preferred = af.compute_preferred(timeout_seconds=5.0)
         # A1 should be IN in all preferred extensions (undercutting always succeeds)
@@ -292,7 +312,7 @@ class TestCycleDetectionInForwardChaining:
         ks.vyaptis = {"V1": v}
 
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9))
+        af.add_argument(_make_arg("A0", "p"))
 
         # First derivation — should create one argument for q
         _derive_rule_arguments(af, ks)
@@ -335,7 +355,7 @@ class TestCycleDetectionInForwardChaining:
         }
 
         af = ArgumentationFramework()
-        af.add_argument(_make_arg("A0", "p", belief=0.9))
+        af.add_argument(_make_arg("A0", "p"))
 
         # Simulate fixpoint loop
         for _ in range(20):
@@ -364,13 +384,15 @@ class TestArgumentTreeRecursionGuard:
         af.add_argument(Argument(
             id="A0", conclusion="p", top_rule=None,
             premises=frozenset(["p"]), is_strict=True,
-            tag=ProvenanceTag(belief=0.9, disbelief=0.0, uncertainty=0.1),
+            tag=ProvenanceTag(),
+            status=EpistemicStatus.ESTABLISHED,
         ))
         af.add_argument(Argument(
             id="A1", conclusion="q", top_rule="V1",
             sub_arguments=("A0",),
             premises=frozenset(["p"]), is_strict=False,
-            tag=ProvenanceTag(belief=0.7, disbelief=0.1, uncertainty=0.2),
+            tag=ProvenanceTag(),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.compute_grounded()
 
@@ -389,13 +411,15 @@ class TestArgumentTreeRecursionGuard:
             id="A0", conclusion="p", top_rule="V1",
             sub_arguments=("A1",),
             premises=frozenset(["p"]), is_strict=False,
-            tag=ProvenanceTag(belief=0.7, disbelief=0.1, uncertainty=0.2),
+            tag=ProvenanceTag(),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.add_argument(Argument(
             id="A1", conclusion="q", top_rule="V2",
             sub_arguments=("A0",),
             premises=frozenset(["q"]), is_strict=False,
-            tag=ProvenanceTag(belief=0.6, disbelief=0.1, uncertainty=0.3),
+            tag=ProvenanceTag(),
+            status=EpistemicStatus.HYPOTHESIS,
         ))
         af.compute_grounded()
 

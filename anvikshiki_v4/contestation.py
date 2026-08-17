@@ -171,20 +171,17 @@ class ContestationManager:
 
         contestation_type: "asiddha" | "savyabhicara" | "viruddha"
                           | "satpratipaksa" | "badhita"
-        evidence: {conclusion, belief, pramana_type, sources}
+        evidence: {conclusion, status, pramana_type, sources}
         """
         conclusion = evidence.get("conclusion", f"_contest_{target_arg_id}")
-        belief = evidence.get("belief", 0.7)
         pramana = PramanaType[evidence.get("pramana_type", "ANUMANA")]
-
-        # Clamp disbelief to prevent negative values (e.g. belief=0.95)
-        disbelief = max(0.0, round(1.0 - belief - 0.1, 4))
-        uncertainty = round(1.0 - belief - disbelief, 4)
+        # A contestation states how strong its claim is, on the lattice.
+        # HYPOTHESIS by default — which is where the previous default of
+        # belief=0.7 landed under the old cutoffs, so this changes the
+        # vocabulary rather than the behaviour.
+        status = EpistemicStatus(evidence.get("status", "hypothesis"))
 
         tag = ProvenanceTag(
-            belief=belief,
-            disbelief=disbelief,
-            uncertainty=uncertainty,
             source_ids=frozenset(evidence.get("sources", [])),
             pramana_type=pramana,
             trust_score=evidence.get("trust", 0.8),
@@ -206,6 +203,7 @@ class ContestationManager:
             attack_target=target_arg_id,
             attack_type=attack_type_map.get(contestation_type, "rebutting"),
             hetvabhasa=contestation_type,
+            status=status,
         )
 
         # For viruddha/satpratipaksa: add reverse attack too

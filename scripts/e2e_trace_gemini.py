@@ -404,8 +404,8 @@ def main():
     out.processing(
         f"Step 3a: Create Premise Arguments\n"
         + "\n".join(
-            f"  {aid}: {arg.conclusion} [premise]  tag: b={arg.tag.belief:.3f}, "
-            f"d={arg.tag.disbelief:.3f}, u={arg.tag.uncertainty:.3f}, "
+            f"  {aid}: {arg.conclusion} [premise]  {arg.status.name}, "
+            f"trust={arg.tag.trust_score:.3f}, "
             f"pramana={arg.tag.pramana_type.name}"
             for aid, arg in sorted(af_1.arguments.items())
             if arg.top_rule is None and not arg.conclusion.startswith("_")
@@ -417,8 +417,7 @@ def main():
             f"    All antecedents available ✓\n"
             f"    → Create {aid}: {arg.conclusion} via {arg.top_rule}\n"
             f"      sub_arguments: {arg.sub_arguments}\n"
-            f"      tag: b={arg.tag.belief:.4f}, d={arg.tag.disbelief:.4f}, "
-            f"u={arg.tag.uncertainty:.4f}\n"
+            f"      status: {arg.status.name}, trust={arg.tag.trust_score:.4f}\n"
             f"      derivation_depth: {arg.tag.derivation_depth}\n"
             f"      pramana: {arg.tag.pramana_type.name}\n"
             f"      trust: {arg.tag.trust_score:.4f}, decay: {arg.tag.decay_factor:.4f}"
@@ -445,8 +444,8 @@ def main():
             f"    top_rule: {arg.top_rule or '[premise]'}\n"
             f"    sub_arguments: {arg.sub_arguments}\n"
             f"    premises: {set(arg.premises)}\n"
-            f"    tag: Tag(b={arg.tag.belief:.4f}, d={arg.tag.disbelief:.4f}, "
-            f"u={arg.tag.uncertainty:.4f})\n"
+            f"    status: {arg.status.name}, "
+            f"tag: {arg.tag!r}\n"
             f"    pramana: {arg.tag.pramana_type.name}\n"
             f"    depth: {arg.tag.derivation_depth}, trust: {arg.tag.trust_score:.4f}, "
             f"decay: {arg.tag.decay_factor:.4f}\n"
@@ -537,8 +536,7 @@ def main():
         "\n".join(
             f"  {conc}:\n"
             f"    status: {info['status'].value}\n"
-            f"    belief: {info['tag'].belief:.4f}\n"
-            f"    disbelief: {info['tag'].disbelief:.4f}\n"
+            f"    trust: {info['tag'].trust_score:.4f}\n"
             f"    uncertainty: {info['tag'].uncertainty:.4f}\n"
             f"    pramana: {info['tag'].pramana_type.name}\n"
             f"    derivation_depth: {info['tag'].derivation_depth}"
@@ -572,7 +570,7 @@ def main():
             f"    epistemic: {json.dumps(uq.get('epistemic', {}))}\n"
             f"    aleatoric: {json.dumps(uq.get('aleatoric', {}))}\n"
             f"    inference: {json.dumps(uq.get('inference', {}))}\n"
-            f"    total_confidence: {uq['total_confidence']:.4f}"
+            f"    status: {uq['epistemic']['status']}"
             for conc, uq in sorted(uncertainty_1.items())
         )
     ))
@@ -596,14 +594,14 @@ def main():
     out.section("Stage 10: LLM Synthesis ({model_label})")
 
     accepted_str = "\n".join(
-        f"- {conc}: {info['status'].value} (belief={info['tag'].belief:.2f})"
+        f"- {conc}: {info['status'].value}"
         for conc, info in results_1.items()
         if info["status"] in (ES.ESTABLISHED, ES.HYPOTHESIS, ES.PROVISIONAL)
     ) or "No accepted conclusions."
 
     defeated_str = "No defeated conclusions."
     uq_str = "\n".join(
-        f"- {conc}: confidence={uq['total_confidence']:.2f}, epistemic={uq['epistemic']['status']}"
+        f"- {conc}: {uq['epistemic']['status']}"
         for conc, uq in uncertainty_1.items()
     )
     retrieved_prose = "\n\n".join(c.text for c in chunks_1[:3])
@@ -840,7 +838,7 @@ def main():
         + "\n".join(
             f"\n  {aid}: {arg.conclusion}\n"
             f"    top_rule: {arg.top_rule or '[premise]'}\n"
-            f"    tag: Tag(b={arg.tag.belief:.4f})\n"
+            f"    status: {arg.status.name}\n"
             f"    depth: {arg.tag.derivation_depth}, pramana: {arg.tag.pramana_type.name}"
             + (f"\n    origin: {active_ks_2.vyaptis[arg.top_rule].augmentation_metadata.origin.value}"
                if arg.top_rule and active_ks_2.vyaptis.get(arg.top_rule)
@@ -873,7 +871,7 @@ def main():
 
     out.output_box("Epistemic Status (Scenario 2)", (
         "\n".join(
-            f"  {conc}: {info['status'].value} (b={info['tag'].belief:.4f}, "
+            f"  {conc}: {info['status'].value} (trust={info['tag'].trust_score:.4f}, "
             f"u={info['tag'].uncertainty:.4f})"
             for conc, info in sorted(results_2.items())
         ) or "  (no epistemic results)"
@@ -887,7 +885,7 @@ def main():
 
     out.output_box("Uncertainty (Scenario 2)", (
         "\n".join(
-            f"  {conc}: total_conf={uq['total_confidence']:.4f}, "
+            f"  {conc}: status={uq['epistemic']['status']}, "
             f"epistemic={uq['epistemic']['status']}"
             for conc, uq in sorted(uncertainty_2.items())
         ) or "  (no uncertainty data)"
@@ -897,13 +895,13 @@ def main():
     out.section("Stage 10: LLM Synthesis (Scenario 2)")
 
     accepted_str_2 = "\n".join(
-        f"- {conc}: {info['status'].value} (belief={info['tag'].belief:.2f})"
+        f"- {conc}: {info['status'].value}"
         for conc, info in results_2.items()
         if info["status"] in (ES.ESTABLISHED, ES.HYPOTHESIS, ES.PROVISIONAL)
     ) or "No accepted conclusions."
 
     uq_str_2 = "\n".join(
-        f"- {conc}: confidence={uq['total_confidence']:.2f}"
+        f"- {conc}: {uq['epistemic']['status']}"
         for conc, uq in uncertainty_2.items()
     ) or "No uncertainty data."
 

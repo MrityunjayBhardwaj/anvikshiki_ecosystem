@@ -26,7 +26,6 @@ export const ArgumentNode = memo(function ArgumentNode({
   selected,
 }: NodeProps & { data: NodeData }) {
   const { arg } = data;
-  const belief = arg.tag.belief;
 
   return (
     <div
@@ -60,18 +59,12 @@ export const ArgumentNode = memo(function ArgumentNode({
       {/* Conclusion */}
       <p className="text-xs leading-snug line-clamp-2">{arg.conclusion}</p>
 
-      {/* Belief bar */}
-      <div className="space-y-0.5">
-        <div className="flex justify-between text-[9px] font-mono text-muted-foreground">
-          <span>b={belief.toFixed(2)}</span>
-          <span>u={arg.tag.uncertainty.toFixed(2)}</span>
-        </div>
-        <div className="h-1 rounded-full bg-muted overflow-hidden">
-          <div
-            className="h-full rounded-full bg-[var(--label-in)] transition-all"
-            style={{ width: `${belief * 100}%` }}
-          />
-        </div>
+      {/* Provenance: the channel the claim arrived through, and how fresh
+          it is. There is no belief bar any more — an argument's grade is a
+          position in the lattice, shown below, not a fraction of a bar. */}
+      <div className="flex justify-between text-[9px] font-mono text-muted-foreground">
+        <span className="lowercase">{arg.tag.pramana_type}</span>
+        <span>depth={arg.tag.derivation_depth}</span>
       </div>
 
       {/* Epistemic status */}

@@ -10,8 +10,9 @@ from datetime import datetime
 from .paths import resolve_repo_path
 from .schema import KnowledgeStore, CausalStatus
 from .schema_v4 import (
-    Argument, Attack, ProvenanceTag, PramanaType
+    Argument, Attack, ProvenanceTag, PramanaType, EpistemicStatus
 )
+from .lattice import from_kb, meet, rank
 from .argumentation import ArgumentationFramework
 from .engine_params import CompilerParams, DEFAULT_PARAMS
 from .predicate_contrariness import (
@@ -62,10 +63,12 @@ def _build_rule_tag(
     knowledge_store: KnowledgeStore,
     params: CompilerParams = _DEFAULT_COMPILER,
 ) -> ProvenanceTag:
-    """Build a provenance tag for a vyāpti from its KB metadata."""
-    b, d, u = params.belief_map.get(
-        vyapti.epistemic_status, params.belief_fallback
-    )
+    """Build a provenance tag for a vyāpti from its KB metadata.
+
+    The vyāpti's epistemic status is not consumed here. It enters the
+    reasoning as an element of the lattice, at the point where the argument
+    using this rule is built.
+    """
     trust = vyapti.confidence.formulation * vyapti.confidence.existence
 
     decay = 1.0
@@ -74,7 +77,6 @@ def _build_rule_tag(
         decay = math.exp(-params.LN2 * age_days / params.decay_half_life_days)
 
     return ProvenanceTag(
-        belief=b, disbelief=d, uncertainty=u,
         source_ids=frozenset(vyapti.sources),
         pramana_type=PRAMANA_MAP.get(
             vyapti.causal_status, PramanaType.ANUMANA),
@@ -141,11 +143,7 @@ def compile_t2(
     # ── Step 1: Premise arguments from grounded query facts ──
     for fact in query_facts:
         arg_id = af.next_arg_id()
-        confidence = fact.get("confidence", 0.9)
         tag = ProvenanceTag(
-            belief=confidence,
-            disbelief=0.0,
-            uncertainty=round(1.0 - confidence, 4),
             source_ids=frozenset(fact.get("sources", [])),
             pramana_type=PramanaType.PRATYAKSA,
             trust_score=1.0,
@@ -159,6 +157,13 @@ def compile_t2(
             premises=frozenset([fact["predicate"]]),
             is_strict=True,
             tag=tag,
+            # A grounded query fact is direct evidence, and it enters L at
+            # the top. The grounder's confidence is deliberately NOT turned
+            # into a status here: cutting a float into categories is the
+            # defect being removed, and confidence belongs to the conformal
+            # feature vector (#23), where it gets a coverage guarantee
+            # instead of a threshold.
+            status=EpistemicStatus.ESTABLISHED,
         ))
 
     # ── Steps 2-4: Forward chain with fixpoint ──
@@ -212,7 +217,7 @@ def _derive_rule_arguments(
         # All combinations, sorted by total belief (best first), capped
         combos = list(iter_product(*candidates_per_ant))
         combos.sort(
-            key=lambda c: sum(a.tag.belief for a in c), reverse=True
+            key=lambda c: sum(rank(a.status) for a in c), reverse=True
         )
         combos = combos[:params.max_argument_combos_per_rule]
 
@@ -230,6 +235,14 @@ def _derive_rule_arguments(
             for sub_arg in combo:
                 combined_tag = ProvenanceTag.tensor(combined_tag, sub_arg.tag)
 
+            # σ(a) = ⋀( status(top_rule), { σ(s) : s ∈ sub_args } )
+            # Weakest link: an inference cannot conclude more strongly than
+            # the weakest thing it reasoned through.
+            combined_status = meet(
+                [from_kb(v.epistemic_status)]
+                + [sub_arg.status for sub_arg in combo]
+            )
+
             arg_id = af.next_arg_id()
             af.add_argument(Argument(
                 id=arg_id,
@@ -241,6 +254,7 @@ def _derive_rule_arguments(
                 )),
                 is_strict=is_strict,
                 tag=combined_tag,
+                status=combined_status,
             ))
 
 
@@ -313,10 +327,13 @@ def _derive_attacks(
                 premises=frozenset([excl]),
                 is_strict=True,
                 tag=ProvenanceTag(
-                    belief=1.0, disbelief=0.0, uncertainty=0.0,
                     pramana_type=PramanaType.PRATYAKSA,
                     trust_score=1.0, decay_factor=1.0,
                 ),
+                # The scope exclusion is present in the framework as an
+                # observed fact about this query, not as a claim under
+                # dispute — it enters at the top of L, as the premises do.
+                status=EpistemicStatus.ESTABLISHED,
             ))
             # Attack ALL arguments using this rule
             for rule_arg in rule_args:
@@ -342,12 +359,14 @@ def _derive_attacks(
             premises=frozenset(["_temporal_decay"]),
             is_strict=True,
             tag=ProvenanceTag(
-                belief=1.0 - a.tag.decay_factor,
-                disbelief=0.0,
-                uncertainty=a.tag.decay_factor,
                 pramana_type=PramanaType.PRATYAKSA,
                 trust_score=1.0, decay_factor=1.0,
             ),
+            # That the supporting premise has decayed past its threshold is
+            # a computed fact about the framework, not a defeasible claim.
+            # Decay stays structural — it triggers an attack in the graph,
+            # which is what survives the subtraction; the magnitude does not.
+            status=EpistemicStatus.ESTABLISHED,
         ))
         af.add_attack(Attack(
             attacker=decay_arg_id, target=a.id,
