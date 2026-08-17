@@ -6,17 +6,26 @@ than "this is right" — and the matcher previously said an extractor emitting
 the exact inverse of every gold predicate scored 1.000/1.000.
 """
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from anvikshiki_v4.instrument_validation import (
     AGREE,
     DISAGREE,
     MatcherDecision,
+    MatcherParams,
+    SheetProvenance,
     agreement,
     build_decision_sheet,
     read_decision_sheet,
     write_decision_sheet,
 )
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 GOLD = {"ltv_exceeds_cac", "high_retention_rate", "value_creation"}
 GOLD_DESCRIPTIONS = {
@@ -69,10 +78,106 @@ def test_a_refused_pair_carries_the_reason_it_was_refused():
         assert "argument order" in reversed_pair[0].veto_reason
 
 
+def _provenance(**overrides) -> SheetProvenance:
+    fields = dict(
+        matcher=MatcherParams(),
+        extraction_model="test/model",
+        extraction_sha256="0" * 64,
+        chapter_id="ch02",
+        gold_count=len(GOLD),
+        candidate_count=len(CANDIDATES),
+        matched_rows=1,
+        near_miss_rows=2,
+        git_commit="abc123",
+        python_hash_seed="unset",
+    )
+    fields.update(overrides)
+    return SheetProvenance(**fields)
+
+
 def test_the_sheet_round_trips_through_yaml(tmp_path):
     sheet = build_decision_sheet(GOLD, GOLD_DESCRIPTIONS, CANDIDATES)
-    path = write_decision_sheet(sheet, tmp_path / "sheet.yaml")
-    assert read_decision_sheet(path) == sheet
+    provenance = _provenance()
+    path = write_decision_sheet(sheet, tmp_path / "sheet.yaml", provenance)
+    loaded = read_decision_sheet(path)
+    assert loaded.decisions == sheet
+    assert loaded.provenance == provenance
+
+
+# ── #64: the same run twice must produce the same sheet ──
+
+_PROBE = """
+import sys
+from anvikshiki_v4.instrument_validation import build_decision_sheet, MatcherParams
+
+gold = {"value_creation", "high_retention_rate"}
+gold_descriptions = {"value_creation": "The business creates value",
+                     "high_retention_rate": "Customer retention is high"}
+# Deliberately share no tokens with the gold names, so every pair scores 0.0
+# and the ranking is decided entirely by how ties are broken.
+candidates = [(n, "") for n in
+              ("zebra", "quark", "mango", "alpha", "tiger", "delta", "kappa")]
+
+sheet = build_decision_sheet(gold, gold_descriptions, candidates,
+                             MatcherParams(match_on="name"))
+for d in sheet:
+    print(d.kind, d.gold, d.candidate, d.score, sep="\\t")
+"""
+
+
+def _build_under_seed(seed: str) -> str:
+    env = {**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(REPO_ROOT)}
+    done = subprocess.run(
+        [sys.executable, "-c", _PROBE],
+        cwd=REPO_ROOT, env=env, capture_output=True, text=True,
+    )
+    assert done.returncode == 0, f"probe failed under seed {seed}:\n{done.stderr}"
+    return done.stdout
+
+
+def test_the_sheet_is_the_same_whatever_the_process_hash_seed_is():
+    """The rows a human is asked to judge must not change between runs.
+
+    Candidate names live in a set and `sorted` is stable, so ranking on
+    similarity alone left tied candidates in set iteration order — which for
+    strings is randomised per process by PYTHONHASHSEED. Ties are the common
+    case, not an edge case: under match_on='name' most pairs score exactly 0.0.
+
+    Judgments are stored per (gold, candidate) row, so a sheet that rebuilds
+    differently cannot be regenerated to match the judgments already entered
+    against it, and a kill criterion computed over it is not checkable.
+
+    The seeds are set on child processes rather than read from this one, so
+    this test still fails on the bug when the suite itself is run under a
+    fixed PYTHONHASHSEED — which would otherwise hide exactly what it checks.
+    """
+    outputs = {seed: _build_under_seed(seed) for seed in ("0", "1", "17", "4242")}
+
+    rows = outputs["0"].strip().splitlines()
+    assert len(rows) == 6, f"expected 2 gold x 3 near misses, got {len(rows)}"
+
+    distinct = set(outputs.values())
+    assert len(distinct) == 1, (
+        f"the sheet differs across {len(distinct)} of {len(outputs)} hash seeds; "
+        "which rows a human is asked to judge depends on the process"
+    )
+
+
+def test_tied_near_misses_are_ranked_by_name():
+    """The tie-break has to be something, and it has to be stated.
+
+    Ranking on (-score, name) is a total order because candidate names are
+    unique. Anything less is a partial order, and a partial order handed to a
+    stable sort leaves the rest to whatever collection the items came from.
+    """
+    tied = [(n, "") for n in ("zebra", "mango", "alpha", "delta")]
+    sheet = build_decision_sheet(
+        {"value_creation"}, {"value_creation": "The business creates value"},
+        tied, MatcherParams(match_on="name"),
+    )
+    near = [d for d in sheet if d.kind == "near_miss"]
+    assert [d.score for d in near] == [0.0, 0.0, 0.0], "expected an all-tied ranking"
+    assert [d.candidate for d in near] == ["alpha", "delta", "mango"]
 
 
 # ── agreement ──
@@ -195,3 +300,79 @@ def test_a_mode_replay_leaves_unjudged_rows_unjudged():
 
     row = MatcherDecision(gold="value_creation", candidate="x", matcher_says_match=False)
     assert replay_mode([row], GOLD_DESCRIPTIONS, match_on="either")[0].human == ""
+
+
+# ── #65: the sheet has to say how it was built ──
+
+def test_a_sheet_cannot_be_written_without_recording_how_it_was_built():
+    """Optional provenance is provenance that gets skipped.
+
+    The registered protocol requires the model, the candidate count and the
+    match mode alongside every figure. They were printed to stdout and nowhere
+    else, so they survived exactly as long as a terminal scrollback.
+    """
+    with pytest.raises(TypeError):
+        write_decision_sheet([], "unused.yaml")
+
+
+def test_a_sheet_written_without_a_provenance_block_reads_as_unknown(tmp_path):
+    """Not as a plausible default, which is the defect one layer up.
+
+    Sheets on disk predate this block. Defaulting `match_on` to its registered
+    value while loading them would state that they were built under 'name' —
+    and the sheet this was written for was in fact built under 'either'. A
+    fabricated record of a build is worse than no record, because nothing
+    downstream can tell the two apart.
+    """
+    import yaml
+
+    path = tmp_path / "old_sheet.yaml"
+    path.write_text(yaml.safe_dump({
+        "instructions": "…",
+        "decisions": [MatcherDecision(
+            gold="g", candidate="c", matcher_says_match=True,
+        ).model_dump()],
+    }))
+
+    loaded = read_decision_sheet(path)
+    assert len(loaded.decisions) == 1, "the rows must still load"
+    assert loaded.provenance is None
+
+
+def test_the_recorded_match_mode_is_the_one_the_matcher_actually_ran_on(tmp_path):
+    """One object goes to the matcher and to the sheet, so they cannot drift.
+
+    The parameters that were not passed explicitly are the dangerous ones: a
+    caller restating them for the provenance block writes a literal that goes
+    stale the moment the default moves.
+    """
+    params = MatcherParams(match_on="description", near_misses_per_gold=1)
+    sheet = build_decision_sheet(GOLD, GOLD_DESCRIPTIONS, CANDIDATES, params)
+    path = write_decision_sheet(
+        sheet, tmp_path / "sheet.yaml", _provenance(matcher=params),
+    )
+
+    recorded = read_decision_sheet(path).provenance
+    assert recorded.matcher == params
+    assert recorded.matcher.near_misses_per_gold == 1
+    per_gold = {}
+    for d in read_decision_sheet(path).decisions:
+        if d.kind == "near_miss":
+            per_gold[d.gold] = per_gold.get(d.gold, 0) + 1
+    assert per_gold, "no near misses to check the recorded setting against"
+    assert set(per_gold.values()) == {1}, (
+        f"sheet records near_misses_per_gold=1 but carries {per_gold}"
+    )
+
+
+def test_a_half_written_provenance_block_fails_loudly(tmp_path):
+    """A block missing its identity fields must not quietly describe a run."""
+    import yaml
+
+    path = tmp_path / "partial.yaml"
+    path.write_text(yaml.safe_dump({
+        "provenance": {"matcher": {"match_on": "either"}},
+        "decisions": [],
+    }))
+    with pytest.raises(Exception):
+        read_decision_sheet(path)
