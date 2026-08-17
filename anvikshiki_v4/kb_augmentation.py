@@ -42,7 +42,19 @@ from .schema import (
 
 APPLICABILITY_THRESHOLD = 0.4
 MAX_NEW_VYAPTIS = 8
-MAX_CONFIDENCE = 0.75
+
+# MAX_CONFIDENCE = 0.75 used to live here and clamp the confidence of every
+# generated rule. It is gone, not relaxed. What bounds a generated rule now
+# is the origin ceiling in `lattice.status_of_rule`, which bounds the status
+# these rules can carry into a conclusion.
+#
+# The cap it replaces constrained `confidence.existence`, which reaches
+# `trust_score` and nothing else — and `trust_score` decides nothing. Defeat
+# compares places in the lattice (`ArgumentationFramework._defeats`) and
+# undermining reads `decay_factor`. So the cap was bounding a reported
+# number while the status it was supposed to restrain flowed past it: an
+# LLM_PARAMETRIC rule was authored WORKING_HYPOTHESIS and, before the
+# ceiling, entered the reasoning at exactly that.
 
 
 # ─── Result Model ────────────────────────────────────────────
@@ -349,10 +361,15 @@ class AugmentationPipeline(dspy.Module):
                     s.strip() for s in scope_str.split(",") if s.strip()
                 ]
 
-                # Cap confidence
+                # Clamped to [0,1] because that is `Confidence`'s own domain,
+                # not because a generated rule deserves a ceiling. Without
+                # it a model returning 1.2 fails validation, and the failure
+                # is swallowed by the handler below into "skipped this
+                # vyapti" — an out-of-range number reading as a rule that
+                # was never proposed.
                 raw_conf = conf_existences[i] if i < len(conf_existences) else 0.6
-                conf_existence = min(float(raw_conf), MAX_CONFIDENCE)
-                conf_formulation = min(conf_existence * 0.85, MAX_CONFIDENCE)
+                conf_existence = min(max(float(raw_conf), 0.0), 1.0)
+                conf_formulation = conf_existence * 0.85
 
                 base_v = base_vyaptis[i] if i < len(base_vyaptis) else ""
 

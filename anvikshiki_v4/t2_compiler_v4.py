@@ -14,7 +14,7 @@ from .schema import KnowledgeStore, CausalStatus
 from .schema_v4 import (
     Argument, Attack, ProvenanceTag, PramanaType, EpistemicStatus
 )
-from .lattice import from_kb, meet, rank
+from .lattice import meet, rank, status_of_rule
 from .argumentation import ArgumentationFramework
 from .engine_params import CompilerParams, DEFAULT_PARAMS
 
@@ -285,8 +285,12 @@ def _derive_rule_arguments(
             # σ(a) = ⋀( status(top_rule), { σ(s) : s ∈ sub_args } )
             # Weakest link: an inference cannot conclude more strongly than
             # the weakest thing it reasoned through.
+            #
+            # The rule's own status is already capped by its origin, so a
+            # derivation through a generated rule cannot exceed that rule's
+            # ceiling however strong its premises are.
             combined_status = meet(
-                [from_kb(v.epistemic_status)]
+                [status_of_rule(v)]
                 + [sub_arg.status for sub_arg in combo]
             )
 

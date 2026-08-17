@@ -30,11 +30,17 @@ _EPISTEMIC_EXPLANATION = {
     EpistemicStatus.ESTABLISHED:
         "every argument reaching it survives, and none passed through a "
         "weaker link than an established one",
+    # These name the weakest link without claiming where its status came
+    # from. A rule reaches a status either because it was authored that way
+    # or because its origin caps it there — `lattice.status_of_rule` takes
+    # the meet — and an explanation asserting the knowledge base recorded it
+    # would be wrong for every generated rule.
     EpistemicStatus.HYPOTHESIS:
-        "supported, but the derivation passes through a rule the knowledge "
-        "base records as a working hypothesis",
+        "supported, but the derivation passes through a rule no stronger "
+        "than a working hypothesis",
     EpistemicStatus.PROVISIONAL:
-        "supported only through provisional rules",
+        "supported only through rules that are provisional — proposed, and "
+        "not validated",
     EpistemicStatus.OPEN:
         "the argumentation neither accepts nor defeats it — attackers and "
         "defenders are mutually undecided",
