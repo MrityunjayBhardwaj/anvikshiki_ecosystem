@@ -291,10 +291,64 @@ def are_contrary(
 ) -> bool:
     """Whether two conclusions contradict each other.
 
-    Two layers, unchanged from the compiler's original behaviour:
+    Three layers. The binding is checked first because it decides whether the
+    other two are even the right question:
+      0. the two conclusions are about the same entity
       1. syntactic not_ negation, with double negation eliminated
       2. the domain's own KnowledgeStore.contrariness_pairs
+
+    Why the binding comes first
+    ──────────────────────────
+    `value_creation(acme)` and `not_value_creation(globex)` are perfectly
+    compatible claims — acme creates value, globex does not, and both can hold
+    at once. Treating them as contradictory is what made the compiler build a
+    rebutting attack between them, and rebuttal reaches the labelling: a
+    defeasible conclusion about one company was labelled OUT on the strength of
+    an unrelated fact about another.
+
+    Rebutting is defined as *concluding the contrary of the other's
+    conclusion*, and the framework's conclusions are ground atoms — a vyāpti is
+    `smoke(X) -> fire(X)`, and arguments are built by instantiating it, so
+    `fire(acme)` and `fire(globex)` are two different atoms. The entity sits
+    inside the atom being negated, not beside it. The contrary of
+    `value_creation(acme)` is `not_value_creation(acme)` and nothing else.
+
+    Consistency is the point. The rationality postulates require the accepted
+    conclusions to be *consistent* and no two accepted arguments to attack each
+    other. `{value_creation(acme), not_value_creation(globex)}` is satisfiable,
+    so the first postulate asks nothing of it — but a spurious attack makes the
+    second one force a conclusion out. Comparing names alone satisfies a
+    postulate by manufacturing the inconsistency the postulate exists to rule
+    out.
+
+    A bare name is a binding, not a wildcard
+    ────────────────────────────────────────
+    `predicate_entity` returns `None` for a bare name, and that is a binding in
+    its own right: two bare conclusions still rebut, which is what every
+    fixture in the tree relies on. A bare conclusion is *not* read as "about
+    every entity". After instantiation the framework holds no free variables —
+    that is what grounding means — so a bare conclusion is a nullary ground
+    atom, and reading it as universally quantified would put a quantifier back
+    into the attack relation one layer after it was eliminated. If a bare
+    predicate ever did mean "for all entities", the place to instantiate it is
+    the grounder, which already contracts to emit `predicate_name(entity)`.
+
+    The consequence is a known limit rather than an oversight: a bound
+    conclusion does not rebut a bare one, so a real contradiction written
+    across the two forms is missed. It is pinned by a test rather than left
+    implicit.
+
+    Restoring, not inventing
+    ────────────────────────
+    This is the behaviour the compiler shipped with. `_are_contrary` compared
+    whole conclusion strings until the entity strip was added, and prefixing
+    `not_` to the whole string kept acme and globex apart for free. The strip
+    was needed for layer 2, which looks up bare names in the domain's pairs —
+    so the binding check is added rather than the strip removed.
     """
+    if predicate_entity(a) != predicate_entity(b):
+        return False
+
     na = normalize_negation(predicate_name(a))
     nb = normalize_negation(predicate_name(b))
 
