@@ -29,6 +29,7 @@ The laws this is built to satisfy are stated in
 `anvikshiki_v4/tests/test_algebra_laws.py`.
 """
 
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -361,6 +362,75 @@ def should_drop_for_citation(vyapti: "Vyapti") -> bool:
     return tier_for_citation(vyapti) is CitationTier.FABRICATED
 
 
+
+# The names a status bound can have. Strings rather than an enum because they
+# travel to the API and into a rendered panel, and because the set is closed
+# and small enough that an enum would buy nothing at the boundary.
+BOUND_AUTHORED = "authored"
+BOUND_ORIGIN = "origin"
+BOUND_CITATION = "citation"
+# Not derived from a rule at all: an asserted fact, a scope exclusion, a decay
+# marker. Three of the four argument construction sites pass `top_rule=None`,
+# and giving them one of the rule bounds above would attribute a constraint to
+# a rule that does not exist.
+BOUND_ASSERTED = "asserted"
+
+
+@dataclass(frozen=True)
+class StatusBreakdown:
+    """Why a rule's status is where it is — the inputs, not just the answer.
+
+    `status_of_rule` returns a meet and throws its arguments away. A reader
+    asking "why is this only PROVISIONAL?" cannot answer it from the result,
+    and that question is the whole point of showing provenance: a ceiling
+    enforced internally and invisible externally is a guarantee nobody
+    benefits from.
+
+    `binding` is a **tuple, not a single name**. Bounds tie routinely — an
+    extracted rule authored as a working hypothesis has authored and origin
+    both at HYPOTHESIS — and reporting one of them as *the* constraint would
+    be a claim the lattice does not make. Removing the named bound would not
+    raise the status if another sits at the same rank, so naming one is
+    actively misleading about what would change if it were lifted.
+    """
+
+    authored: EpistemicStatus
+    origin_ceiling: EpistemicStatus
+    citation_ceiling: EpistemicStatus
+    citation_tier: CitationTier
+    origin: "AugmentationOrigin | None"
+    effective: EpistemicStatus
+    binding: tuple[str, ...]
+
+
+def status_breakdown(vyapti: "Vyapti") -> StatusBreakdown:
+    """The three bounds on a rule, the result, and which bounds are binding."""
+    origin = None
+    if vyapti.augmentation_metadata is not None:
+        origin = vyapti.augmentation_metadata.origin
+
+    bounds = {
+        BOUND_AUTHORED: from_kb(vyapti.epistemic_status),
+        BOUND_ORIGIN: ceiling_for_origin(origin),
+        BOUND_CITATION: ceiling_for_citation(vyapti),
+    }
+    effective = meet(bounds.values())
+
+    return StatusBreakdown(
+        authored=bounds[BOUND_AUTHORED],
+        origin_ceiling=bounds[BOUND_ORIGIN],
+        citation_ceiling=bounds[BOUND_CITATION],
+        citation_tier=tier_for_citation(vyapti),
+        origin=origin,
+        effective=effective,
+        # Every bound sitting at the minimum, in a stable order. Ties are the
+        # normal case, not an edge one.
+        binding=tuple(
+            name for name in (BOUND_AUTHORED, BOUND_ORIGIN, BOUND_CITATION)
+            if bounds[name] is effective
+        ),
+    )
+
 def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
     """A rule's effective status: authored, capped by origin and by citation.
 
@@ -385,11 +455,8 @@ def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
     from what has been verified rather than asserted, and rises on its own as
     sources are checked.
     """
-    origin = None
-    if vyapti.augmentation_metadata is not None:
-        origin = vyapti.augmentation_metadata.origin
-    return meet([
-        from_kb(vyapti.epistemic_status),
-        ceiling_for_origin(origin),
-        ceiling_for_citation(vyapti),
-    ])
+    # Delegated rather than recomputed. The panel shows the breakdown and the
+    # engine enforces this number, and two independent meets over the same
+    # three bounds would eventually disagree — at which point the displayed
+    # explanation would be of a status the system did not actually apply.
+    return status_breakdown(vyapti).effective

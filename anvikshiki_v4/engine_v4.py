@@ -135,6 +135,25 @@ def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
             # can differ here, and that difference is the explanation for
             # why the conclusion landed where it did.
             "status": a.status.value,
+            # Why the status is where it is, rather than only what it is. A
+            # ceiling enforced internally and invisible externally is a
+            # guarantee nobody benefits from.
+            #
+            # A list, because bounds tie routinely — an extracted rule
+            # authored as a working hypothesis has `authored` and `origin`
+            # both at HYPOTHESIS — and naming one of two tied constraints
+            # misstates what would change if it were lifted. Empty is never
+            # sent: `null` means the argument did not record it, which is a
+            # different claim from "nothing constrains this".
+            "status_bound_by": (
+                list(a.status_bound_by)
+                if a.status_bound_by is not None else None
+            ),
+            # None on an argument with no top rule, and rendered as such:
+            # an asserted premise has no origin tier and makes no citation
+            # claim, so showing it one would invent provenance.
+            "origin": a.origin,
+            "citation_tier": a.citation_tier,
             "tag": a.tag.to_dict(),
             "premises": sorted(a.premises),
             "vyapti_id": a.top_rule,

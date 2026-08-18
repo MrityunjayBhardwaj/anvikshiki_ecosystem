@@ -227,6 +227,29 @@ class Argument:
     # Status in L: the meet of this argument's top rule and its
     # sub-arguments.
     status: Optional['EpistemicStatus'] = None
+    # Which of the bounds in that meet are sitting at the minimum — the
+    # answer to "why is this only PROVISIONAL?".
+    #
+    # `None` means **not recorded**, and is never to be read as "nothing
+    # constrains this": the second is the reading that flatters us, and it is
+    # what an empty tuple would say. Test fixtures leave it None because
+    # their bindings are irrelevant; every production construction site must
+    # pass it, which is asserted by parsing this package rather than by a
+    # runtime raise that would only fire once a real query ran.
+    #
+    # A tuple because bounds tie routinely, and naming one of two tied
+    # constraints misstates what would change if it were lifted.
+    status_bound_by: Optional[tuple] = None
+    # The two provenance axes for this argument's top rule, carried here
+    # because the serializer sees Arguments and not Vyaptis, and re-deriving
+    # them there would mean a second lookup that can disagree with the one
+    # the status was actually computed from.
+    #
+    # None on an argument with no top rule — an asserted fact has no origin
+    # tier and makes no citation claim, and rendering it as though it did
+    # would invent provenance for a premise.
+    origin: Optional[str] = None
+    citation_tier: Optional[str] = None
 
     def __post_init__(self):
         if self.status is None:
