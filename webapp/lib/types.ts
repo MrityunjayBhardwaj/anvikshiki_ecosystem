@@ -43,6 +43,22 @@ export const ArgumentNodeSchema = z.object({
   tag: ProvenanceTagSchema,
   premises: z.array(z.string()),
   vyapti_id: z.string().optional().nullable(),
+  // Which bounds are holding `status` down: "authored", "origin",
+  // "citation", "asserted", or "sub:<argument id>" when a sub-argument is
+  // the weakest link. An array because bounds tie routinely, and naming one
+  // of two tied constraints misstates what lifting it would do.
+  //
+  // null means the argument did not record it. That is not the same claim as
+  // "nothing constrains this", and the panel renders the two differently —
+  // `z.object` strips unknown keys silently, so a field missing from this
+  // schema would show as absent with nothing raising anywhere.
+  status_bound_by: z.array(z.string()).optional().nullable(),
+  // The top rule's two provenance axes. Both null when the argument has no
+  // top rule — an asserted premise has no origin and makes no citation
+  // claim. A curated rule sends "curated" rather than null, so the panel can
+  // tell it apart from having no rule at all.
+  origin: z.string().optional().nullable(),
+  citation_tier: z.string().optional().nullable(),
 });
 
 export const AttackEdgeSchema = z.object({
