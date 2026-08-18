@@ -49,6 +49,7 @@ import pytest
 from anvikshiki_v4 import t2_compiler_v4
 from anvikshiki_v4.predicate_contrariness import (
     are_contrary,
+    get_contrary,
     match_veto,
     normalize_negation,
     predicate_entity,
@@ -225,35 +226,59 @@ def test_undermining_targets_an_argument_by_identity_not_by_predicate(ks):
 
 # ── The generative law, with its denominator and its mutation asserted ──────
 
+def two_entity_framework(kb_path):
+    """Every rule in a base, bound to two entities at once.
+
+    The domain has to include the *contrary of each consequent*, not only the
+    antecedents. A rebuttal needs both sides of a pair present, and grounding
+    antecedents alone reaches only the side the rules derive — which made the
+    first version of this law vacuous on `sample_architecture.yaml`: that base
+    concludes `not_good_governance` and nothing ever concluded
+    `good_governance`, so the framework held no rebuttals at all and "none of
+    them cross a binding" was true of an empty set.
+    """
+    ks = load_knowledge_store(kb_path)
+    names = sorted(
+        {a for v in ks.vyaptis.values() for a in v.antecedents}
+        | {get_contrary(v.consequent) for v in ks.vyaptis.values()}
+    )
+    assert names, f"{kb_path} declares no predicates to ground"
+    grounded = [f"{n}({e})" for n in names for e in ("acme", "globex")]
+    return compile_t2(ks, facts(*grounded))
+
+
 @pytest.mark.parametrize("kb_path", SHIPPED_KBS)
 def test_no_rebuttal_in_a_shipped_kb_ever_crosses_a_binding(kb_path):
     """Over every rule in every shipped base, bound to two entities at once.
 
     The single-case tests above pin one pair. This one asks the question of
-    the whole base: compile every antecedent the KB declares, once for `acme`
-    and once for `globex`, and require that no rebutting attack in the
-    resulting framework links two different bindings.
+    the whole base, and asserts its own denominator first: a law of the form
+    "none of them do X" passes trivially over an empty set, so the framework
+    is required to contain rebuttals before it is asked whether any cross.
     """
-    ks = load_knowledge_store(kb_path)
-    antecedents = sorted({
-        a for v in ks.vyaptis.values() for a in v.antecedents
-    })
-    assert antecedents, f"{kb_path} declares no antecedents to ground"
+    af = two_entity_framework(kb_path)
+    found = rebuttals(af)
 
-    grounded = [f"{a}({e})" for a in antecedents for e in ("acme", "globex")]
-    af = compile_t2(ks, facts(*grounded))
+    assert found, (
+        f"{kb_path} produced no rebutting attacks at all, so this law is "
+        f"vacuous for it — the generated domain no longer reaches both sides "
+        f"of any contrary pair"
+    )
 
     crossing = [
-        (x, y) for x, y in rebuttals(af)
+        (x, y) for x, y in found
         if predicate_entity(x) != predicate_entity(y)
     ]
     assert not crossing, (
-        f"{kb_path}: {len(crossing)} rebuttals cross a binding, e.g. "
-        f"{crossing[:3]}"
+        f"{kb_path}: {len(crossing)} of {len(found)} rebuttals cross a "
+        f"binding, e.g. {crossing[:3]}"
     )
 
 
-def test_the_law_above_would_catch_the_defect_it_was_written_for(monkeypatch):
+@pytest.mark.parametrize("kb_path", SHIPPED_KBS)
+def test_the_law_above_would_catch_the_defect_it_was_written_for(
+    kb_path, monkeypatch
+):
     """The law is only worth having if it fails on the old behaviour.
 
     A law over a generated domain can pass because the generator never
@@ -261,6 +286,11 @@ def test_the_law_above_would_catch_the_defect_it_was_written_for(monkeypatch):
     back, the substitution is *asserted to have taken effect*, and only then
     is the law required to fail — a mutation check that silently failed to
     mutate would otherwise report the same thing as one that worked.
+
+    Run against both bases, because the vacuity it guards against was
+    base-specific: the first version of the law was live on
+    `business_expert.yaml` and empty on `sample_architecture.yaml`, and a
+    mutation check on one base would not have said so.
     """
     def entity_blind(a, b, knowledge_store=None):
         na = normalize_negation(predicate_name(a))
@@ -277,7 +307,7 @@ def test_the_law_above_would_catch_the_defect_it_was_written_for(monkeypatch):
     )
 
     with pytest.raises(AssertionError, match="cross a binding"):
-        test_no_rebuttal_in_a_shipped_kb_ever_crosses_a_binding(KB)
+        test_no_rebuttal_in_a_shipped_kb_ever_crosses_a_binding(kb_path)
 
 
 # ── The other caller, unaffected ────────────────────────────────────────────
