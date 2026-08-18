@@ -20,7 +20,9 @@ from .predicate_contrariness import (
     are_contrary,
     get_contrary,
     normalize_negation,
+    predicate_entity,
     predicate_name,
+    with_entity,
 )
 
 # ── Tag Construction ──
@@ -178,6 +180,50 @@ def compile_t2(
     return af
 
 
+def _argument_bindings(af: ArgumentationFramework) -> dict:
+    """Arguments indexed by (predicate name, entity binding).
+
+    The grounder produces `pricing_power(company)` while a knowledge base
+    declares `pricing_power`, so comparing conclusions as strings finds
+    nothing. Splitting both sides into a name and a binding is what lets the
+    two meet.
+    """
+    index: dict = {}
+    for a in af.arguments.values():
+        key = (predicate_name(a.conclusion), predicate_entity(a.conclusion))
+        index.setdefault(key, []).append(a)
+    return index
+
+
+def _rule_bindings(ks: KnowledgeStore, index: dict):
+    """Every (rule, entity) pair worth attempting, deterministically ordered.
+
+    A vyāpti is `consequent(E) :- antecedent1(E), antecedent2(E), …` — one
+    Entity variable shared by the whole rule, as `Vyapti`'s own docstring
+    specifies. So a rule is attempted once per entity, and every antecedent
+    must hold *for that same entity*. `datalog_engine` already reasons this
+    way; this is the ASPIC+ compiler agreeing with it.
+    """
+    for vid, v in ks.vyaptis.items():
+        if not v.antecedents:
+            # A rule with no antecedents fires once and is about nothing in
+            # particular, so there is no binding to carry to its consequent.
+            yield vid, v, None
+            continue
+
+        # Every antecedent shares E, so any entity this rule could fire for
+        # has to appear under the first one. The rest are checked by the
+        # caller, which is what makes the binding strict.
+        entities = {e for (name, e) in index if name == v.antecedents[0]}
+
+        # Sorted because argument ids are handed out in iteration order and a
+        # set's order is hash-randomised between runs. An unsorted loop here
+        # would make the framework's ids differ run to run for the same input
+        # — the defect that made the decision sheet irreproducible.
+        for entity in sorted(entities, key=lambda e: (e is not None, e or "")):
+            yield vid, v, entity
+
+
 def _derive_rule_arguments(
     af: ArgumentationFramework,
     ks: KnowledgeStore,
@@ -191,23 +237,18 @@ def _derive_rule_arguments(
 
     Tracks (rule_id, sub_argument_ids) to prevent cyclic re-derivation.
     """
-    available = {a.conclusion for a in af.arguments.values()}
+    index = _argument_bindings(af)
     existing_derivations = {
         (a.top_rule, a.sub_arguments)
         for a in af.arguments.values() if a.top_rule
     }
 
-    for vid, v in ks.vyaptis.items():
-        if not all(ant in available for ant in v.antecedents):
-            continue
-
-        # Collect ALL candidate sub-arguments per antecedent
+    for vid, v, entity in _rule_bindings(ks, index):
+        # Collect ALL candidate sub-arguments per antecedent, every one of
+        # them bound to the same entity as the rest of the rule.
         candidates_per_ant = []
         for ant in v.antecedents:
-            candidates = [
-                a for a in af.arguments.values()
-                if a.conclusion == ant
-            ]
+            candidates = index.get((ant, entity), [])
             if not candidates:
                 break
             candidates_per_ant.append(candidates)
@@ -274,7 +315,11 @@ def _derive_rule_arguments(
             arg_id = af.next_arg_id()
             af.add_argument(Argument(
                 id=arg_id,
-                conclusion=v.consequent,
+                # The consequent is about whatever the antecedents were about.
+                # Concluding the bare `pricing_power` from
+                # `superior_information(firm)` would make the rule fire and
+                # silently drop which firm it decided about.
+                conclusion=with_entity(v.consequent, entity),
                 top_rule=vid,
                 sub_arguments=sub_arg_ids,
                 premises=frozenset().union(*(

@@ -137,6 +137,34 @@ def predicate_name(pred: str) -> str:
     return pred[:paren] if paren >= 0 else pred
 
 
+def predicate_entity(pred: str) -> str | None:
+    """The entity a predicate is about: 'holds(acme)' → 'acme'.
+
+    `None` for a bare predicate, which is a binding in its own right and not
+    a missing value — every knowledge base in the tree writes rules as bare
+    names, and matching two bare predicates against each other is the case
+    that has always worked.
+
+    Anything that opens a paren without closing one at the end is malformed
+    and read as a bare name, so it can still match other bare names rather
+    than becoming an entity nothing else can share.
+    """
+    paren = pred.find("(")
+    if paren < 0 or not pred.endswith(")"):
+        return None
+    return pred[paren + 1:-1]
+
+
+def with_entity(name: str, entity: str | None) -> str:
+    """Rebuild a predicate from a name and a binding — the inverse of the pair
+    above, so a rule can conclude about the entity it reasoned over.
+
+    `with_entity(predicate_name(p), predicate_entity(p)) == p` for every
+    well-formed `p`; a malformed one normalises to its bare name.
+    """
+    return name if entity is None else f"{name}({entity})"
+
+
 def negation_differs(a: str, b: str) -> bool:
     """True when exactly one of the two names is negated."""
     na, nb = normalize_negation(a), normalize_negation(b)
