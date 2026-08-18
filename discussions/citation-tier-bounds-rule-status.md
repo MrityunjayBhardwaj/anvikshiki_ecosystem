@@ -114,3 +114,27 @@ verdict, and the information was being computed and discarded one stage upstream
   caller**. Nothing deletes rules today; on this data it would delete nothing.
 - The tier is computed but not yet surfaced — #25 is what shows it to a reader.
 - One chapter, one model. `fabricated` has never been observed on real data.
+
+## Self-review finding: `exists` is doubly inert (#79)
+
+Comparing the two ceiling tables against each other, rather than reading either
+alone:
+
+```
+tier         ceiling       lowers the result for
+attributed   established   NOTHING   (correct — it is the top)
+exists       hypothesis    curated only
+unresolved   provisional   curated, guide_extracted, hitl_promoted
+fabricated   contested     all five origins
+curated      established   NOTHING   (correct)
+```
+
+`exists` binds only for `curated`-origin rules, and those are exempt from this
+axis by construction — they return the `curated` tier before `exists` is ever
+evaluated. So it is not only unreachable until #16; it would change no outcome
+even once reachable. Every other origin is already capped at HYPOTHESIS or below.
+
+Nothing is wrong in today's output, because `exists` is never produced. The cost
+lands later: #25 would render it to a reader as a meaningful tier. Filed as #79
+with the three ways out — move its ceiling to PROVISIONAL so it binds, declare it
+display-only, or remove it until #16 makes it real.
