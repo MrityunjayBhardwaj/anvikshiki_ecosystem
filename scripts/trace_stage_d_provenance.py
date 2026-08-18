@@ -22,6 +22,8 @@ from the 24 real candidates of ch02 rather than from fixtures.
 
 from __future__ import annotations
 
+import argparse
+import collections
 import json
 import sys
 from pathlib import Path
@@ -35,19 +37,48 @@ from anvikshiki_v4.extraction_schema import (
     StageBOutput,
     StageCOutput,
 )
+from anvikshiki_v4.lattice import (
+    CitationTier,
+    should_drop_for_citation,
+    status_of_rule,
+    tier_for_citation,
+)
 from anvikshiki_v4.predicate_extraction import StageDConstructor, StageEValidator
 from anvikshiki_v4.t2_compiler_v4 import load_knowledge_store
 
 KB = REPO_ROOT / "anvikshiki_v4" / "data" / "business_expert.yaml"
 STAGE_A_CACHE = REPO_ROOT / "traces" / "instrument_validation" / "stage_a_ch02.json"
+# The run that was actually asked to quote. The cache above predates span
+# capture, so every candidate in it carries an empty quote and no rule built
+# from it can reach ATTRIBUTED — which is a fact about when it was produced,
+# not about the chapter.
+STAGE_A_QUOTED = (
+    REPO_ROOT / "traces" / "verbatim_rate" / "stage_a_ch02_verbatim.json"
+)
 OUT_DIR = REPO_ROOT / "traces" / "extraction_ch02"
 
 
-def main() -> int:
-    if not STAGE_A_CACHE.exists():
-        raise SystemExit(f"no cached Stage A run at {STAGE_A_CACHE}")
+def _load_stage_a(path: Path) -> StageAOutput:
+    """Accept either a bare StageAOutput or one wrapped with run metadata."""
+    blob = json.loads(path.read_text())
+    return StageAOutput(**blob.get("stage_a", blob))
 
-    stage_a = StageAOutput(**json.loads(STAGE_A_CACHE.read_text()))
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--stage-a",
+        type=Path,
+        default=STAGE_A_QUOTED if STAGE_A_QUOTED.exists() else STAGE_A_CACHE,
+        help="Stage A output to trace (defaults to the quoted run when present)",
+    )
+    args = ap.parse_args()
+
+    if not args.stage_a.exists():
+        raise SystemExit(f"no cached Stage A run at {args.stage_a}")
+
+    print(f"tracing {args.stage_a.relative_to(REPO_ROOT)}\n")
+    stage_a = _load_stage_a(args.stage_a)
     ks = load_knowledge_store(str(KB))
 
     stage_d = StageDConstructor(ks, ExtractionConfig())
@@ -99,6 +130,49 @@ def main() -> int:
     print("A rule reaches #19's ATTRIBUTED tier only with a quote that was")
     print("found in the source. Where the quote count is 0 the reason is now")
     print("visible in the artifact rather than absent from it.")
+
+    # ── the citation tier, over the rules that reached the store ──
+    print()
+    print("─" * 66)
+    print(f"citation tier over the {len(stored)} stored rule(s)")
+    print("─" * 66)
+    if not stored:
+        print("no stored rules — nothing to tier, and no tier figure below "
+              "would be a measurement")
+    else:
+        tiers = collections.Counter(
+            tier_for_citation(v).value for v in stored
+        )
+        for tier in CitationTier:
+            n = tiers.get(tier.value, 0)
+            print(f"  {tier.value:12s} {n:3d} / {len(stored)}"
+                  f"  ({100.0 * n / len(stored):5.1f}%)")
+
+        statuses = collections.Counter(status_of_rule(v).value for v in stored)
+        print()
+        print(f"  effective status: {dict(statuses)}")
+
+        dropped = [v for v in stored if should_drop_for_citation(v)]
+        print(f"  would be dropped: {len(dropped)} / {len(stored)}")
+        for v in dropped:
+            print(f"    - {v.id} {v.name}")
+
+    # The curated half, reported beside it. A tier run that silently ignored
+    # the shipped knowledge base would look identical to one that found it
+    # clean.
+    curated = [v for v in ks.vyaptis.values() if not v.augmentation_metadata]
+    print()
+    print(f"curated rules in the base KB: {len(curated)}")
+    if curated:
+        c_tiers = collections.Counter(
+            tier_for_citation(v).value for v in curated
+        )
+        c_drop = [v for v in curated if should_drop_for_citation(v)]
+        print(f"  tiers           : {dict(c_tiers)}")
+        print(f"  would be dropped: {len(c_drop)} / {len(curated)}")
+        print("  (a hand-authored rule cites literature rather than a located")
+        print("   span, so the citation axis does not bound it — see the tier")
+        print("   named `curated` rather than reusing `attributed`)")
 
     print()
     print(f"stage D trace      : {(OUT_DIR / 'stage_d_ch02.json').relative_to(REPO_ROOT)}")
