@@ -584,6 +584,10 @@ class StageAExtractor(dspy.Module):
                         paragraph_index=i,
                         quote=quote.strip(),
                         quote_found_in_source=found,
+                        # Carried, not just counted. Downstream the tier has
+                        # to tell a dropped asterisk from an invented
+                        # sentence, and the bool above cannot.
+                        quote_verdict=verdict,
                         confidence=0.5,
                     ),
                     related_existing_vyapti=rel if rel != "none" else None,

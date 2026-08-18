@@ -300,11 +300,26 @@ def test_the_generated_rule_is_still_reasoned_with():
 # extraction paths stamp at construction rather than relying on a later pass
 # that a caller can bypass (#51).
 
-def test_a_reviewer_approved_rule_carries_its_origin():
-    from anvikshiki_v4.extraction_hitl import HITLReviewer
-    from anvikshiki_v4.extraction_schema import ProposedVyapti
+def _approved_proposal(with_citation: bool):
+    """A reviewer-approved proposal, optionally carrying a verified span.
 
-    proposed = ProposedVyapti(
+    The citation argument exists so this file can keep testing the *origin*
+    axis in isolation. Once a citation ceiling joined the meet, a proposal
+    with no provenance was bounded by two things at once and a test asserting
+    "capped by review" was really asserting "capped by review or by the
+    missing citation, whichever bit first".
+    """
+    from anvikshiki_v4.extraction_schema import Provenance, ProposedVyapti
+
+    provenance = []
+    if with_citation:
+        provenance = [Provenance(
+            chapter_id="ch02",
+            quote="a span long enough to discriminate between chapters",
+            quote_found_in_source=True,
+        )]
+
+    return ProposedVyapti(
         id="V99",
         name="approved_rule",
         statement="p implies q",
@@ -315,7 +330,15 @@ def test_a_reviewer_approved_rule_carries_its_origin():
         evidence_type="theoretical",
         antecedents=["p"],
         consequent="q",
+        provenance=provenance,
+        provenance_attached=with_citation,
     )
+
+
+def test_a_reviewer_approved_rule_carries_its_origin():
+    from anvikshiki_v4.extraction_hitl import HITLReviewer
+
+    proposed = _approved_proposal(with_citation=True)
     vyapti = HITLReviewer._proposed_to_vyapti(proposed)
 
     assert vyapti is not None, (
@@ -328,8 +351,36 @@ def test_a_reviewer_approved_rule_carries_its_origin():
     )
     assert (vyapti.augmentation_metadata.origin
             is AugmentationOrigin.HITL_PROMOTED)
-    # Authored ESTABLISHED, capped by review.
+    # Authored ESTABLISHED, capped by review. Its span is verified, so the
+    # citation axis is uncapped here and review is the only binding constraint.
     assert status_of_rule(vyapti) is EpistemicStatus.HYPOTHESIS
+
+
+def test_an_approved_rule_with_no_citation_is_bounded_below_its_review():
+    """Review and citation are separate bounds and the meet takes the weaker.
+
+    A reviewer approving a rule says a human read it. It does not say anyone
+    checked where the claim came from, and an extracted rule that reached the
+    knowledge base with no provenance record has no citation to check. The
+    approval earns HYPOTHESIS on the origin axis; the missing record earns
+    PROVISIONAL on the citation axis; the rule gets PROVISIONAL.
+
+    This is the case the previous test used to cover by accident, before its
+    fixture carried a span — worth its own name now that the two bounds can
+    disagree.
+    """
+    from anvikshiki_v4.extraction_hitl import HITLReviewer
+
+    vyapti = HITLReviewer._proposed_to_vyapti(
+        _approved_proposal(with_citation=False)
+    )
+
+    assert vyapti is not None
+    assert vyapti.provenance == []
+    assert ceiling_for_origin(
+        vyapti.augmentation_metadata.origin
+    ) is EpistemicStatus.HYPOTHESIS
+    assert status_of_rule(vyapti) is EpistemicStatus.PROVISIONAL
 
 
 def test_no_extraction_path_builds_a_vyapti_without_an_origin():
