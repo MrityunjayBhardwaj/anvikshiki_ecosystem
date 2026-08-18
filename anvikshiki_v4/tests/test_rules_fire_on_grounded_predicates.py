@@ -216,6 +216,38 @@ def test_a_predicate_splits_into_a_name_and_a_binding(pred, name, entity):
     assert with_entity(name, entity) == pred
 
 
+@pytest.mark.parametrize("kb", [
+    "anvikshiki_v4/data/business_expert.yaml",
+    "anvikshiki_v4/data/sample_architecture.yaml",
+])
+def test_knowledge_bases_declare_bare_predicate_names(kb):
+    """The binding is supplied by the query, never written into the rule.
+
+    `with_entity` assumes the consequent it is given is a bare name. Handed a
+    consequent that already carries one it would produce `pricing_power(x)(f)`
+    — a predicate nothing can ever match, so the rule would fire and conclude
+    something unreachable rather than fail visibly.
+
+    No shipped base does this today. Asserted so that a base which starts
+    doing so breaks a law here rather than silently producing dead
+    conclusions, and with the rule set checked non-empty so the scan cannot
+    pass by reading nothing.
+    """
+    store = load_knowledge_store(kb)
+    assert store.vyaptis, f"{kb} declares no rules — this law read nothing"
+
+    offenders = [
+        (vid, p)
+        for vid, v in store.vyaptis.items()
+        for p in [v.consequent, *v.antecedents, *v.scope_exclusions]
+        if "(" in p
+    ]
+    assert not offenders, (
+        f"{kb} writes a binding into the rule itself: {offenders}. "
+        "Entities come from the query; see #81."
+    )
+
+
 def test_scope_exclusions_are_still_entity_blind(ks):
     """Pins a blind spot this change *activates*, so it fails when closed.
 
