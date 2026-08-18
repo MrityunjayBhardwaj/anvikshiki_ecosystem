@@ -71,6 +71,15 @@ class ArgumentNode(BaseModel):
     tag: ProvenanceTag
     premises: list[str]
     vyapti_id: str | None = None
+    # Which bounds are holding this argument's status down — `authored`,
+    # `origin`, `citation`, `asserted`, or `sub:<argument id>` when a
+    # sub-argument is the weakest link. None means the argument did not
+    # record it; that is not the same as nothing constraining it, and the
+    # panel must not render the two alike.
+    status_bound_by: list[str] | None = None
+    # The rule's two provenance axes. None when the argument has no top rule.
+    origin: str | None = None
+    citation_tier: str | None = None
 
 
 class AttackEdge(BaseModel):

@@ -14,7 +14,7 @@ from typing import Optional
 from .schema_v4 import (
     Argument, Attack, Label, ProvenanceTag, EpistemicStatus
 )
-from .lattice import join, rank
+from .lattice import BOUND_ASSERTED, join, rank
 
 
 @dataclass
@@ -419,6 +419,9 @@ class ArgumentationFramework:
             id=arg_id,
             conclusion=conclusion,
             top_rule=None,
+            # A user-supplied contestation. Its status is the explicit
+            # default above, not a bound derived from any rule.
+            status_bound_by=(BOUND_ASSERTED,),
             premises=frozenset([conclusion]),
             is_strict=False,
             tag=tag,

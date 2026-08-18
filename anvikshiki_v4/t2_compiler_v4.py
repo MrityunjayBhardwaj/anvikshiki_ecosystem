@@ -13,7 +13,13 @@ from .schema import KnowledgeStore, CausalStatus
 from .schema_v4 import (
     Argument, Attack, ProvenanceTag, PramanaType, EpistemicStatus
 )
-from .lattice import meet, rank, status_of_rule
+from .lattice import (
+    BOUND_ASSERTED,
+    meet,
+    rank,
+    status_breakdown,
+    status_of_rule,
+)
 from .argumentation import ArgumentationFramework
 from .engine_params import CompilerParams, DEFAULT_PARAMS
 from .predicate_contrariness import (
@@ -157,6 +163,9 @@ def compile_t2(
             id=arg_id,
             conclusion=fact["predicate"],
             top_rule=None,
+            # An asserted fact. No rule bounds it, so naming one would
+            # attribute the constraint to a rule that does not exist.
+            status_bound_by=(BOUND_ASSERTED,),
             premises=frozenset([fact["predicate"]]),
             is_strict=True,
             tag=tag,
@@ -307,10 +316,21 @@ def _derive_rule_arguments(
             # The rule's own status is already capped by its origin, so a
             # derivation through a generated rule cannot exceed that rule's
             # ceiling however strong its premises are.
-            combined_status = meet(
-                [status_of_rule(v)]
-                + [sub_arg.status for sub_arg in combo]
-            )
+            breakdown = status_breakdown(v)
+            sub_statuses = [sub_arg.status for sub_arg in combo]
+            combined_status = meet([breakdown.effective] + sub_statuses)
+
+            # What is actually holding this argument down. The rule's own
+            # bounds only explain it while the rule is the weakest link; once
+            # a sub-argument is weaker, naming a rule bound would point a
+            # reader at something whose removal would change nothing.
+            if any(rank(st) < rank(breakdown.effective) for st in sub_statuses):
+                bound_by = tuple(
+                    f"sub:{sub_arg.id}" for sub_arg in combo
+                    if rank(sub_arg.status) == rank(combined_status)
+                )
+            else:
+                bound_by = breakdown.binding
 
             arg_id = af.next_arg_id()
             af.add_argument(Argument(
@@ -328,6 +348,16 @@ def _derive_rule_arguments(
                 is_strict=is_strict,
                 tag=combined_tag,
                 status=combined_status,
+                status_bound_by=bound_by,
+                # Absent metadata *is* the curated case — the same reading
+                # `ceiling_for_origin` gives it. Sent as the word rather than
+                # as null so the panel can tell a curated rule from an
+                # argument that has no rule at all; both would otherwise
+                # arrive as None and render alike.
+                origin=(
+                    breakdown.origin.value if breakdown.origin else "curated"
+                ),
+                citation_tier=breakdown.citation_tier.value,
             ))
 
 
@@ -397,6 +427,7 @@ def _derive_attacks(
                 id=scope_arg_id,
                 conclusion=target_conclusion,
                 top_rule=None,
+                status_bound_by=(BOUND_ASSERTED,),
                 premises=frozenset([excl]),
                 is_strict=True,
                 tag=ProvenanceTag(
@@ -429,6 +460,7 @@ def _derive_attacks(
             id=decay_arg_id,
             conclusion=stale_conclusion,
             top_rule=None,
+            status_bound_by=(BOUND_ASSERTED,),
             premises=frozenset(["_temporal_decay"]),
             is_strict=True,
             tag=ProvenanceTag(

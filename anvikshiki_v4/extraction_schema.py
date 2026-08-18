@@ -121,6 +121,26 @@ class Provenance(BaseModel):
             "direction that flatters us."
         ),
     )
+    quote_verdict: str = Field(
+        default="",
+        description=(
+            "Why the quote did not match, verbatim, at the moment it was "
+            "captured — `absent`, `punctuation`, `markup`, `punctuation and "
+            "markup`, `too short to discriminate` — or empty when it matched "
+            "or when nobody recorded a reason.\n\n"
+            "`quote_found_in_source` cannot carry this. It is a bool, so a "
+            "model that dropped a pair of markdown asterisks and a model that "
+            "invented a sentence both arrive as False — and the citation tier "
+            "reads False as grounds to delete the rule. On the first real "
+            "chapter that collapse would have deleted its central claim, "
+            "which is why the verdict travels with the record instead of "
+            "being computed, used once and discarded.\n\n"
+            "Empty on a record written before this field existed. That is "
+            "read as *unknown*, never as clean: without a reason, a False "
+            "flag cannot be told from fabrication, and the tier that "
+            "authorises deletion must not fire on an absence."
+        ),
+    )
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
     @field_validator("content_sha256")

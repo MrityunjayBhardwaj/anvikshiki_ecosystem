@@ -33,6 +33,41 @@ const PRAMANA_COLOR: Record<string, string> = {
   UPAMANA: "var(--pramana-upamana)",
 };
 
+// The two provenance axes, as they are named to a reader. The citation tier
+// `curated` is deliberately distinct from `attributed`: both leave the status
+// uncapped, but only one of them means a span was checked against a source,
+// and showing a hand-authored rule as "attributed" would claim a verification
+// nobody performed.
+const CITATION_LABEL: Record<string, string> = {
+  attributed: "span verified",
+  exists: "source reachable",
+  unresolved: "unverified",
+  fabricated: "span not found",
+  curated: "hand-authored",
+};
+
+const ORIGIN_LABEL: Record<string, string> = {
+  curated: "hand-authored",
+  guide_extracted: "extracted from a guide",
+  hitl_promoted: "reviewer-approved",
+  web_sourced: "retrieved from the web",
+  llm_parametric: "model's own knowledge",
+};
+
+const BOUND_LABEL: Record<string, string> = {
+  authored: "as authored",
+  origin: "how it was produced",
+  citation: "how well it is cited",
+  asserted: "asserted premise",
+};
+
+function describeBound(bound: string): string {
+  if (bound.startsWith("sub:")) {
+    return `a weaker step (${bound.slice(4)})`;
+  }
+  return BOUND_LABEL[bound] ?? bound;
+}
+
 const STATUS_COLOR: Record<string, string> = {
   established: "var(--established)",
   hypothesis: "var(--hypothesis)",
@@ -80,6 +115,7 @@ export function ProvenanceTable() {
               <TableHead className="text-[10px] w-10">Pramāṇa</TableHead>
               <TableHead className="text-[10px] w-16">Label</TableHead>
               <TableHead className="text-[10px] w-24">Status</TableHead>
+              <TableHead className="text-[10px] w-28">Bounded by</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -152,6 +188,82 @@ export function ProvenanceTable() {
                     <div className="font-mono text-[10px] uppercase text-muted-foreground">
                       {arg.epistemic_status ?? "—"}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {/*
+                      Three states, not two. An empty list would say "nothing
+                      constrains this"; null says the argument never recorded
+                      what does. Rendering them alike is the failure this
+                      column exists to avoid — a ceiling shown with no
+                      explanation reads as an unbounded status.
+                    */}
+                    {arg.status_bound_by == null ? (
+                      <span className="text-[10px] text-muted-foreground italic">
+                        not recorded
+                      </span>
+                    ) : arg.status_bound_by.length === 0 ? (
+                      <span className="text-[10px] text-muted-foreground">
+                        unbounded
+                      </span>
+                    ) : (
+                      <Tooltip>
+                        <TooltipTrigger className="text-left">
+                          <div className="flex flex-wrap gap-1">
+                            {arg.status_bound_by.map((bound) => (
+                              <Badge
+                                key={bound}
+                                variant="secondary"
+                                className="text-[9px] font-normal px-1 py-0"
+                              >
+                                {describeBound(bound)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-xs space-y-1">
+                          <p className="font-medium">
+                            Why this is {arg.status}
+                          </p>
+                          {/*
+                            Plural on purpose. Bounds tie routinely, and
+                            saying "the" constraint would imply that lifting
+                            the named one would raise the status — which is
+                            false whenever another sits at the same rank.
+                          */}
+                          <p>
+                            {arg.status_bound_by.length > 1
+                              ? "Several bounds sit at this level, so lifting any one of them alone would not raise it:"
+                              : "Bounded by:"}
+                          </p>
+                          <ul className="list-disc pl-4">
+                            {arg.status_bound_by.map((bound) => (
+                              <li key={bound}>{describeBound(bound)}</li>
+                            ))}
+                          </ul>
+                          <div className="pt-1 border-t text-[10px] text-muted-foreground space-y-0.5">
+                            {/*
+                              Absent for an argument with no top rule. An
+                              asserted premise has no origin and makes no
+                              citation claim, and showing it a tier would
+                              invent provenance for it.
+                            */}
+                            <p>
+                              origin:{" "}
+                              {arg.origin
+                                ? ORIGIN_LABEL[arg.origin] ?? arg.origin
+                                : "no rule — asserted"}
+                            </p>
+                            <p>
+                              citation:{" "}
+                              {arg.citation_tier
+                                ? CITATION_LABEL[arg.citation_tier] ??
+                                  arg.citation_tier
+                                : "no rule — asserted"}
+                            </p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </TableCell>
                 </TableRow>
               );

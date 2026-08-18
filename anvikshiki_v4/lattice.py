@@ -29,14 +29,17 @@ The laws this is built to satisfy are stated in
 `anvikshiki_v4/tests/test_algebra_laws.py`.
 """
 
+from dataclasses import dataclass
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from .schema import AugmentationOrigin
 from .schema import EpistemicStatus as KBEpistemicStatus
 from .schema_v4 import EpistemicStatus
+from .span_verification import is_discriminating
 
 if TYPE_CHECKING:
-    from .schema import Vyapti
+    from .schema import Provenance, Vyapti
 
 # Weakest first. Index in this tuple is the element's rank in L.
 STATUS_ORDER: tuple[EpistemicStatus, ...] = (
@@ -85,6 +88,55 @@ _ORIGIN_CEILING = {
     AugmentationOrigin.WEB_SOURCED: EpistemicStatus.PROVISIONAL,
     # The model's own parametric knowledge, with nothing behind it.
     AugmentationOrigin.LLM_PARAMETRIC: EpistemicStatus.PROVISIONAL,
+}
+
+
+class CitationTier(str, Enum):
+    """How well a rule's citation has been checked.
+
+    Not a quality judgement about the claim — a statement about what we have
+    verified regarding where it came from. A true claim badly cited and a
+    false claim well cited both exist, and this axis only sees the citation.
+    """
+
+    ATTRIBUTED = "attributed"
+    EXISTS = "exists"
+    UNRESOLVED = "unresolved"
+    FABRICATED = "fabricated"
+    # Hand-authored: this rule makes no located-span claim, so the axis does
+    # not apply to it. A separate value rather than reusing ATTRIBUTED,
+    # because the tier is shown to a reader — calling a curated rule
+    # "attributed" would assert a verification that never happened, in order
+    # to obtain a ceiling that is correct for an entirely different reason.
+    CURATED = "curated"
+
+
+# The highest status a rule may reach, given how well its citation checks out.
+#
+# Same discipline as `_ORIGIN_CEILING`: every tier mapped explicitly, an
+# unmapped one raises. These are ceilings, so a rule already weaker stays
+# weaker — the tier never promotes anything.
+_CITATION_CEILING = {
+    # The locator points somewhere we can reach and the claim's span was
+    # found in it. This is the only tier that has checked the words.
+    CitationTier.ATTRIBUTED: EpistemicStatus.ESTABLISHED,
+    # A source we can reach, with nothing checked inside it. The document is
+    # real; whether it says this is unknown.
+    CitationTier.EXISTS: EpistemicStatus.HYPOTHESIS,
+    # A citation that is a bare string, or a locator nothing can currently
+    # resolve. Both mean the same thing operationally — we cannot get to the
+    # source — and neither is evidence against the rule.
+    CitationTier.UNRESOLVED: EpistemicStatus.PROVISIONAL,
+    # We looked at the source and the words were not there. The bottom of L
+    # rather than a drop: CONTESTED is the positive claim that something was
+    # argued and defeated, which is exactly what a checked-and-missing span
+    # establishes. Dropping is a separate decision a caller makes; see
+    # `should_drop_for_citation`.
+    CitationTier.FABRICATED: EpistemicStatus.CONTESTED,
+    # No cap. The rule cites literature rather than a span, so this axis has
+    # nothing to say about it and must not lower it — the origin ceiling is
+    # what governs a curated rule.
+    CitationTier.CURATED: EpistemicStatus.ESTABLISHED,
 }
 
 
@@ -162,10 +214,227 @@ def ceiling_for_origin(
         ) from None
 
 
-def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
-    """A rule's effective status: what it was authored as, capped by origin.
+def _record_is_reachable(record: "Provenance") -> bool | None:
+    """Whether this record's source can be reached. Three states.
 
-    ⋀( from_kb(vyapti.epistemic_status), ceiling_for_origin(origin) )
+    True  — there is a locator and something can resolve it.
+    False — there is a locator and it demonstrably does not resolve.
+    None  — **we have no resolver**, so the question was never asked.
+
+    The third state is the whole reason this is not a bool. Identifier
+    resolution is not built yet, so today the honest answer for every record
+    carrying a locator is None: not "the source is unreachable", but "nobody
+    looked". Collapsing None into False would read our own missing machinery
+    as evidence against every source in the knowledge base — and because the
+    unreachable tier is the one that justifies dropping a rule, that
+    collapse would delete the entire KB on the strength of a component we
+    have not written yet.
+
+    So None maps to UNRESOLVED, never FABRICATED, and this function returns
+    None until a resolver exists to return anything else.
+    """
+    # Unconditional today, and written as one line so it does not read as a
+    # resolver that happens to be failing. Two branches both returning None
+    # would look like logic and be none: the honest statement is that this
+    # question cannot be asked yet, for any record. When identifier
+    # resolution lands it answers here, and only here.
+    return None
+
+
+def tier_for_citation(vyapti: "Vyapti") -> CitationTier:
+    """How well this rule's citation has been checked.
+
+    Read off the provenance records, taking the **best** record: a rule with
+    one verified span and one bare string is better cited than a rule with
+    only the bare string, and the ceiling should reflect its strongest
+    support rather than its weakest. That is the opposite discipline to
+    `meet` further up, and deliberately so — chaining through a weak step
+    genuinely weakens a conclusion, while citing an extra weak source
+    alongside a strong one does not weaken the strong one.
+
+    **A hand-authored rule is exempt, and this is the load-bearing case.**
+    `Vyapti.provenance` is empty on curated rules *by design* — the schema
+    says so where the field is defined: they cite literature rather than a
+    located span, and `augmentation_metadata` is what tells the two apart.
+    Tiering that absence UNRESOLVED would read a deliberate design decision
+    as an unverified citation and cap the entire shipped knowledge base at
+    PROVISIONAL — on the strength of an identifier resolver that does not
+    exist yet. Two tests already existed to catch precisely that demotion.
+
+    So the citation axis only bounds rules that were *supposed* to carry a
+    record: extracted ones, whose citations are machine-produced and
+    therefore both checkable and fakeable. Absent metadata means curated,
+    exactly as `ceiling_for_origin` reads it.
+
+    An extracted rule with no records is still UNRESOLVED, not FABRICATED.
+    Never checked is not the same as checked and found wanting.
+    """
+    if vyapti.augmentation_metadata is None:
+        return CitationTier.CURATED
+
+    if not vyapti.provenance:
+        return CitationTier.UNRESOLVED
+
+    tiers = [_tier_for_record(record) for record in vyapti.provenance]
+    # Best record wins, by ceiling strength.
+    return max(tiers, key=lambda t: rank(_CITATION_CEILING[t]))
+
+
+def _tier_for_record(record: "Provenance") -> CitationTier:
+    """One provenance record's tier."""
+    checked = record.quote_found_in_source
+
+    # Checked, and the words were genuinely not there. The only fabrication
+    # evidence this system actually has — and note it comes from the span
+    # check at capture time, not from identifier resolution. #19 defines
+    # FABRICATED as "identifier does not resolve", which is unreachable while
+    # no resolver exists; wiring it that way would have made every rule
+    # fabricated.
+    #
+    # Read from the verdict, never from the bool alone. A quote that matches
+    # once markdown emphasis is stripped is not verbatim, so the bool is
+    # False — the same False an invented sentence produces. Deciding deletion
+    # on that collapse deleted the central claim of the first real chapter
+    # traced, for a pair of asterisks the model did not reproduce.
+    if checked is False:
+        if record.quote_verdict == "absent":
+            return CitationTier.FABRICATED
+        if record.quote_verdict == "markup":
+            # The words are identical; only markdown emphasis differs. That
+            # is source *formatting*, on the same footing as the line
+            # wrapping already normalised away — the model quoted prose out
+            # of a marked-up document and did not reproduce the asterisks.
+            # Treated as found, so it can reach ATTRIBUTED below.
+            checked = True
+        else:
+            # Everything else that failed the strict check: a punctuation
+            # substitution is a changed character in the content rather than
+            # formatting around it, and no run has yet produced one to reason
+            # from. An old record carries no verdict at all. Neither is
+            # evidence against the source, and neither is evidence for it.
+            return CitationTier.UNRESOLVED
+
+    reachable = _record_is_reachable(record)
+    if reachable is False:
+        return CitationTier.UNRESOLVED
+
+    # Checked and found — but a span too short to discriminate proves nothing
+    # about whether the source says this, so it does not earn the tier that
+    # means "we read the words there".
+    if checked is True and is_discriminating(record.quote):
+        return CitationTier.ATTRIBUTED
+
+    # A locator we could reach but nothing checked inside it. Only claimable
+    # once resolution exists; until then `reachable` is None and this falls
+    # through to UNRESOLVED, which is the honest answer.
+    if reachable is True:
+        return CitationTier.EXISTS
+
+    return CitationTier.UNRESOLVED
+
+
+def ceiling_for_citation(vyapti: "Vyapti") -> EpistemicStatus:
+    """The highest status this rule may reach, given its citation tier."""
+    tier = tier_for_citation(vyapti)
+    try:
+        return _CITATION_CEILING[tier]
+    except KeyError:
+        raise ValueError(
+            f"citation tier {tier!r} has no ceiling in the lattice. Add one "
+            f"explicitly rather than letting it default: a tier with no "
+            f"ceiling is an unchecked citation with no bound. Known tiers "
+            f"are {sorted(t.value for t in _CITATION_CEILING)}"
+        ) from None
+
+
+def should_drop_for_citation(vyapti: "Vyapti") -> bool:
+    """Whether this rule's citation is bad enough to remove it entirely.
+
+    Kept apart from the ceiling on purpose. A ceiling is total — it returns a
+    status for every rule — and a function that could instead delete its
+    argument is not. Making the drop a separate, explicit decision also means
+    a caller has to opt into deletion rather than receiving it as a side
+    effect of asking what a rule's status is.
+
+    True only for FABRICATED: a span that was checked against its source and
+    was not there. Never for a rule nobody has checked.
+    """
+    return tier_for_citation(vyapti) is CitationTier.FABRICATED
+
+
+
+# The names a status bound can have. Strings rather than an enum because they
+# travel to the API and into a rendered panel, and because the set is closed
+# and small enough that an enum would buy nothing at the boundary.
+BOUND_AUTHORED = "authored"
+BOUND_ORIGIN = "origin"
+BOUND_CITATION = "citation"
+# Not derived from a rule at all: an asserted fact, a scope exclusion, a decay
+# marker. Three of the four argument construction sites pass `top_rule=None`,
+# and giving them one of the rule bounds above would attribute a constraint to
+# a rule that does not exist.
+BOUND_ASSERTED = "asserted"
+
+
+@dataclass(frozen=True)
+class StatusBreakdown:
+    """Why a rule's status is where it is — the inputs, not just the answer.
+
+    `status_of_rule` returns a meet and throws its arguments away. A reader
+    asking "why is this only PROVISIONAL?" cannot answer it from the result,
+    and that question is the whole point of showing provenance: a ceiling
+    enforced internally and invisible externally is a guarantee nobody
+    benefits from.
+
+    `binding` is a **tuple, not a single name**. Bounds tie routinely — an
+    extracted rule authored as a working hypothesis has authored and origin
+    both at HYPOTHESIS — and reporting one of them as *the* constraint would
+    be a claim the lattice does not make. Removing the named bound would not
+    raise the status if another sits at the same rank, so naming one is
+    actively misleading about what would change if it were lifted.
+    """
+
+    authored: EpistemicStatus
+    origin_ceiling: EpistemicStatus
+    citation_ceiling: EpistemicStatus
+    citation_tier: CitationTier
+    origin: "AugmentationOrigin | None"
+    effective: EpistemicStatus
+    binding: tuple[str, ...]
+
+
+def status_breakdown(vyapti: "Vyapti") -> StatusBreakdown:
+    """The three bounds on a rule, the result, and which bounds are binding."""
+    origin = None
+    if vyapti.augmentation_metadata is not None:
+        origin = vyapti.augmentation_metadata.origin
+
+    bounds = {
+        BOUND_AUTHORED: from_kb(vyapti.epistemic_status),
+        BOUND_ORIGIN: ceiling_for_origin(origin),
+        BOUND_CITATION: ceiling_for_citation(vyapti),
+    }
+    effective = meet(bounds.values())
+
+    return StatusBreakdown(
+        authored=bounds[BOUND_AUTHORED],
+        origin_ceiling=bounds[BOUND_ORIGIN],
+        citation_ceiling=bounds[BOUND_CITATION],
+        citation_tier=tier_for_citation(vyapti),
+        origin=origin,
+        effective=effective,
+        # Every bound sitting at the minimum, in a stable order. Ties are the
+        # normal case, not an edge one.
+        binding=tuple(
+            name for name in (BOUND_AUTHORED, BOUND_ORIGIN, BOUND_CITATION)
+            if bounds[name] is effective
+        ),
+    )
+
+def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
+    """A rule's effective status: authored, capped by origin and by citation.
+
+    ⋀( from_kb(status), ceiling_for_origin(origin), ceiling_for_citation() )
 
     This is the bound that makes the guarantee hold on the *output* rather
     than on an input. The numeric confidence cap it replaces constrained one
@@ -174,8 +443,20 @@ def status_of_rule(vyapti: "Vyapti") -> EpistemicStatus:
     arithmetic landed above the cutoff — and two capped derivations combining
     by noisy-or reached 0.94. A cap on an input to a non-monotone pipeline is
     not a guarantee on its output; a meet in a lattice is.
+
+    The citation ceiling joins on the same terms — a third bound inside one
+    meet rather than a second pass, because the guarantee wanted is "the
+    weakest of everything we know about this rule", and adding a bound must
+    not depend on a caller remembering to apply it.
+
+    Note what this does to a hand-authored knowledge base: its rules cite
+    bare strings, so they tier UNRESOLVED and cap at PROVISIONAL however they
+    were authored. That is the intended reading — status becomes computed
+    from what has been verified rather than asserted, and rises on its own as
+    sources are checked.
     """
-    origin = None
-    if vyapti.augmentation_metadata is not None:
-        origin = vyapti.augmentation_metadata.origin
-    return meet([from_kb(vyapti.epistemic_status), ceiling_for_origin(origin)])
+    # Delegated rather than recomputed. The panel shows the breakdown and the
+    # engine enforces this number, and two independent meets over the same
+    # three bounds would eventually disagree — at which point the displayed
+    # explanation would be of a status the system did not actually apply.
+    return status_breakdown(vyapti).effective
