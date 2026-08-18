@@ -40,12 +40,15 @@ from anvikshiki_v4.span_verification import (
     is_discriminating,
     normalise_whitespace,
     quote_appears_in,
+    strip_markup,
 )
 
 SOURCE = (
     "### Growth and unit economics\n"
     "A startup's growth rate -- however fast -- cannot fix negative unit\n"
     "economics. Growth multiplies whatever unit economics you already have.\n"
+    "**The fundamental inequality:** viability holds if and only if "
+    "**LTV > CAC** at the unit level.\n"
 )
 
 
@@ -110,9 +113,16 @@ def test_an_empty_quote_is_not_found_rather_than_an_error():
     ("A startup’s growth rate — however fast — cannot fix negative unit "
      "economics.", "punctuation"),
     ("economics.", "too short to discriminate"),
+    ("viability holds if and only if LTV > CAC at the unit level.", "markup"),
+    ("The fundamental inequality: viability holds if and only if LTV > CAC",
+     "markup"),
+    ("A startup’s growth rate — however fast — cannot fix negative unit "
+     "economics. Growth multiplies whatever unit economics you already have. "
+     "The fundamental inequality: viability holds if and only if LTV > CAC",
+     "punctuation and markup"),
 ])
 def test_every_diagnosis_is_reachable(quote, expected):
-    """All five verdicts, each reached by an input.
+    """All seven verdicts, each reached by an input.
 
     A category the code can produce but no input reaches is a claim about
     behaviour that nothing verifies — and `punctuation` in particular was
@@ -120,6 +130,43 @@ def test_every_diagnosis_is_reachable(quote, expected):
     could not match a source written with two.
     """
     assert diagnose(quote, SOURCE) == expected
+
+
+def test_dropped_markdown_emphasis_is_not_counted_as_fabrication():
+    """The case that made this category necessary, from the real chapter.
+
+    ch02 reads `if and only if **LTV > CAC**` and GLM-5 quoted the prose
+    without the asterisks. Every word matches; only the markup differs. With
+    no `markup` verdict that quote scored `absent` — the category described in
+    the report as "the words are not in the section at all", i.e. the
+    fabrication number. One formatting artefact was 4.2% of a rate nobody
+    would have read as formatting.
+    """
+    quote = "viability holds if and only if LTV > CAC at the unit level."
+
+    assert quote not in SOURCE            # still not verbatim, and still refused
+    assert quote_appears_in(quote, SOURCE) is False
+    assert diagnose(quote, SOURCE) == "markup"
+    assert diagnose(quote, SOURCE) != "absent"
+
+
+def test_stripping_markup_does_not_excuse_a_changed_word():
+    """The same guard `punctuation` has. Generous about markers, never about
+    words — otherwise every added category is a hole in the fabrication
+    number rather than a correction to it."""
+    assert diagnose(
+        "viability holds if and only if LTV < CAC at the unit level.", SOURCE
+    ) == "absent"
+
+
+def test_underscores_survive_stripping_because_predicates_contain_them():
+    """`_italic_` is real markdown, but this domain's predicates are
+    snake_case and a quote is likelier to contain `not_value_creation` than
+    an underscore-italicised phrase. Stripping them would mangle the
+    identifier and do it in the direction that hides a miss."""
+    assert strip_markup("**not_value_creation**") == "not_value_creation"
+    assert strip_markup("`ltv_cac_ratio`") == "ltv_cac_ratio"
+    assert strip_markup("_emphasised_") == "_emphasised_"
 
 
 def test_the_punctuation_verdict_does_not_swallow_a_real_difference():
@@ -255,6 +302,114 @@ def test_the_three_outcomes_are_never_the_same_counter():
         o.candidates[0].provenance.quote_found_in_source
         for o in (verbatim, absent, missing)
     ] == [True, False, None]
+
+
+class _StubMultiPredictor:
+    """Returns several predicates with whatever parallel lists it is given.
+
+    The single-predicate stub above cannot reach the zip at all: with one
+    predicate, a short list and a complete one are the same list.
+    """
+
+    def __init__(self, predicates, quotes):
+        self.predicates = predicates
+        self.quotes = quotes
+        self.history = []
+
+    def __call__(self, **kwargs):
+        self.history.append({"response": SimpleNamespace(
+            choices=[SimpleNamespace(finish_reason="stop")])})
+        return SimpleNamespace(
+            predicates=list(self.predicates),
+            descriptions=[f"paraphrase of {p}" for p in self.predicates],
+            quotes=list(self.quotes),
+            claim_types=["causal"] * len(self.predicates),
+            related_vyaptis=["none"] * len(self.predicates),
+        )
+
+
+def _run_many(predicates, quotes) -> StageAOutput:
+    from anvikshiki_v4.predicate_extraction import StageAExtractor
+
+    stage = StageAExtractor(
+        KnowledgeStore(domain_type=DomainType.CRAFT), ExtractionConfig()
+    )
+    stage.extractor = _StubMultiPredictor(predicates, quotes)
+    return stage(chapter_text=_SECTION, chapter_id="ch02")
+
+
+_REAL = "A startup's growth rate cannot fix negative unit economics"
+
+
+def test_a_short_quotes_list_is_not_counted_as_the_model_declining_to_cite():
+    """Our zip running out and the model answering "no quote" both arrive as
+    `""`. Only the second is a fact about the model, and the verbatim rate is
+    unreadable while they share a counter."""
+    out = _run_many(["pred_a", "pred_b", "pred_c"], [_REAL])
+
+    assert len(out.candidates) == 3
+    assert out.unquoted_by_short_list == 2
+    assert out.quoteless_candidates == 0
+    assert all("short quotes list" in f for f in out.quote_failures)
+    assert "1 quote(s) for 3 predicate(s)" in out.quote_failures[0]
+
+
+def test_an_offered_empty_quote_is_still_the_models_own_silence():
+    """The other side of the same split: a list long enough, holding "". That
+    is the model declining, and it must not be attributed to our zip."""
+    out = _run_many(["pred_a", "pred_b"], [_REAL, ""])
+
+    assert out.quoteless_candidates == 1
+    assert out.unquoted_by_short_list == 0
+    assert out.quote_failures == []
+
+
+def test_the_two_reasons_partition_the_empty_quotes():
+    """They must sum to the number of empty quotes, or the split is not a
+    split. The measurement script asserts this on the page too — a breakdown
+    that disagrees with the total it breaks down is worse than none."""
+    out = _run_many(["a", "b", "c", "d"], [_REAL, ""])
+
+    empty = sum(1 for c in out.candidates if not c.provenance.quote)
+    assert empty == 3
+    assert out.quoteless_candidates == 1
+    assert out.unquoted_by_short_list == 2
+    assert out.quoteless_candidates + out.unquoted_by_short_list == empty
+
+
+def test_a_run_predating_the_short_list_counter_reads_as_unmeasured():
+    """Same trap as `quoteless_candidates`, one field later: a new counter
+    defaulting to 0 claims a measurement on every record written before it
+    existed. `quotes_checked` is what makes the zero readable."""
+    stale = StageAOutput(chapter_id="ch02", section_count=1)
+    assert stale.unquoted_by_short_list == 0
+    assert stale.quotes_checked is False
+
+
+def test_a_shifted_middle_element_is_still_undetected():
+    """The limit of this fix, asserted rather than described.
+
+    Dropping a quote from the *middle* leaves the lists a valid length apart
+    at the end only — every quote after the gap silently moves onto the wrong
+    predicate. The one that lands on the last predicate is a real span from
+    this section, so it passes the verbatim check while citing a claim it does
+    not support. Nothing here catches that, and this test fails the day
+    something does.
+    """
+    second = "this section runs past twenty words so the extractor does not skip it"
+    assert second in _SECTION  # both are real spans; that is the problem
+
+    out = _run_many(["pred_a", "pred_b"], [second])
+
+    # `pred_a` is now credited with `pred_b`'s quote, verbatim and verified.
+    assert out.candidates[0].name == "pred_a"
+    assert out.candidates[0].provenance.quote == second
+    assert out.candidates[0].provenance.quote_found_in_source is True
+
+    # And the only thing flagged is the padding at the end, which is the
+    # symptom furthest from the actual mistake.
+    assert out.unquoted_by_short_list == 1
+    assert out.unverified_quote_candidates == 0
 
 
 def test_a_punctuation_miss_is_recorded_as_such_not_as_absent():

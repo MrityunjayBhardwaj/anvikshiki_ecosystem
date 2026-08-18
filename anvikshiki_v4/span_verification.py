@@ -43,6 +43,17 @@ import re
 _WHITESPACE = re.compile(r"\s+")
 _HYPHEN_RUN = re.compile(r"-{2,}")
 
+# Markdown emphasis, which a model quoting prose drops as a matter of course:
+# the source reads `if and only if **LTV > CAC**` and the quote comes back
+# without the asterisks. Nothing about the words differs.
+#
+# Underscores are deliberately absent. `_italic_` is valid markdown, but this
+# corpus writes emphasis with asterisks and its predicates are snake_case —
+# `not_value_creation`, `ltv_cac_ratio_exceeds_one` — so stripping `_` would
+# mangle the very identifiers a quote is most likely to contain, and would do
+# it in the direction that hides a real miss.
+_MARKUP = re.compile(r"\*{1,3}|`")
+
 # Typographic characters a model may substitute for their ASCII originals.
 # Used only to explain a miss, never to accept one.
 _PUNCTUATION_FOLD = {
@@ -84,6 +95,18 @@ def fold_punctuation(text: str) -> str:
     return _HYPHEN_RUN.sub("-", text)
 
 
+def strip_markup(text: str) -> str:
+    """Remove markdown emphasis markers.
+
+    Diagnostic only, exactly like `fold_punctuation`: nothing decides a match
+    on the stripped form. A quote whose sole difference from the source is a
+    pair of dropped asterisks is not verbatim and is not accepted — but it is
+    also not an invented sentence, and calling it `absent` puts a formatting
+    artefact into the fabrication number.
+    """
+    return _MARKUP.sub("", text)
+
+
 def quote_appears_in(quote: str, source: str) -> bool:
     """Whether `quote` occurs verbatim in `source`, whitespace aside.
 
@@ -119,11 +142,24 @@ def diagnose(quote: str, source: str) -> str:
       `punctuation`                — matches once typographic characters are
                                      folded to ASCII. A rendering artefact, not
                                      an invention.
+      `markup`                     — matches once markdown emphasis is
+                                     stripped. The model quoted prose out of a
+                                     formatted source and dropped the
+                                     asterisks, which every model does.
+      `punctuation and markup`     — both of the above at once, named rather
+                                     than attributed to whichever check ran
+                                     first.
       `too short to discriminate`  — found, but so short that finding it says
                                      nothing. Reported rather than silently
                                      accepted.
       `empty`                      — the model returned no quote for this
                                      predicate.
+
+    The categories are checked from most specific difference to least, and
+    `absent` is what is left when none of them explains the miss. That
+    ordering is the point: every category added here is a category subtracted
+    from the fabrication number, and the fabrication number is the one a
+    reader will quote.
     """
     if not quote.strip():
         return "empty"
@@ -131,9 +167,18 @@ def diagnose(quote: str, source: str) -> str:
     if quote_appears_in(quote, source):
         return "" if is_discriminating(quote) else "too short to discriminate"
 
-    if normalise_whitespace(fold_punctuation(quote)) in normalise_whitespace(
-        fold_punctuation(source)
-    ):
+    def within(transform) -> bool:
+        return normalise_whitespace(transform(quote)) in normalise_whitespace(
+            transform(source)
+        )
+
+    if within(fold_punctuation):
         return "punctuation"
+
+    if within(strip_markup):
+        return "markup"
+
+    if within(lambda t: strip_markup(fold_punctuation(t))):
+        return "punctuation and markup"
 
     return "absent"

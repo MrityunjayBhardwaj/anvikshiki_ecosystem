@@ -464,6 +464,7 @@ class StageAExtractor(dspy.Module):
         truncated_sections = 0
         truncations: list[str] = []
         quoteless_candidates = 0
+        unquoted_by_short_list = 0
         unverified_quote_candidates = 0
         quote_failures: list[str] = []
         # True only while every response so far could be checked. One
@@ -530,7 +531,13 @@ class StageAExtractor(dspy.Module):
                 desc = descriptions[j] if j < len(descriptions) else ""
                 ct_str = claim_types[j] if j < len(claim_types) else "causal"
                 rel = related[j] if j < len(related) else "none"
-                quote = quotes[j] if j < len(quotes) else ""
+                # Kept apart from the quote itself. Both produce "" here, but
+                # one is the model answering "no quote" and the other is our
+                # index running off the end of a short list — and only the
+                # first is a fact about the model. Folding them together makes
+                # the quoteless rate unreadable, which is what it was before.
+                quote_was_offered = j < len(quotes)
+                quote = quotes[j] if quote_was_offered else ""
 
                 try:
                     ct = ClaimType(ct_str)
@@ -545,7 +552,15 @@ class StageAExtractor(dspy.Module):
                 # source has not moved.
                 verdict = diagnose(quote, section)
                 if not quote.strip():
-                    quoteless_candidates += 1
+                    if quote_was_offered:
+                        quoteless_candidates += 1
+                    else:
+                        unquoted_by_short_list += 1
+                        quote_failures.append(
+                            f"section {i}: {norm}: short quotes list "
+                            f"({len(quotes)} quote(s) for {len(predicates)} "
+                            f"predicate(s)) — no quote was offered for this one"
+                        )
                     found: bool | None = None
                 elif verdict:
                     unverified_quote_candidates += 1
@@ -593,6 +608,7 @@ class StageAExtractor(dspy.Module):
             # stays distinguishable from one that checked and found nothing.
             quotes_checked=True,
             quoteless_candidates=quoteless_candidates,
+            unquoted_by_short_list=unquoted_by_short_list,
             unverified_quote_candidates=unverified_quote_candidates,
             quote_failures=quote_failures,
         )
