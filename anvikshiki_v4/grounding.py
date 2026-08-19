@@ -31,6 +31,11 @@ class GroundingMode(str, Enum):
     FULL = "full"         # N=5 ensemble + round-trip + solver feedback
 
 from .datalog_engine import DatalogEngine
+from .predicate_contrariness import (
+    predicate_entity,
+    predicate_name,
+    with_entity,
+)
 from .schema import KnowledgeStore
 
 
@@ -325,13 +330,39 @@ class GroundingPipeline(dspy.Module):
         )
 
     def _check_scope(self, predicates: list[str]) -> list[str]:
-        """Deterministic scope checking — no LLM."""
+        """Deterministic scope checking — no LLM.
+
+        An exclusion applies the way the compiler says it applies
+        (`t2_compiler_v4`): matched by predicate *name*, and bound to the
+        entity it was observed of.
+
+        The lowercase substring test this replaces answered a different
+        question and got both halves wrong. `not_subsidized_entity(acme)`
+        contains the exclusion as a substring, so a query stating the
+        exclusion does **not** hold warned exactly as though it did — the
+        warning inverted the query's meaning. And `subsidized_entity(globex)`
+        warned without saying whose exclusion it was, which is the
+        entity-blindness already fixed in the compiler for this same field.
+
+        A bare exclusion fact binds to `None`, which is a binding like any
+        other, so a base written entirely in bare names reads as before.
+        """
         warnings: list[str] = []
         for vid, v in self.ks.vyaptis.items():
             for excl in v.scope_exclusions:
-                if any(excl.lower() in p.lower() for p in predicates):
+                excl_name = predicate_name(excl)
+                excluded_entities = {
+                    predicate_entity(p)
+                    for p in predicates
+                    if predicate_name(p) == excl_name
+                }
+                for entity in sorted(
+                    excluded_entities, key=lambda e: (e is not None, e or "")
+                ):
+                    subject = with_entity(excl_name, entity)
                     warnings.append(
-                        f"SCOPE: {vid} excludes '{excl}' but query matches"
+                        f"SCOPE: {vid} excludes '{subject}', "
+                        f"which the query asserts"
                     )
         return warnings
 
