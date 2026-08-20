@@ -248,18 +248,18 @@ def test_knowledge_bases_declare_bare_predicate_names(kb):
     )
 
 
-def test_scope_exclusions_are_still_entity_blind(ks):
-    """Pins a blind spot this change *activates*, so it fails when closed.
+def test_scope_exclusions_undercut_only_the_excluded_entity(ks):
+    """The blind spot this change activated, now closed.
 
     The exclusion block returns early when no argument uses the rule, so
-    before rules fired it was unreachable and had never been evaluated. Now
-    that they fire, it triggers on any entity and undercuts every entity:
-    `perfectly_commoditized_market(acme)` denies globex's conclusion too.
+    before rules fired it was unreachable and had never been evaluated. Once
+    they fired it triggered on any entity and undercut every entity —
+    `perfectly_commoditized_market(acme)` denied globex's conclusion too.
 
-    Filed as #83. Asserted rather than left implicit because a fix that makes
-    dead code live owes an account of what it turned on — and this documents
-    the wrong behaviour so that correcting it breaks a law rather than
-    silently changing output.
+    This law was originally written asserting that wrong behaviour, so that
+    correcting it would break a test rather than silently change output. It
+    did. Filed as #83, fixed, and the assertion is now the right one; the
+    fuller set of laws lives in `test_scope_exclusions_respect_entity.py`.
     """
     af = compile_t2(ks, facts(
         "superior_information(acme)",
@@ -272,10 +272,9 @@ def test_scope_exclusions_are_still_entity_blind(ks):
         if af.arguments[atk.attacker].conclusion.startswith("inapplicable_")
     }
 
-    assert undercut == {"pricing_power(acme)", "pricing_power(globex)"}, (
-        "expected the known entity-blind behaviour of #83; if globex is no "
-        "longer undercut, #83 is fixed and this law should be replaced by one "
-        "asserting only acme is"
+    assert undercut == {"pricing_power(acme)"}, (
+        "only acme is in a perfectly commoditized market, so only acme's "
+        "conclusion may be undercut"
     )
 
 

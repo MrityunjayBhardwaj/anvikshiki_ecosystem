@@ -361,6 +361,24 @@ def _derive_rule_arguments(
             ))
 
 
+def _rule_arguments_reached_by_exclusion(
+    af: ArgumentationFramework, vid: str, entity: str | None
+) -> list:
+    """The arguments a scope exclusion reaches: this rule, this binding.
+
+    How far an exclusion reaches is the whole of what #83 got wrong, so it is
+    named rather than inlined. The block used to return every argument built
+    from the rule, which meant one firm in a perfectly commoditized market
+    suppressed V03 for every firm in the query. An exclusion is observed of an
+    entity, and `Vyapti` shares one Entity variable across the rule and its
+    exclusions, so it reaches that entity's derivations and no others.
+    """
+    return [
+        a for a in af.arguments.values()
+        if a.top_rule == vid and predicate_entity(a.conclusion) == entity
+    ]
+
+
 def _derive_attacks(
     af: ArgumentationFramework,
     ks: KnowledgeStore,
@@ -404,48 +422,76 @@ def _derive_attacks(
 
     # 3b. Undercutting attacks (savyabhicāra): scope violations
     # Uses _predicate_name() for matching (fixes III-09)
-    # Attacks ALL arguments using the violated rule (fixes III-11)
+    # Attacks the arguments using the violated rule *for that entity* (III-11).
+    #
+    # An exclusion is scoped to the entity it was observed of. `Vyapti` writes
+    # a rule as `consequent(Entity) :- ..., not scope_exclusion1(Entity)`, one
+    # Entity variable throughout, so `perfectly_commoditized_market(acme)`
+    # excludes V03 for acme and says nothing about globex. Triggering on any
+    # entity and undercutting every entity denied conclusions that should
+    # stand — one firm in a commoditized market suppressed the rule for all of
+    # them. The block was unreachable dead code until rules began firing,
+    # which is why it had never been evaluated.
     for vid, v in ks.vyaptis.items():
         for excl in v.scope_exclusions:
-            # Match by predicate name, not exact string (III-09)
-            if not any(_predicate_name(arg.conclusion) == _predicate_name(excl)
+            excl_name = predicate_name(excl)
+            # Match by predicate name, not exact string (III-09), and collect
+            # the bindings the exclusion was actually observed for. A bare
+            # exclusion fact binds to None, which is a binding like any other,
+            # so a base written entirely in bare names behaves as before.
+            excluded_entities = {
+                predicate_entity(arg.conclusion)
+                for arg in af.arguments.values()
+                if predicate_name(arg.conclusion) == excl_name
+            }
+            for entity in sorted(
+                excluded_entities, key=lambda e: (e is not None, e or "")
+            ):
+                rule_args = _rule_arguments_reached_by_exclusion(
+                    af, vid, entity
+                )
+                if not rule_args:
+                    continue
+                # Renamed from _undercut_ to inapplicable_ (III-11), and bound,
+                # so two entities excluded from one rule do not collide on a
+                # single argument — the dedup guard below is per-entity for the
+                # same reason.
+                target_conclusion = with_entity(
+                    f"inapplicable_{vid}", entity
+                )
+                if any(arg.conclusion == target_conclusion
                        for arg in af.arguments.values()):
-                continue
-            # Find all arguments using this rule
-            rule_args = [
-                a for a in af.arguments.values() if a.top_rule == vid
-            ]
-            if not rule_args:
-                continue
-            # Renamed from _undercut_ to inapplicable_ (III-11)
-            target_conclusion = f"inapplicable_{vid}"
-            if any(arg.conclusion == target_conclusion
-                   for arg in af.arguments.values()):
-                continue
-            scope_arg_id = af.next_arg_id()
-            af.add_argument(Argument(
-                id=scope_arg_id,
-                conclusion=target_conclusion,
-                top_rule=None,
-                status_bound_by=(BOUND_ASSERTED,),
-                premises=frozenset([excl]),
-                is_strict=True,
-                tag=ProvenanceTag(
-                    pramana_type=PramanaType.PRATYAKSA,
-                    trust_score=1.0, decay_factor=1.0,
-                ),
-                # The scope exclusion is present in the framework as an
-                # observed fact about this query, not as a claim under
-                # dispute — it enters at the top of L, as the premises do.
-                status=EpistemicStatus.ESTABLISHED,
-            ))
-            # Attack ALL arguments using this rule
-            for rule_arg in rule_args:
-                if (scope_arg_id, rule_arg.id) not in existing_attacks:
-                    af.add_attack(Attack(
-                        attacker=scope_arg_id, target=rule_arg.id,
-                        attack_type="undercutting", hetvabhasa="savyabhicara"))
-                    existing_attacks.add((scope_arg_id, rule_arg.id))
+                    continue
+                scope_arg_id = af.next_arg_id()
+                af.add_argument(Argument(
+                    id=scope_arg_id,
+                    conclusion=target_conclusion,
+                    top_rule=None,
+                    status_bound_by=(BOUND_ASSERTED,),
+                    # The fact that excluded the rule, as observed rather than
+                    # as the base declares it. With one undercutter per entity
+                    # the bare name would read identically on all of them, and
+                    # this premise is what vāda offers back as evidence to
+                    # check.
+                    premises=frozenset([with_entity(excl_name, entity)]),
+                    is_strict=True,
+                    tag=ProvenanceTag(
+                        pramana_type=PramanaType.PRATYAKSA,
+                        trust_score=1.0, decay_factor=1.0,
+                    ),
+                    # The scope exclusion is present in the framework as an
+                    # observed fact about this query, not as a claim under
+                    # dispute — it enters at the top of L, as the premises do.
+                    status=EpistemicStatus.ESTABLISHED,
+                ))
+                # Attack every argument this rule derived for this entity
+                for rule_arg in rule_args:
+                    if (scope_arg_id, rule_arg.id) not in existing_attacks:
+                        af.add_attack(Attack(
+                            attacker=scope_arg_id, target=rule_arg.id,
+                            attack_type="undercutting",
+                            hetvabhasa="savyabhicara"))
+                        existing_attacks.add((scope_arg_id, rule_arg.id))
 
     # 3c. Undermining attacks (asiddha): decay-expired premises
     for a in list(af.arguments.values()):
