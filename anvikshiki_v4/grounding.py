@@ -223,21 +223,28 @@ def _consensus(
     if not pred_sets:
         return set(), set()
 
-    votes: dict[tuple[str, str | None], dict[str, int]] = {}
-    for pred_set in pred_sets:
+    # A vote belongs to a MEMBER, not to an occurrence. Summing occurrences
+    # lets one member that names the subject two ways inside its own predicate
+    # list vote twice, and so carry a predicate to consensus alone — a
+    # manufactured majority, which is the mirror image of the unanimity defect
+    # this function exists to fix. `set.intersection` was per-member by
+    # construction; pooling is what makes the distinction necessary.
+    votes: dict[tuple[str, str | None], dict[str, set[int]]] = {}
+    for member, pred_set in enumerate(pred_sets):
         for pred in pred_set:
             key = (predicate_name(pred), normalize_entity(predicate_entity(pred)))
             votes.setdefault(key, {})
-            votes[key][pred] = votes[key].get(pred, 0) + 1
+            votes[key].setdefault(pred, set()).add(member)
 
     needed = len(pred_sets) * threshold
     consensus: set[str] = set()
     disputed: set[str] = set()
     for spellings in votes.values():
-        total = sum(spellings.values())
-        # Most-voted spelling, ties broken lexicographically for determinism.
-        winner = min(sorted(spellings), key=lambda p: (-spellings[p], p))
-        if total > needed:
+        # Distinct members backing this finding under any spelling.
+        backers = set().union(*spellings.values())
+        # Most-backed spelling, ties broken lexicographically for determinism.
+        winner = min(sorted(spellings), key=lambda p: (-len(spellings[p]), p))
+        if len(backers) > needed:
             consensus.add(winner)
         else:
             disputed.update(spellings)

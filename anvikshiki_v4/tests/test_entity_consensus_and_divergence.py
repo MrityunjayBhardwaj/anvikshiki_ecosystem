@@ -50,6 +50,7 @@ from anvikshiki_v4.predicate_contrariness import (
     entity_divergence,
     normalize_entity,
     predicate_entity,
+    predicate_name,
 )
 from anvikshiki_v4.t2_compiler_v4 import load_knowledge_store
 
@@ -238,3 +239,152 @@ def test_the_refusal_is_not_routed_through_the_dead_warning_channel(checker):
         ["positive_unit_economics(acme)", "value_creation(Acme)"]
     )
     assert result.clarification_needed is True
+
+
+# ── a vote belongs to a member, not to an occurrence ─────────
+#
+# Every majority law above gives each member exactly one spelling, so the case
+# where ONE member names the subject two ways inside its own predicate list is
+# never constructed — the laws pass and the defect is live. The blind spot was
+# in the test domain, not in the reading of it.
+
+def _by_occurrence(pred_sets, threshold=CONSENSUS_THRESHOLD):
+    """The pooling as first written — votes summed per occurrence.
+
+    Kept as the mutation, so the law below cannot pass vacuously.
+    """
+    votes: dict = {}
+    for pred_set in pred_sets:
+        for pred in pred_set:
+            key = (predicate_name(pred), normalize_entity(predicate_entity(pred)))
+            votes.setdefault(key, {})
+            votes[key][pred] = votes[key].get(pred, 0) + 1
+    needed = len(pred_sets) * threshold
+    consensus = set()
+    for spellings in votes.values():
+        if sum(spellings.values()) > needed:
+            consensus.add(min(sorted(spellings), key=lambda p: (-spellings[p], p)))
+    return consensus
+
+
+ONE_MEMBER_TWO_SPELLINGS = [
+    {"superior_information(firm)", "superior_information(the_firm)"},
+    {"pricing_power(acme)"},
+    {"pricing_power(acme)"},
+]
+
+
+def test_one_member_naming_a_subject_twice_cannot_reach_consensus_alone():
+    """Pooling spellings must not let a minority of one manufacture a
+    majority — the mirror image of the unanimity defect this fix removes."""
+    consensus, disputed = _consensus(ONE_MEMBER_TWO_SPELLINGS)
+    assert not any(p.startswith("superior_information") for p in consensus)
+    assert "superior_information(firm)" in disputed
+
+
+def test_counting_occurrences_instead_of_members_would_promote_it():
+    """The mutation check, asserting the mutation applies. If per-occurrence
+    counting does NOT promote here, the law above proves nothing."""
+    promoted = _by_occurrence(ONE_MEMBER_TWO_SPELLINGS)
+    assert any(p.startswith("superior_information") for p in promoted), (
+        "the mutation did not apply — per-occurrence counting must promote "
+        "the single member here, or the law above is vacuous"
+    )
+    consensus, _ = _consensus(ONE_MEMBER_TWO_SPELLINGS)
+    assert not any(p.startswith("superior_information") for p in consensus)
+
+
+def test_a_member_repeating_itself_does_not_inflate_confidence():
+    """Confidence is consensus / (consensus + disputed), so a manufactured
+    majority moves a predicate from the denominator into the numerator."""
+    consensus, disputed = _consensus(ONE_MEMBER_TWO_SPELLINGS)
+    confidence = len(consensus) / max(len(consensus) + len(disputed), 1)
+    assert confidence < 0.5, f"one member of three should not carry it: {confidence}"
+
+
+def test_pooling_still_rescues_a_real_majority():
+    """The fix above must not undo the fix it guards. Three DIFFERENT members
+    writing the subject three ways is still agreement."""
+    consensus, _ = _consensus([{"p(firm)"}, {"p(the_firm)"}, {"p(Firm)"}])
+    assert len(consensus) == 1
+
+
+# ── the refusal is reached from the query path ───────────────
+#
+# Every divergence law above calls `_entity_divergence` directly, so they prove
+# the comparison is right and prove nothing about whether the query path
+# reaches it. Delete either call site and they all stay green.
+
+class _StubGrounder:
+    """Returns fixed predicates, so the path is exercised with no LM call."""
+
+    def __init__(self, predicates):
+        self.predicates = predicates
+
+    def __call__(self, **kwargs):
+        import types
+        return types.SimpleNamespace(
+            predicates=list(self.predicates), relevant_vyaptis=[]
+        )
+
+
+DIVERGENT = ["positive_unit_economics(acme)", "value_creation(Acme)"]
+
+
+def _piped(predicates):
+    gp = GroundingPipeline.__new__(GroundingPipeline)
+    gp.ks = load_knowledge_store(KB_PATH)
+    gp.grounder = _StubGrounder(predicates)
+    gp.engine = None
+    return gp
+
+
+def test_the_minimal_path_reaches_the_refusal():
+    result = _piped(DIVERGENT)._forward_minimal("q", "snippet")
+    assert result.clarification_needed is True
+
+
+def test_the_ensemble_path_reaches_the_refusal():
+    result = _piped(DIVERGENT)._forward_ensemble("q", "snippet", n=3,
+                                                 use_solver=False)
+    assert result.clarification_needed is True
+
+
+@pytest.mark.parametrize("path", ["_forward_minimal", "_forward_ensemble"])
+def test_an_unambiguous_grounding_still_proceeds_on_both_paths(path):
+    """The guard must not be reached by everything — a check that always
+    fires is not a check."""
+    gp = _piped(["positive_unit_economics(acme)",
+                 "not_positive_unit_economics(globex)"])
+    args = ("q", "snippet") if path == "_forward_minimal" else \
+           ("q", "snippet", 3, False)
+    result = getattr(gp, path)(*args)
+    assert result.clarification_needed is False
+
+
+def test_every_non_clarifying_return_path_is_guarded():
+    """A source-level law with the path count asserted, so it cannot pass by
+    matching nothing. If a third return path is added without the guard, the
+    two behavioural laws above will not see it."""
+    import ast
+    import inspect
+
+    from anvikshiki_v4 import grounding as grounding_module
+
+    tree = ast.parse(inspect.getsource(grounding_module))
+    cls = next(n for n in ast.walk(tree)
+               if isinstance(n, ast.ClassDef) and n.name == "GroundingPipeline")
+
+    producers = [m for m in cls.body
+                 if isinstance(m, ast.FunctionDef)
+                 and m.name in ("_forward_minimal", "_forward_ensemble")]
+    assert len(producers) == 2, (
+        f"expected 2 grounding paths, found {len(producers)} — the scan is "
+        "measuring something other than what it was written for"
+    )
+    for method in producers:
+        calls = [n for n in ast.walk(method)
+                 if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Attribute)
+                 and n.func.attr == "_entity_divergence"]
+        assert calls, f"{method.name} returns a grounding without the guard"
