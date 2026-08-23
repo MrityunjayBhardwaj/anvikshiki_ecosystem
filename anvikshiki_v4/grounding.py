@@ -32,6 +32,8 @@ class GroundingMode(str, Enum):
 
 from .datalog_engine import DatalogEngine
 from .predicate_contrariness import (
+    entity_divergence,
+    normalize_entity,
     predicate_entity,
     predicate_name,
     with_entity,
@@ -180,6 +182,68 @@ class OntologySnippetBuilder:
         return snippet
 
 
+
+# ─── Ensemble consensus ──────────────────────────────────────
+
+
+CONSENSUS_THRESHOLD = 0.5
+
+
+def _consensus(
+    pred_sets: list[set[str]],
+    threshold: float = CONSENSUS_THRESHOLD,
+) -> tuple[set[str], set[str]]:
+    """Predicates the ensemble agrees on, and the rest.
+
+    This replaces `set.intersection(*pred_sets)`, which had two failures that
+    compounded, both measured on one live query.
+
+    *It compared full predicate strings, entity included.* The ensemble is N
+    samplings of ONE query, so two spellings of the subject cannot be two
+    subjects — but `superior_information(firm)` and
+    `superior_information(the_firm)` are different strings, so identical
+    findings failed to intersect. Votes are therefore counted per
+    `(predicate name, normalised entity)`, which is exactly the question the
+    ensemble is entitled to ask. Normalising here cannot merge two companies,
+    because there is only ever one query being sampled.
+
+    *It required unanimity.* Intersection over all N means a single divergent
+    rollout at temperature 0.7 deletes a predicate every other member
+    produced. Observed: four of five members emitted
+    `superior_information(firm)`, the fifth wrote `the_firm`, the intersection
+    was empty, confidence was 0.00, and the engine told the user their
+    question needed clarification. It did not. A majority threshold is what
+    the field named `consensus` always implied.
+
+    The surviving spelling is the one the most members wrote, ties broken by
+    sort order so the result does not depend on set iteration order — an
+    ensemble that grounds differently on reruns cannot be compared against
+    itself.
+    """
+    if not pred_sets:
+        return set(), set()
+
+    votes: dict[tuple[str, str | None], dict[str, int]] = {}
+    for pred_set in pred_sets:
+        for pred in pred_set:
+            key = (predicate_name(pred), normalize_entity(predicate_entity(pred)))
+            votes.setdefault(key, {})
+            votes[key][pred] = votes[key].get(pred, 0) + 1
+
+    needed = len(pred_sets) * threshold
+    consensus: set[str] = set()
+    disputed: set[str] = set()
+    for spellings in votes.values():
+        total = sum(spellings.values())
+        # Most-voted spelling, ties broken lexicographically for determinism.
+        winner = min(sorted(spellings), key=lambda p: (-spellings[p], p))
+        if total > needed:
+            consensus.add(winner)
+        else:
+            disputed.update(spellings)
+    return consensus, disputed
+
+
 # ─── Grounding Pipeline ──────────────────────────────────────
 
 
@@ -245,6 +309,10 @@ class GroundingPipeline(dspy.Module):
         candidate_preds = g.predicates
         candidate_vyaptis = g.relevant_vyaptis
 
+        divergence = self._entity_divergence(candidate_preds)
+        if divergence is not None:
+            return divergence
+
         warnings: list[str] = []
         warnings.extend(self._check_scope(candidate_preds))
         warnings.extend(self._check_decay(candidate_vyaptis))
@@ -282,9 +350,7 @@ class GroundingPipeline(dspy.Module):
         all_pred_sets = [set(g.predicates) for g in groundings]
         all_vyapti_sets = [set(g.relevant_vyaptis) for g in groundings]
 
-        consensus_preds = set.intersection(*all_pred_sets) if all_pred_sets else set()
-        all_preds = set.union(*all_pred_sets) if all_pred_sets else set()
-        disputed_preds = all_preds - consensus_preds
+        consensus_preds, disputed_preds = _consensus(all_pred_sets)
 
         consensus_vyaptis = set.intersection(*all_vyapti_sets) if all_vyapti_sets else set()
 
@@ -339,6 +405,10 @@ class GroundingPipeline(dspy.Module):
                 candidate_preds = refined.predicates
                 refinement_rounds += 1
 
+        divergence = self._entity_divergence(candidate_preds)
+        if divergence is not None:
+            return divergence
+
         # Deterministic scope/decay checks (no LLM)
         warnings: list[str] = []
         warnings.extend(self._check_scope(candidate_preds))
@@ -351,6 +421,58 @@ class GroundingPipeline(dspy.Module):
             warnings=warnings,
             refinement_rounds=refinement_rounds,
             clarification_needed=False,
+        )
+
+    def _entity_divergence(
+        self, predicates: list[str]
+    ) -> Optional[GroundingResult]:
+        """Refuse to proceed when one query names a subject two ways.
+
+        Fail loudly; normalise nothing. `predicate_entity` still returns what
+        was written, and nothing here rewrites a binding — two spellings may
+        genuinely be two companies, and silently merging them is the failure
+        the entity work exists to prevent.
+
+        What it prevents is the *other* silence. The entity decides rule
+        chaining, rebuttal and scope, so `acme` and `Acme` partition the
+        framework: V08 stops chaining, the engine reports no conclusion, and
+        nothing says why. A missed inference reads as "no conclusion follows".
+        Asking which was meant is the only answer that is neither a guess nor a
+        silence.
+
+        This returns a clarification rather than appending to `warnings`
+        because grounding warnings are computed and read by nothing on the
+        query path — a loud failure routed through a dead channel is not loud.
+        The clarification path is the one the engine already renders.
+
+        Distinct from the ensemble's normalisation above, and deliberately so:
+        there, N samplings of one query cannot be about two subjects, so
+        agreement is safe to infer. Here the predicates are the finished
+        grounding of one query, and two spellings in it are a real ambiguity.
+        """
+        divergence = entity_divergence(predicates)
+        if not divergence:
+            return None
+
+        detail = "; ".join(
+            f"{canonical}: " + ", ".join(sorted(spellings))
+            for canonical, spellings in sorted(divergence.items())
+        )
+        return GroundingResult(
+            predicates=sorted(predicates),
+            confidence=0.0,
+            disputed=sorted(
+                p for p in predicates
+                if predicate_entity(p) in
+                {s for spellings in divergence.values() for s in spellings}
+            ),
+            warnings=[
+                f"ENTITY: one query named the same subject more than one way "
+                f"({detail}). The binding decides rule chaining, rebuttal and "
+                f"scope, so these are treated as different entities and no "
+                f"rule will chain across them."
+            ],
+            clarification_needed=True,
         )
 
     def _check_scope(self, predicates: list[str]) -> list[str]:

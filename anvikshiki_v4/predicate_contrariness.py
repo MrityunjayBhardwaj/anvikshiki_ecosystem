@@ -155,6 +155,68 @@ def predicate_entity(pred: str) -> str | None:
     return pred[paren + 1:-1]
 
 
+# Articles and corporate suffixes that distinguish two spellings of one
+# subject without distinguishing two subjects. `the_firm` and `firm` are the
+# same firm; `acme_corp` and `acme` are the same company. Deliberately short:
+# every entry is a claim that two strings mean the same thing, and a wrong
+# entry merges two real entities.
+_ENTITY_ARTICLES = ("the_", "a_", "an_")
+_ENTITY_SUFFIXES = (
+    "_corp", "_corporation", "_inc", "_incorporated", "_ltd", "_limited",
+    "_llc", "_plc", "_co", "_company", "_group", "_holdings",
+)
+
+
+def normalize_entity(entity: str | None) -> str | None:
+    """A canonical form for comparing two spellings of one subject.
+
+    NOT a repair. Nothing in the engine rewrites a binding to this value —
+    `predicate_entity` still returns exactly what was written, because two
+    spellings may genuinely be two companies and silently merging them is the
+    failure the entity work exists to prevent.
+
+    This exists so a caller can ask "could these be the same subject?" without
+    deciding that they are. Two sites ask it for opposite reasons: the
+    grounding ensemble, where N samplings of ONE query cannot be about two
+    subjects, so agreement is safe to infer; and the engine boundary, where
+    they might be, so divergence is reported rather than resolved.
+
+    `None` — a bare predicate — normalises to `None`, because absence of a
+    binding is a binding and not a spelling of one.
+    """
+    if entity is None:
+        return None
+    norm = entity.strip().strip("()\"' ").casefold()
+    norm = re.sub(r"[\s\-.]+", "_", norm)
+    norm = re.sub(r"_+", "_", norm).strip("_")
+    for article in _ENTITY_ARTICLES:
+        if norm.startswith(article) and len(norm) > len(article):
+            norm = norm[len(article):]
+            break
+    for suffix in _ENTITY_SUFFIXES:
+        if norm.endswith(suffix) and len(norm) > len(suffix):
+            norm = norm[: -len(suffix)]
+            break
+    return norm.strip("_") or None
+
+
+def entity_divergence(predicates: list[str]) -> dict[str, set[str]]:
+    """Spellings that normalise alike, grouped by canonical form.
+
+    Only groups with more than one raw spelling are returned, so an empty
+    result means "no two of these could be the same subject written twice" —
+    not "nothing was checked". Callers should print the number of predicates
+    examined beside an empty result.
+    """
+    by_norm: dict[str, set[str]] = {}
+    for pred in predicates:
+        entity = predicate_entity(pred)
+        if entity is None:
+            continue
+        by_norm.setdefault(normalize_entity(entity), set()).add(entity)
+    return {k: v for k, v in by_norm.items() if len(v) > 1}
+
+
 def with_entity(name: str, entity: str | None) -> str:
     """Rebuild a predicate from a name and a binding — the inverse of the pair
     above, so a rule can conclude about the entity it reasoned over.
