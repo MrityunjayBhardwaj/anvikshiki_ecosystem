@@ -387,119 +387,333 @@ chapter_fingerprints:
     difficulty_tier: "advanced"
 
 reference_bank:
-  src_hbs_unit_economics:
-    title: "What Are Unit Economics?"
-    author: "Harvard Business School Online"
-    year: 2023
-  src_ries_2011:
-    title: "The Lean Startup"
-    author: "Ries"
-    year: 2011
-  src_goldratt_1984:
-    title: "The Goal"
-    author: "Goldratt"
-    year: 1984
-  src_goldratt_1994:
-    title: "It's Not Luck"
-    author: "Goldratt"
-    year: 1994
-  src_shapiro_varian_1998:
-    title: "Information Rules"
-    author: "Shapiro & Varian"
-    year: 1998
-  src_porter_1985:
-    title: "Competitive Advantage"
-    author: "Porter"
-    year: 1985
-  src_dunbar_2010:
-    title: "How Many Friends Does One Person Need?"
-    author: "Dunbar"
-    year: 2010
-  src_conway_1968:
-    title: "How Do Committees Invent?"
-    author: "Conway"
-    year: 1968
-  src_skelton_pais_2019:
-    title: "Team Topologies"
-    author: "Skelton & Pais"
-    year: 2019
+  # Machine-checkable identifiers (#16). Three statuses, never two:
+  # resolved  - a locator was fetched and matched on title, author and year
+  # ambiguous - several candidates are defensible; none was chosen
+  # not_found - we looked and did not find it. NOT a claim of fabrication.
+  #
+  # A resolved URL means the locator resolves. It does NOT mean the page
+  # says what the annotation claims - that is a span check, and it has
+  # not been made. isbn_13 is omitted, with a reason, wherever no edition
+  # carries the recorded year: one of many correct ISBNs picked at random
+  # is a guess wearing the shape of a fact.
   src_blank_2005:
     title: "The Four Steps to the Epiphany"
     author: "Blank"
     year: 2005
-  src_christensen_2016:
-    title: "Know Your Customers' Jobs to Be Done"
-    author: "Christensen et al."
-    year: 2016
-  src_thorndike_2012:
-    title: "The Outsiders"
-    author: "Thorndike"
-    year: 2012
+    work_id: "openlibrary:OL8844576W"
+    isbn_13: "9780976470700"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
   src_buffett_letters:
     title: "Berkshire Hathaway Annual Letters"
     author: "Buffett"
     year: 2024
-  src_mauboussin_2012:
-    title: "The Success Equation"
-    author: "Mauboussin"
-    year: 2012
-  src_kerr_1975:
-    title: "On the Folly of Rewarding A, While Hoping for B"
-    author: "Kerr"
-    year: 1975
-  src_jensen_meckling_1976:
-    title: "Theory of the Firm"
-    author: "Jensen & Meckling"
-    year: 1976
+    url: "https://www.berkshirehathaway.com/letters/letters.html"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "HTTP 200; locator resolves, page content not checked"
   src_christensen_1997:
     title: "The Innovator's Dilemma"
     author: "Christensen"
     year: 1997
-  src_king_baatartogtokh_2015:
-    title: "How Useful Is the Theory of Disruptive Innovation?"
-    author: "King & Baatartogtokh"
-    year: 2015
-  src_lepore_2014:
-    title: "The Disruption Machine"
-    author: "Lepore"
-    year: 2014
-  src_tetlock_2015:
-    title: "Superforecasting"
-    author: "Tetlock & Gardner"
-    year: 2015
-  src_kahneman_2011:
-    title: "Thinking, Fast and Slow"
-    author: "Kahneman"
-    year: 2011
-  src_tetlock_2005:
-    title: "Expert Political Judgment"
-    author: "Tetlock"
-    year: 2005
-  src_klein_1998:
-    title: "Sources of Power"
-    author: "Klein"
-    year: 1998
+    work_id: "openlibrary:OL1999873W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1997 carries an ISBN (20 editions examined), so
+        none is claimed
+  src_christensen_2016:
+    title: "Know Your Customers' Jobs to Be Done"
+    author: "Christensen et al."
+    year: 2016
+    url: "https://hbr.org/2016/09/know-your-customers-jobs-to-be-done"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "HTTP 200; locator resolves, page content not checked"
+  src_conway_1968:
+    title: "How Do Committees Invent?"
+    author: "Conway"
+    year: 1968
+    url: "https://www.melconway.com/Home/Committees_Paper.html"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "HTTP 200; locator resolves, page content not checked"
+  src_dunbar_2010:
+    title: "How Many Friends Does One Person Need?"
+    author: "Dunbar"
+    year: 2010
+    resolution:
+      status: ambiguous
+      checked: 2026-09-02
+      note: >-
+        two OpenLibrary works for one book, different publishers; a
+        title/author/year citation cannot say which was consulted
+      candidates:
+        - work_id: "openlibrary:OL15620385W"
+          isbn_13: "9780571253425"
+          publisher: "Faber and Faber"
+        - work_id: "openlibrary:OL15456213W"
+          isbn_13: "9780674057166"
+          publisher: "Harvard University Press"
+  src_goldratt_1984:
+    title: "The Goal"
+    author: "Goldratt"
+    year: 1984
+    work_id: "openlibrary:OL2463051W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1984 carries an ISBN (14 editions examined), so
+        none is claimed
+  src_goldratt_1994:
+    title: "It's Not Luck"
+    author: "Goldratt"
+    year: 1994
+    work_id: "openlibrary:OL2463053W"
+    isbn_13: "9780884271130"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
   src_graham_dodd_1934:
     title: "Security Analysis"
     author: "Graham & Dodd"
     year: 1934
-  src_penman_2012:
-    title: "Financial Statement Analysis and Security Valuation"
-    author: "Penman"
-    year: 2012
+    work_id: "openlibrary:OL273188W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1934 carries an ISBN (31 editions examined), so
+        none is claimed
   src_greenwald_kahn_2005:
     title: "Competition Demystified"
     author: "Greenwald & Kahn"
     year: 2005
-  src_osterwalder_pigneur_2010:
-    title: "Business Model Generation"
-    author: "Osterwalder & Pigneur"
-    year: 2010
+    work_id: "openlibrary:OL18574747W"
+    isbn_13: "9781591840572"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+  src_hbs_unit_economics:
+    title: "What Are Unit Economics?"
+    author: "Harvard Business School Online"
+    year: 2023
+    resolution:
+      status: not_found
+      checked: 2026-09-02
+      via: "web search, domain-restricted and open"
+      note: >-
+        searched online.hbs.edu and the open web; no HBS Online article of
+        this title located. A genuine HBS faculty note (On CUE: The Quest
+        for Optimal Customer Unit Economics) exists but is a different
+        work, author and year. not_found is not fabricated - nobody has
+        shown the work does not exist.
+  src_jensen_meckling_1976:
+    title: "Theory of the Firm"
+    author: "Jensen & Meckling"
+    year: 1976
+    doi: "10.1016/0304-405x(76)90026-x"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "api.crossref.org, year-filtered"
+      container: "Journal of Financial Economics"
+  src_kahneman_2011:
+    title: "Thinking, Fast and Slow"
+    author: "Kahneman"
+    year: 2011
+    work_id: "openlibrary:OL15992072W"
+    isbn_13: "9780141918921"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+  src_kerr_1975:
+    title: "On the Folly of Rewarding A, While Hoping for B"
+    author: "Kerr"
+    year: 1975
+    doi: "10.2307/255378"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "api.crossref.org, year-filtered"
+      container: "Academy of Management Journal"
+  src_king_baatartogtokh_2015:
+    title: "How Useful Is the Theory of Disruptive Innovation?"
+    author: "King & Baatartogtokh"
+    year: 2015
+    url: "https://sloanreview.mit.edu/article/how-useful-is-the-theory-of-disruptive-innovation/"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "HTTP 200; locator resolves, page content not checked"
+  src_klein_1998:
+    title: "Sources of Power"
+    author: "Klein"
+    year: 1998
+    work_id: "openlibrary:OL2731587W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1998 carries an ISBN (2 editions examined), so
+        none is claimed
+  src_lepore_2014:
+    title: "The Disruption Machine"
+    author: "Lepore"
+    year: 2014
+    url: "https://www.newyorker.com/magazine/2014/06/23/the-disruption-machine"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "HTTP 200; locator resolves, page content not checked"
+  src_mauboussin_2012:
+    title: "The Success Equation"
+    author: "Mauboussin"
+    year: 2012
+    work_id: "openlibrary:OL16637720W"
+    isbn_13: "9781422184233"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
   src_moore_1991:
     title: "Crossing the Chasm"
     author: "Moore"
     year: 1991
+    work_id: "openlibrary:OL30695W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1991 carries an ISBN (21 editions examined), so
+        none is claimed
+  src_osterwalder_pigneur_2010:
+    title: "Business Model Generation"
+    author: "Osterwalder & Pigneur"
+    year: 2010
+    resolution:
+      status: ambiguous
+      checked: 2026-09-02
+      note: >-
+        three OpenLibrary work records dated 2009-2010, none clearly
+        canonical
+      candidates:
+        - work_id: "openlibrary:OL15576733W"
+        - work_id: "openlibrary:OL16660390W"
+        - work_id: "openlibrary:OL29249246W"
+  src_penman_2012:
+    title: "Financial Statement Analysis and Security Valuation"
+    author: "Penman"
+    year: 2012
+    resolution:
+      status: ambiguous
+      checked: 2026-09-02
+      note: >-
+        no OpenLibrary edition dated 2012; candidates are 2001, 2003 and
+        2013
+      candidates:
+        - work_id: "openlibrary:OL5523244W"
+        - work_id: "openlibrary:OL16451884W"
+        - work_id: "openlibrary:OL283557W"
+  src_porter_1985:
+    title: "Competitive Advantage"
+    author: "Porter"
+    year: 1985
+    work_id: "openlibrary:OL1827734W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1985 carries an ISBN (4 editions examined), so
+        none is claimed
+  src_ries_2011:
+    title: "The Lean Startup"
+    author: "Ries"
+    year: 2011
+    work_id: "openlibrary:OL16086010W"
+    isbn_13: "9780670921621"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
   src_schein_2010:
     title: "Organizational Culture and Leadership"
     author: "Schein"
     year: 2010
+    work_id: "openlibrary:OL15588220W"
+    isbn_13: "9780470185865"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+  src_shapiro_varian_1998:
+    title: "Information Rules"
+    author: "Shapiro & Varian"
+    year: 1998
+    work_id: "openlibrary:OL1906587W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 1998 carries an ISBN (1 editions examined), so
+        none is claimed
+  src_skelton_pais_2019:
+    title: "Team Topologies"
+    author: "Skelton & Pais"
+    year: 2019
+    work_id: "openlibrary:OL21232655W"
+    isbn_13: "9781942788829"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+  src_tetlock_2005:
+    title: "Expert Political Judgment"
+    author: "Tetlock"
+    year: 2005
+    work_id: "openlibrary:OL5737028W"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+      isbn_note: >-
+        no edition dated 2005 carries an ISBN (7 editions examined), so
+        none is claimed
+  src_tetlock_2015:
+    title: "Superforecasting"
+    author: "Tetlock & Gardner"
+    year: 2015
+    work_id: "openlibrary:OL18233878W"
+    isbn_13: "9781448166596"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
+  src_thorndike_2012:
+    title: "The Outsiders"
+    author: "Thorndike"
+    year: 2012
+    work_id: "openlibrary:OL16599653W"
+    isbn_13: "9781422162675"
+    resolution:
+      status: resolved
+      checked: 2026-09-02
+      via: "openlibrary.org search.json + works/<id>/editions.json"
