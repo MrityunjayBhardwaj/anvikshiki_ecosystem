@@ -24,14 +24,20 @@ citations and a precondition for the resolver — not an observable status chang
 Saying so here keeps the next reader from expecting one.
 """
 
+from pathlib import Path
+
 import yaml
 
-KB_PATH = "anvikshiki_v4/data/business_expert.yaml"
+# Anchored to this file, not to the working directory. The bare relative path
+# reads fine and fails from anywhere but the repo root — 12 of the 13 laws
+# below fail that way — which is #61's shape, and there is no reason to add to
+# it in a new file when `test_citation_tier.py` already does this correctly.
+KB_PATH = Path(__file__).resolve().parents[1] / "data" / "business_expert.yaml"
 VALID_STATUSES = {"resolved", "ambiguous", "not_found"}
 
 
 def _bank():
-    return yaml.safe_load(open(KB_PATH))["reference_bank"]
+    return yaml.safe_load(KB_PATH.read_text())["reference_bank"]
 
 
 def test_the_bank_is_not_empty():
@@ -112,7 +118,7 @@ def test_not_found_entries_say_what_was_searched():
 
 def test_every_cited_source_still_resolves_into_the_bank():
     """The property that already held, asserted so this edit cannot break it."""
-    doc = yaml.safe_load(open(KB_PATH))
+    doc = yaml.safe_load(KB_PATH.read_text())
     bank, n = doc["reference_bank"], 0
     for vid, v in doc["vyaptis"].items():
         for s in (v.get("sources") or []):
@@ -143,16 +149,14 @@ def test_the_bank_carries_real_identifiers_now():
     assert ids >= 25, f"only {ids} of {len(bank)} entries carry an identifier"
 
 
-def test_the_citation_tier_is_unchanged_by_this(  ):
+def test_the_citation_tier_is_unchanged_by_this():
     """Reachability, asserted rather than asserted-in-prose. Adding
     identifiers must not silently move a rule's ceiling: every rule is
     hand-authored, tiers CURATED, and is exempt from the citation axis."""
-    import sys
-    sys.path.insert(0, ".")
     from anvikshiki_v4.lattice import CitationTier, tier_for_citation
     from anvikshiki_v4.t2_compiler_v4 import load_knowledge_store
 
-    ks = load_knowledge_store(KB_PATH)
+    ks = load_knowledge_store(str(KB_PATH))
     tiers = {vid: tier_for_citation(v) for vid, v in ks.vyaptis.items()}
     assert len(tiers) == 11, f"expected 11 rules, examined {len(tiers)}"
     assert set(tiers.values()) == {CitationTier.CURATED}, tiers
