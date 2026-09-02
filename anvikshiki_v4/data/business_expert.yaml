@@ -387,10 +387,23 @@ chapter_fingerprints:
     difficulty_tier: "advanced"
 
 reference_bank:
-  # Machine-checkable identifiers (#16). Three statuses, never two:
-  # resolved  - a locator was fetched and matched on title, author and year
-  # ambiguous - several candidates are defensible; none was chosen
-  # not_found - we looked and did not find it. NOT a claim of fabrication.
+  # Machine-checkable identifiers (#16). Four statuses:
+  # resolved             - a locator was fetched and matched on title, author, year
+  # ambiguous            - several candidates are defensible; none was chosen
+  # not_found            - we looked and did not find it. NOT a claim of fabrication.
+  # not_a_locatable_work - the entry names a case, a practice or a field-wide
+  #                        tension rather than a citable document, so there is
+  #                        nothing to locate. An absence that is CORRECT, not a
+  #                        gap - the same shape as a curated rule's empty
+  #                        provenance. Distinct from not_found, which is a
+  #                        failed search for something that should exist.
+  #
+  # not_a_locatable_work is UNUSED in this bank: all 29 entries name a citable
+  # document. It exists because the copywriting bank (#20) has roughly fifteen
+  # slots that are worked examples and dissenting critiques - there is no DOI
+  # for a field-wide tension - and requiring an identifier for those would force
+  # either an invented one or the loss of the counter-arguments an argumentation
+  # engine most wants. See #106.
   #
   # A resolved URL means the locator resolves. It does NOT mean the page
   # says what the annotation claims - that is a span check, and it has
