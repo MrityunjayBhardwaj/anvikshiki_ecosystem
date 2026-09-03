@@ -98,25 +98,25 @@ class TestKnowledgeStoreLoading:
         assert len(copy_ks.reference_bank) == 25
 
     def test_the_two_structural_vyaptis(self, copy_ks):
-        """V4 and V9 are the two the author classified STRUCTURAL. The rest
+        """V04 and V09 are the two the author classified STRUCTURAL. The rest
         collapse onto `empirical`, because the schema has no separate value
         for the author's CAUSAL and EMPIRICAL REGULARITY."""
         structural = sorted(v.id for v in copy_ks.vyaptis.values()
                             if v.causal_status == CausalStatus.STRUCTURAL)
-        assert structural == ["V4", "V9"]
+        assert structural == ["V04", "V09"]
 
     def test_the_three_vyaptis_the_author_marked_down(self, copy_ks):
-        """V5, V8 and V9 are the three STEP 3B calls PARTIALLY SOURCED. The
+        """V05, V08 and V09 are the three STEP 3B calls PARTIALLY SOURCED. The
         causal_status mapping is lossy, so the author's reservation survives
         only here — if this drifts, the KB has silently promoted a claim its
         source material declines to make."""
-        assert copy_ks.vyaptis["V5"].epistemic_status == KBEpistemic.WORKING_HYPOTHESIS
-        assert copy_ks.vyaptis["V8"].epistemic_status == KBEpistemic.WORKING_HYPOTHESIS
-        assert copy_ks.vyaptis["V9"].epistemic_status == KBEpistemic.ACTIVELY_CONTESTED
+        assert copy_ks.vyaptis["V05"].epistemic_status == KBEpistemic.WORKING_HYPOTHESIS
+        assert copy_ks.vyaptis["V08"].epistemic_status == KBEpistemic.WORKING_HYPOTHESIS
+        assert copy_ks.vyaptis["V09"].epistemic_status == KBEpistemic.ACTIVELY_CONTESTED
 
     def test_the_decay_marker_survived_transcription(self, copy_ks):
         """DECAY MARKER 1 in STEP 2I is the only one attached to a vyapti."""
-        v9 = copy_ks.vyaptis["V9"]
+        v9 = copy_ks.vyaptis["V09"]
         assert v9.decay_risk.value == "high"
         assert v9.decay_condition
         assert "annually" in v9.decay_condition
@@ -144,7 +144,7 @@ class TestCompilation:
         as a law rather than as a sentence in a PR body."""
         af = compile_t2(copy_ks, full_facts)
         fired = sorted({a.top_rule for a in af.arguments.values() if a.top_rule})
-        assert fired == ["V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9"]
+        assert fired == ["V01", "V02", "V03", "V04", "V05", "V06", "V07", "V08", "V09"]
         assert len(fired) == len(copy_ks.vyaptis)
 
     def test_fixpoint_convergence(self, copy_ks, full_facts):
@@ -157,49 +157,49 @@ class TestCompilation:
 class TestChainDerivation:
     """The two chains are the author's own words, not a graph decoration.
 
-    V1 -> V3: "Attention is the non-negotiable prerequisite; everything else
+    V01 -> V03: "Attention is the non-negotiable prerequisite; everything else
               is conditional on it."
-    V4 -> V8: "editing can't fix strategic errors — polishing copy aimed at
+    V04 -> V08: "editing can't fix strategic errors — polishing copy aimed at
               the wrong awareness level is wasted effort."
     """
 
     def test_attention_chain_v1_to_v3(self, copy_ks, chain_facts):
         af = compile_t2(copy_ks, chain_facts)
         derived = [a for a in af.arguments.values()
-                   if a.top_rule == "V3" and a.conclusion == "reader_receptive"]
-        assert derived, "V3 did not fire"
+                   if a.top_rule == "V03" and a.conclusion == "reader_receptive"]
+        assert derived, "V03 did not fire"
         assert any(a.tag.derivation_depth >= 2 for a in derived)
 
     def test_strategy_chain_v4_to_v8(self, copy_ks, chain_facts):
         af = compile_t2(copy_ks, chain_facts)
         derived = [a for a in af.arguments.values()
-                   if a.top_rule == "V8" and a.conclusion == "copy_effective"]
-        assert derived, "V8 did not fire"
+                   if a.top_rule == "V08" and a.conclusion == "copy_effective"]
+        assert derived, "V08 did not fire"
         assert any(a.tag.derivation_depth >= 2 for a in derived)
 
     def test_v3_does_not_fire_without_attention(self, copy_ks):
         """Remove the chain's root and the chain must not complete. Without
-        this, a V3 that fired for some unrelated reason would still pass the
+        this, a V03 that fired for some unrelated reason would still pass the
         chain test above."""
         af = compile_t2(copy_ks, [
             {"predicate": "problem_first_sequence", "confidence": 0.9},
         ])
-        assert not [a for a in af.arguments.values() if a.top_rule == "V3"]
+        assert not [a for a in af.arguments.values() if a.top_rule == "V03"]
 
     def test_v8_does_not_fire_without_strategic_fit(self, copy_ks):
         af = compile_t2(copy_ks, [
             {"predicate": "expert_editing_applied", "confidence": 0.9},
         ])
-        assert not [a for a in af.arguments.values() if a.top_rule == "V8"]
+        assert not [a for a in af.arguments.values() if a.top_rule == "V08"]
 
     def test_two_independent_routes_to_credibility(self, copy_ks, full_facts):
-        """V2 (specificity) and V6 (proof) both conclude perceived_credibility
+        """V02 (specificity) and V06 (proof) both conclude perceived_credibility
         from different antecedents — the shape business_expert.yaml has at
         long_term_value, arrived at here without being planned for."""
         af = compile_t2(copy_ks, full_facts)
         routes = sorted({a.top_rule for a in af.arguments.values()
                          if a.conclusion == "perceived_credibility" and a.top_rule})
-        assert routes == ["V2", "V6"]
+        assert routes == ["V02", "V06"]
 
 
 # ── Attacks: what is here, and what is not ──
@@ -219,7 +219,7 @@ class TestAttacks:
         undercuts = [a for a in af.attacks if a.attack_type == "undercutting"]
         assert len(undercuts) == 2
         targeted = sorted(af.arguments[a.target].top_rule for a in undercuts)
-        assert targeted == ["V1", "V2"]
+        assert targeted == ["V01", "V02"]
         assert all(a.hetvabhasa == "savyabhicara" for a in undercuts)
 
     def test_there_are_no_rebutting_attacks_and_here_is_the_denominator(

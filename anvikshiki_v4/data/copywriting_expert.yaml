@@ -25,14 +25,14 @@
 #         STRUCTURAL           -> structural
 #     CAUSAL and EMPIRICAL REGULARITY collapse onto one value. The distinction
 #     the author drew — whether the mechanism is characterised — survives only
-#     in confidence.evidence and in the epistemic_status, which is where V5,
-#     V8 and V9 are marked down.
+#     in confidence.evidence and in the epistemic_status, which is where V05,
+#     V08 and V09 are marked down.
 #
 #  2. antecedents / consequent. The guide states each vyāpti in prose and
 #     never names a predicate. Every predicate below was read off the
-#     statement and its scope paragraph, and the two chains (V1->V3, V4->V8)
-#     are the author's own words: V3 operates only once attention is captured,
-#     and V8 says in as many words that "editing can't fix strategic errors —
+#     statement and its scope paragraph, and the two chains (V01->V03, V04->V08)
+#     are the author's own words: V03 operates only once attention is captured,
+#     and V08 says in as many words that "editing can't fix strategic errors —
 #     polishing copy aimed at the wrong awareness level is wasted effort."
 #     No third chain was manufactured to make the graph look richer.
 #
@@ -57,8 +57,8 @@ domain_type: CRAFT
 pramanas: ["pratyaksa", "anumana", "sabda", "upamana"]
 
 vyaptis:
-  V1:
-    id: V1
+  V01:
+    id: V01
     name: "The Attention Gate"
     statement: "No persuasion occurs without prior attention capture; copy that fails to stop the reader in the first 3-8 seconds never enters the persuasion sequence, regardless of the strength of the argument, offer or proof downstream"
     causal_status: empirical
@@ -71,8 +71,8 @@ vyaptis:
     antecedents: ["attention_captured"]
     consequent: "persuasion_possible"
 
-  V2:
-    id: V2
+  V02:
+    id: V02
     name: "The Specificity-Credibility Link"
     statement: "Specific, concrete claims are more persuasive than vague or general claims, all else being equal, because the mind reads precision as a signal of actual measurement while vagueness reads as ignorance or deception"
     causal_status: empirical
@@ -85,11 +85,11 @@ vyaptis:
     antecedents: ["specific_claim"]
     consequent: "perceived_credibility"
 
-  # Chains from V1: the problem-first sequence can only operate on a reader
+  # Chains from V01: the problem-first sequence can only operate on a reader
   # who is still present. "Attention is the non-negotiable prerequisite;
   # everything else is conditional on it" (VYĀPTI 1, stage2_architecture.md).
-  V3:
-    id: V3
+  V03:
+    id: V03
     name: "The Problem-First Persuasion Sequence"
     statement: "Copy that begins with the reader's felt problem and bridges to the solution consistently outperforms copy that begins with the product, because we move away from pain before we move toward gain"
     causal_status: empirical
@@ -102,8 +102,8 @@ vyaptis:
     antecedents: ["problem_first_sequence", "persuasion_possible"]
     consequent: "reader_receptive"
 
-  V4:
-    id: V4
+  V04:
+    id: V04
     name: "The Awareness-Level Law"
     statement: "The effectiveness of any piece of copy is primarily determined by the match between its assumptions about the reader's awareness level and the reader's actual awareness level; mismatched awareness is the most common strategic failure in copywriting and is invisible to writers who have not internalised it"
     causal_status: structural
@@ -116,8 +116,8 @@ vyaptis:
     antecedents: ["awareness_level_matched"]
     consequent: "strategic_fit"
 
-  V5:
-    id: V5
+  V05:
+    id: V05
     name: "The Voice-Trust Compound"
     statement: "A distinctive, consistent brand voice compounds trust over time, while a generic or inconsistent voice produces diminishing returns regardless of copy quality; voice is not decoration on top of persuasion, it is itself a persuasion mechanism"
     causal_status: empirical
@@ -130,11 +130,11 @@ vyaptis:
     antecedents: ["distinctive_voice", "voice_consistency"]
     consequent: "compounding_trust"
 
-  # Second producer of perceived_credibility, alongside V2. Two independent
+  # Second producer of perceived_credibility, alongside V02. Two independent
   # routes to one conclusion, which is the shape business_expert.yaml has at
   # long_term_value.
-  V6:
-    id: V6
+  V06:
+    id: V06
     name: "The Proof Hierarchy"
     statement: "Claims without proof are processed as marketing, claims with generic proof as slightly more credible marketing, and claims with specific verifiable proof as information; moving one level up the proof hierarchy for a key claim can shift conversion more than rewriting the surrounding copy"
     causal_status: empirical
@@ -147,8 +147,8 @@ vyaptis:
     antecedents: ["specific_verifiable_proof"]
     consequent: "perceived_credibility"
 
-  V7:
-    id: V7
+  V07:
+    id: V07
     name: "The Friction-Conversion Inverse"
     statement: "Every point of cognitive friction between the reader's current state and the desired action reduces conversion probability, and reducing friction produces gains that are independent of, and often larger than, gains from improving persuasive quality"
     causal_status: empirical
@@ -161,11 +161,11 @@ vyaptis:
     antecedents: ["friction_reduced"]
     consequent: "conversion_lift"
 
-  # Chains from V4. The scope paragraph is explicit: "editing can't fix
+  # Chains from V04. The scope paragraph is explicit: "editing can't fix
   # strategic errors — polishing copy aimed at the wrong awareness level is
   # wasted effort." So strategic_fit is an antecedent, not a nicety.
-  V8:
-    id: V8
+  V08:
+    id: V08
     name: "The Editing Multiplier"
     statement: "The ratio of persuasive impact between first-draft copy and expertly edited copy is typically 2:1 to 5:1; editing produces more improvement per hour invested than any other copy activity, and the craft of copywriting is primarily an editing craft"
     causal_status: empirical
@@ -178,8 +178,8 @@ vyaptis:
     antecedents: ["expert_editing_applied", "strategic_fit"]
     consequent: "copy_effective"
 
-  V9:
-    id: V9
+  V09:
+    id: V09
     name: "The AI Complement Principle"
     statement: "AI writing tools are strong at generating structurally competent prose and weak at strategic judgment, so as AI capability increases the value of human copywriters shifts from production toward judgment: taste, strategic diagnosis, voice development, and the ability to evaluate and improve AI output"
     causal_status: structural
@@ -194,56 +194,56 @@ vyaptis:
     consequent: "human_judgment_value_increases"
 
 hetvabhasas:
-  H1:
-    id: H1
+  H01:
+    id: H01
     name: "The Template Fallacy"
     description: "Concluding that copy is good because it follows a persuasion framework; following AIDA or PAS guarantees structural completeness but not persuasive quality, and you can write terrible copy that follows AIDA perfectly"
     detection_signature: "framework_compliance_cited_as_quality_evidence"
     correction_pattern: "Frameworks are scaffolds, not blueprints — evaluate the execution (word choice, specificity, rhythm, voice, psychological precision) separately from the structure"
     common_contexts: ["beginner_copy_review", "agency_deliverables", "template_marketplaces"]
 
-  H2:
-    id: H2
+  H02:
+    id: H02
     name: "The Cleverness Trap"
     description: "Prioritising elegance, wit or literary quality over clarity and persuasive function, so that the reader admires the line but does not understand what is being sold"
     detection_signature: "craft_praise_without_conversion_evidence"
     correction_pattern: "Ask what action the copy is for; cleverness that serves the function is good, cleverness that obscures it is self-indulgence. Awards are not conversions"
     common_contexts: ["creative_awards", "brand_campaigns", "writers_with_artistic_training"]
 
-  H3:
-    id: H3
+  H03:
+    id: H03
     name: "The Feature-Benefit Confusion"
     description: "Describing what the product does instead of what the reader gets, forcing the reader to do the translation work that most readers will not do"
     detection_signature: "product_capability_stated_without_reader_outcome"
     correction_pattern: "Translate each feature into an improvement in the reader's life; keep features as proof mechanisms supporting the benefit claim, not as the claim"
     common_contexts: ["technical_products", "ai_product_copy", "founder_written_copy"]
 
-  H4:
-    id: H4
+  H04:
+    id: H04
     name: "The Audience of One"
     description: "Writing copy based on what would persuade the writer rather than researching what would persuade the actual audience, projecting one's own knowledge level, pain points and decision criteria onto the market"
     detection_signature: "no_audience_research_cited_for_audience_claims"
     correction_pattern: "Do voice-of-customer research; the writer is almost never representative of the target audience, and once you know something you cannot easily reconstruct not knowing it"
     common_contexts: ["founder_written_copy", "in_house_marketing", "solo_practitioners"]
 
-  H5:
-    id: H5
+  H05:
+    id: H05
     name: "The Social Proof Cascade"
     description: "Copying the style, structure or tactics of competitors and popular brands without understanding the strategic context that makes those choices work for that brand and that audience"
     detection_signature: "competitor_practice_cited_as_justification"
     correction_pattern: "Identify the strategic context that makes the observed choice work — brand equity, awareness level, category position — and check whether yours matches before borrowing the tactic"
     common_contexts: ["competitive_analysis", "saas_landing_pages", "category_conventions"]
 
-  H6:
-    id: H6
+  H06:
+    id: H06
     name: "The Optimization Myopia"
     description: "Treating A/B test results as the sole arbiter of copy quality, without considering brand consistency, long-term trust effects, or whether the test measured the right thing"
     detection_signature: "short_term_metric_win_treated_as_quality_verdict"
     correction_pattern: "Ask what the test could not see — trust erosion, lifetime value, word of mouth, positioning for the next interaction. Optimising hard for immediate conversion can cannibalise long-term value"
     common_contexts: ["conversion_optimization", "email_subject_testing", "performance_marketing"]
 
-  H7:
-    id: H7
+  H07:
+    id: H07
     name: "The AI Equivalence Error"
     description: "Concluding from AI's surface competence that human copywriting skill is commoditised — or, inversely, that AI copy is always bad and will never matter. Both mistake surface-level competence for the full skill stack"
     detection_signature: "ai_capability_claim_without_layer_distinction"
@@ -268,8 +268,8 @@ threshold_concepts:
 
 dependency_graph:
   # Vyāpti chains (consequent of one feeds an antecedent of another)
-  V1: ["V3"]              # persuasion_possible → problem-first sequence can operate
-  V4: ["V8"]              # strategic_fit → editing can multiply
+  V01: ["V03"]              # persuasion_possible → problem-first sequence can operate
+  V04: ["V08"]              # strategic_fit → editing can multiply
   # Concept-level dependencies, transcribed from STEP 2C. Key → concepts
   # that depend on it, matching the direction used in business_expert.yaml.
   C01: ["C03", "C05", "C10"]
@@ -309,11 +309,11 @@ chapter_fingerprints:
     title: "The Attention Gate — Why Nothing Works Without This"
     key_terms: ["hook", "headline", "scroll_stop", "attention_hierarchy", "first_eight_seconds"]
     anchoring_concepts: ["attention_as_prerequisite"]
-    vyaptis_introduced: ["V1"]
+    vyaptis_introduced: ["V01"]
     hetvabhasas_active: []
     prerequisites: ["ch01"]
     forward_dependencies: ["ch04", "ch10"]
-    epistemic_statuses: {"V1": "established"}
+    epistemic_statuses: {"V01": "established"}
     difficulty_tier: "foundational"
 
   ch03:
@@ -321,11 +321,11 @@ chapter_fingerprints:
     title: "The Anatomy of Persuasion — Core Principles That Never Change"
     key_terms: ["specificity", "proof_hierarchy", "benefit_framing", "social_proof", "scarcity", "authority"]
     anchoring_concepts: ["core_persuasion_principles"]
-    vyaptis_introduced: ["V2", "V6"]
-    hetvabhasas_active: ["H3"]
+    vyaptis_introduced: ["V02", "V06"]
+    hetvabhasas_active: ["H03"]
     prerequisites: ["ch01", "ch02"]
     forward_dependencies: ["ch04", "ch07", "ch14"]
-    epistemic_statuses: {"V2": "established", "V6": "established"}
+    epistemic_statuses: {"V02": "established", "V06": "established"}
     difficulty_tier: "foundational"
 
   ch04:
@@ -333,11 +333,11 @@ chapter_fingerprints:
     title: "Frameworks — The Architecture of Persuasion"
     key_terms: ["aida", "pas", "before_after_bridge", "four_us", "storytelling_structure"]
     anchoring_concepts: ["frameworks_as_scaffolds"]
-    vyaptis_introduced: ["V3"]
-    hetvabhasas_active: ["H1"]
+    vyaptis_introduced: ["V03"]
+    hetvabhasas_active: ["H01"]
     prerequisites: ["ch03"]
     forward_dependencies: ["ch11", "ch12", "ch13"]
-    epistemic_statuses: {"V3": "established"}
+    epistemic_statuses: {"V03": "established"}
     difficulty_tier: "foundational"
 
   ch05:
@@ -345,11 +345,11 @@ chapter_fingerprints:
     title: "Awareness Levels — The Strategic Foundation"
     key_terms: ["unaware", "problem_aware", "solution_aware", "product_aware", "most_aware", "market_sophistication"]
     anchoring_concepts: ["awareness_levels_as_strategic_frame"]
-    vyaptis_introduced: ["V4"]
+    vyaptis_introduced: ["V04"]
     hetvabhasas_active: []
     prerequisites: ["ch02", "ch03"]
     forward_dependencies: ["ch08", "ch11", "ch13", "ch16"]
-    epistemic_statuses: {"V4": "established"}
+    epistemic_statuses: {"V04": "established"}
     difficulty_tier: "intermediate"
 
   ch06:
@@ -357,11 +357,11 @@ chapter_fingerprints:
     title: "The Reader's Journey — From Attention to Action"
     key_terms: ["friction", "micro_decision", "call_to_action", "objection_handling", "abandonment"]
     anchoring_concepts: ["reader_journey_as_friction_sequence"]
-    vyaptis_introduced: ["V7"]
+    vyaptis_introduced: ["V07"]
     hetvabhasas_active: []
     prerequisites: ["ch03"]
     forward_dependencies: ["ch12"]
-    epistemic_statuses: {"V7": "established"}
+    epistemic_statuses: {"V07": "established"}
     difficulty_tier: "intermediate"
 
   ch07:
@@ -369,11 +369,11 @@ chapter_fingerprints:
     title: "Voice, Tone & Brand Language"
     key_terms: ["brand_voice", "tone", "voice_system", "distinctiveness", "parasocial_trust"]
     anchoring_concepts: ["voice_as_trained_intuition"]
-    vyaptis_introduced: ["V5"]
-    hetvabhasas_active: ["H2"]
+    vyaptis_introduced: ["V05"]
+    hetvabhasas_active: ["H02"]
     prerequisites: ["ch03"]
     forward_dependencies: ["ch14", "ch17"]
-    epistemic_statuses: {"V5": "hypothesis"}
+    epistemic_statuses: {"V05": "hypothesis"}
     difficulty_tier: "intermediate"
 
   ch08:
@@ -382,7 +382,7 @@ chapter_fingerprints:
     key_terms: ["voice_of_customer", "customer_avatar", "competitive_copy_analysis", "positioning"]
     anchoring_concepts: ["research_as_strategic_act"]
     vyaptis_introduced: []
-    hetvabhasas_active: ["H4", "H5"]
+    hetvabhasas_active: ["H04", "H05"]
     prerequisites: ["ch05"]
     forward_dependencies: ["ch09"]
     epistemic_statuses: {}
@@ -429,11 +429,11 @@ chapter_fingerprints:
     title: "Editing, Revision & the Craft of Cutting"
     key_terms: ["self_editing", "rhythm", "cadence", "readability", "cutting", "ab_testing"]
     anchoring_concepts: ["editing_as_the_primary_craft"]
-    vyaptis_introduced: ["V8"]
-    hetvabhasas_active: ["H6"]
+    vyaptis_introduced: ["V08"]
+    hetvabhasas_active: ["H06"]
     prerequisites: ["ch06", "ch11"]
     forward_dependencies: ["ch16", "ch17"]
-    epistemic_statuses: {"V8": "hypothesis"}
+    epistemic_statuses: {"V08": "hypothesis"}
     difficulty_tier: "advanced"
 
   ch13:
@@ -454,7 +454,7 @@ chapter_fingerprints:
     key_terms: ["social_copy", "ad_copy", "website_copy", "product_description", "case_study"]
     anchoring_concepts: ["format_specific_diagnosis"]
     vyaptis_introduced: []
-    hetvabhasas_active: ["H3"]
+    hetvabhasas_active: ["H03"]
     prerequisites: ["ch07", "ch10"]
     forward_dependencies: []
     epistemic_statuses: {}
@@ -465,11 +465,11 @@ chapter_fingerprints:
     title: "AI-Era Copywriting — What Changes and What Doesn't"
     key_terms: ["llm_drafting", "editorial_judgment", "prompt_engineering", "originality", "voice_consistency"]
     anchoring_concepts: ["ai_as_complement_not_substitute"]
-    vyaptis_introduced: ["V9"]
-    hetvabhasas_active: ["H7"]
+    vyaptis_introduced: ["V09"]
+    hetvabhasas_active: ["H07"]
     prerequisites: ["ch03", "ch10"]
     forward_dependencies: ["ch17"]
-    epistemic_statuses: {"V9": "contested"}
+    epistemic_statuses: {"V09": "contested"}
     difficulty_tier: "advanced"
 
   ch16:
@@ -478,7 +478,7 @@ chapter_fingerprints:
     key_terms: ["conversion_economics", "roi_framing", "pricing", "portfolio", "client_work"]
     anchoring_concepts: ["copy_as_revenue_multiplier"]
     vyaptis_introduced: []
-    hetvabhasas_active: ["H6"]
+    hetvabhasas_active: ["H06"]
     prerequisites: ["ch05", "ch12"]
     forward_dependencies: []
     epistemic_statuses: {}
