@@ -6,17 +6,32 @@ title/author/year, zero DOIs, zero ISBNs, zero URLs. The chain resolved in
 *shape* — all 25 citations pointed at a real bank entry — while nothing in the
 pipeline could confirm any of those works exists.
 
-Three statuses, never two, and the third is the load-bearing one:
+Four statuses, and the last two carry the weight:
 
-    resolved   a locator was fetched and matched on title, author and year
-    ambiguous  several candidates are defensible; none was chosen
-    not_found  we looked and did not find it
+    resolved              a locator was fetched and matched on title, author, year
+    ambiguous             several candidates are defensible; none was chosen
+    not_found             we looked and did not find it
+    not_a_locatable_work  there is nothing to locate
 
 `not_found` is deliberately not `fabricated`. Two failed searches are not proof
 of absence, and the citation tier reserves its deleting verdict for a span that
 was checked and found missing. Reading "we could not find it" as "the source is
 invented" is the same collapse that would have deleted the knowledge base on the
 strength of an identifier resolver nobody had written.
+
+`not_a_locatable_work` is the opposite error guarded against. Some entries name
+a worked example, a practice or a field-wide tension rather than a citable
+document — there is no DOI for "the frameworks-as-crutches critique" — and
+demanding an identifier for those forces either an invented one or the loss of
+the dissenting material, which is exactly what an argumentation engine wants.
+The absence is the accurate record, not a gap: the same shape as a curated
+rule's empty provenance, which the schema's own docstring calls correct.
+
+It is UNUSED in the business bank, deliberately and visibly. All 29 entries
+there name a citable document; the status exists for the copywriting bank (#20),
+whose citation practice differs in kind (#106). A law below asserts the zero
+**with its denominator**, so it reads as ready-and-unused rather than working —
+an unexercised status is untested machinery wearing the same green as the rest.
 
 None of this changes a rule's status today. All 11 rules tier CURATED, which
 returns before provenance is read, so the retrofit buys reader-checkable
@@ -33,7 +48,7 @@ import yaml
 # below fail that way — which is #61's shape, and there is no reason to add to
 # it in a new file when `test_citation_tier.py` already does this correctly.
 KB_PATH = Path(__file__).resolve().parents[1] / "data" / "business_expert.yaml"
-VALID_STATUSES = {"resolved", "ambiguous", "not_found"}
+VALID_STATUSES = {"resolved", "ambiguous", "not_found", "not_a_locatable_work"}
 
 
 def _bank():
@@ -160,3 +175,57 @@ def test_the_citation_tier_is_unchanged_by_this():
     tiers = {vid: tier_for_citation(v) for vid, v in ks.vyaptis.items()}
     assert len(tiers) == 11, f"expected 11 rules, examined {len(tiers)}"
     assert set(tiers.values()) == {CitationTier.CURATED}, tiers
+
+
+# ── not_a_locatable_work ─────────────────────────────────────
+
+def test_the_fourth_status_is_recognised():
+    """It must be spellable before #20 can use it. Without this the copywriting
+    bank's cases and critiques have only `not_found` available, which asserts a
+    failed search for something that was never a document."""
+    assert "not_a_locatable_work" in VALID_STATUSES
+
+
+def test_it_is_unused_here_and_the_denominator_says_so():
+    """Ready, not working. All 29 business entries name a citable document, so
+    this status is unexercised on the day it ships — and an unexercised status
+    is untested machinery wearing the same green as the rest. State the zero
+    beside what it was measured over, or the number means nothing."""
+    bank = _bank()
+    used = [k for k, v in bank.items()
+            if v["resolution"]["status"] == "not_a_locatable_work"]
+    assert len(used) == 0, used
+    assert len(bank) >= 29, f"zero measured over only {len(bank)} entries"
+
+
+def test_it_must_say_why_there_is_nothing_to_locate():
+    """The whole difference from not_found is the reason. Without one the two
+    are indistinguishable in the file, and one means 'we failed' while the other
+    means 'there was never a document here'."""
+    for k, v in _bank().items():
+        if v["resolution"]["status"] != "not_a_locatable_work":
+            continue
+        assert v["resolution"].get("note"), f"{k}: no reason recorded"
+
+
+def test_it_must_not_carry_an_identifier():
+    """An entry that is not a locatable work cannot have resolved to one. If it
+    did, the status is wrong — or the identifier was invented, which is the
+    failure this whole axis exists to catch."""
+    for k, v in _bank().items():
+        if v["resolution"]["status"] != "not_a_locatable_work":
+            continue
+        assert not (v.get("work_id") or v.get("doi")
+                    or v.get("url") or v.get("isbn_13")), \
+            f"{k}: not a locatable work, yet an identifier was recorded"
+
+
+def test_it_is_not_a_synonym_for_not_found():
+    """Two absences with opposite meanings. Collapsing them would relabel a
+    failed search as a by-design absence and hide it — #103 is exactly such a
+    failed search, and it must stay visible."""
+    assert "not_a_locatable_work" != "not_found"
+    bank = _bank()
+    nf = [k for k, v in bank.items()
+          if v["resolution"]["status"] == "not_found"]
+    assert nf, "the not_found case disappeared; #103 must remain visible"
