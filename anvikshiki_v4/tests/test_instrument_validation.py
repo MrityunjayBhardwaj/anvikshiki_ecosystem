@@ -16,6 +16,9 @@ import pytest
 from anvikshiki_v4.instrument_validation import (
     AGREE,
     DISAGREE,
+    MATCH,
+    NO_MATCH,
+    UNJUDGED,
     MatcherDecision,
     MatcherParams,
     SheetProvenance,
@@ -268,31 +271,43 @@ def test_kappa_is_computed_when_the_raters_vary():
 
 # ── replaying one set of judgments across match modes ──
 
-def test_a_mode_replay_preserves_what_the_human_meant():
-    """The human judges the pair, not the matcher, so one sheet scores all modes.
-
-    A judgment is a fact about whether two predicates mean the same thing. If
-    the matcher's verdict flips under a different mode, agree/disagree has to
-    flip with it — otherwise switching modes silently rewrites what the human
-    said.
-    """
-    from anvikshiki_v4.instrument_validation import replay_mode
-
-    judged = MatcherDecision(
+def _near_miss_the_human_calls_a_match(human):
+    """One pair, judged as a match, spelled whichever way the caller asks."""
+    return MatcherDecision(
         gold="high_retention_rate",
         candidate="customers_stay_subscribed",
         gold_description=GOLD_DESCRIPTIONS["high_retention_rate"],
         candidate_description=GOLD_DESCRIPTIONS["high_retention_rate"],
         matcher_says_match=False,
-        human=DISAGREE,        # human: these DO mean the same thing
+        human=human,
         kind="near_miss",
     )
+
+
+@pytest.mark.parametrize("spelling", [MATCH, DISAGREE])
+def test_a_mode_replay_preserves_what_the_human_meant(spelling):
+    """The human judges the pair, not the matcher, so one sheet scores all modes.
+
+    A judgment is a fact about whether two predicates mean the same thing, and
+    the replay must carry that fact across a verdict that moves underneath it —
+    otherwise switching modes silently rewrites what the human said.
+
+    Parametrised over both spellings because that is the whole argument for the
+    fact vocabulary. `disagree` on a near miss and `match` mean the same thing
+    here, and only one of them keeps meaning it after the verdict flips: the
+    relative spelling needs a compensating flip on the way through, and a
+    compensating flip is only ever as reliable as whoever maintains it. The
+    replay writes the fact, so there is nothing left to flip.
+    """
+    from anvikshiki_v4.instrument_validation import replay_mode
+
+    judged = _near_miss_the_human_calls_a_match(spelling)
     assert judged.human_says_match is True
 
     replayed = replay_mode([judged], GOLD_DESCRIPTIONS, match_on="description")[0]
     assert replayed.matcher_says_match is True     # descriptions catch it
-    assert replayed.human == AGREE                 # so they now agree
     assert replayed.human_says_match is True       # and the human still says match
+    assert replayed.human == MATCH                 # written as the fact it is
 
 
 def test_a_mode_replay_leaves_unjudged_rows_unjudged():
@@ -378,3 +393,85 @@ def test_a_half_written_provenance_block_fails_loudly(tmp_path):
     }))
     with pytest.raises(ValidationError):
         read_decision_sheet(path)
+
+
+# ── the judgment vocabulary states a fact ────────────────────
+#
+# Thirty-three of the shipped sheet's thirty-eight rows are near misses, where
+# `matcher_says_match` is False. Under `agree`/`disagree` a judge answering the
+# question the sheet's own instructions pose — "do these two mean the same
+# thing?" — had to invert their answer on every one of them, and getting it
+# wrong is undetectable downstream: an inverted sheet produces a different
+# kappa and nothing can tell it from an honest one.
+
+@pytest.mark.parametrize("matcher_says_match", [True, False])
+def test_match_says_match_whatever_the_matcher_said(matcher_says_match):
+    d = _decision(matcher_says_match, MATCH)
+    assert d.judged
+    assert d.human_says_match is True
+
+
+@pytest.mark.parametrize("matcher_says_match", [True, False])
+def test_no_match_says_no_match_whatever_the_matcher_said(matcher_says_match):
+    d = _decision(matcher_says_match, NO_MATCH)
+    assert d.judged
+    assert d.human_says_match is False
+
+
+def test_the_relative_spelling_still_reads_correctly():
+    """A sheet already written in agree/disagree means what it meant. Nothing
+    is judged today, so nothing depends on this — but silently changing what a
+    filled sheet says would be the same defect at one remove."""
+    assert _decision(True, AGREE).human_says_match is True
+    assert _decision(False, AGREE).human_says_match is False
+    assert _decision(True, DISAGREE).human_says_match is False
+    assert _decision(False, DISAGREE).human_says_match is True
+
+
+def test_agree_and_match_mean_opposite_things_on_a_near_miss():
+    """The trap, asserted so it cannot be forgotten or reintroduced.
+
+    This is not a quirk to work around — it is why the vocabulary changed. On
+    the 33 near-miss rows the two spellings of a judge's honest 'yes, these
+    mean the same thing' point in opposite directions.
+    """
+    assert _decision(False, MATCH).human_says_match is True
+    assert _decision(False, AGREE).human_says_match is False
+
+
+def test_an_unrecognised_word_is_unjudged_rather_than_a_guess(tmp_path):
+    """A typo must not be silently resolved to one of the two answers. Unjudged
+    is reported as unjudged; a guess would enter the count as data."""
+    d = _decision(True, "yes")
+    assert not d.judged
+    assert d.human_says_match is None
+
+
+def test_the_instructions_ask_for_the_fact_not_for_agreement(tmp_path):
+    """The sheet carries its own instructions, so they are part of the
+    instrument. Asking for agreement with `matcher_says_match` is asking the
+    judge to encode the thing being measured."""
+    import yaml as _yaml
+
+    path = write_decision_sheet(
+        [_decision(False, UNJUDGED)], tmp_path / "sheet.yaml", _provenance()
+    )
+    instructions = _yaml.safe_load(path.read_text())["instructions"]
+    assert "'match'" in instructions and "'no_match'" in instructions
+    assert "agree" not in instructions, (
+        "the word is the trap: a judge scanning for it will find the old "
+        "vocabulary in a sheet that no longer uses it"
+    )
+    assert "matcher_says_match" in instructions, (
+        "the fields to ignore have to be named, or the judge reads them"
+    )
+
+
+def test_a_judged_sheet_round_trips(tmp_path):
+    path = write_decision_sheet(
+        [_decision(False, MATCH), _decision(True, NO_MATCH)],
+        tmp_path / "sheet.yaml", _provenance(),
+    )
+    back = read_decision_sheet(path).decisions
+    assert [d.human for d in back] == [MATCH, NO_MATCH]
+    assert [d.human_says_match for d in back] == [True, False]
