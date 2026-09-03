@@ -21,6 +21,14 @@ because bag-of-tokens discards the relation the predicate exists to express.
 import pytest
 
 from anvikshiki_v4.coverage import TOKEN_OVERLAP_MIN, SemanticCoverageAnalyzer
+from anvikshiki_v4.schema import (
+    CausalStatus,
+    Confidence,
+    DomainType,
+    EpistemicStatus,
+    KnowledgeStore,
+    Vyapti,
+)
 from anvikshiki_v4.extraction_eval import (
     _best_match_score,
     _token_overlap,
@@ -153,22 +161,33 @@ def test_the_evaluator_and_the_compiler_now_agree():
 
 # ── coverage routing, which runs in production ──
 
-class _StubVyapti:
-    def __init__(self, antecedents, consequent):
-        self.antecedents = antecedents
-        self.consequent = consequent
+def _StubKS(predicates):
+    """A real `KnowledgeStore`, built from real `Vyapti` objects.
 
+    This was a pair of hand-built stand-ins carrying the four attributes the
+    analyzer happened to read. #47 filed that shape and predicted exactly what
+    followed: the analyzer learned to read `scope_conditions`, and a test about
+    token overlap and negation broke with an `AttributeError` about a field it
+    has no opinion on. A hand-built stub is a second definition of the model
+    that drifts silently and reports the drift somewhere unrelated.
 
-class _StubKS:
-    """Minimal stand-in — the analyzer reads vyaptis and the two tables only."""
-
-    def __init__(self, predicates):
-        self.vyaptis = {
-            f"V{i:02d}": _StubVyapti([p], "some_consequent")
+    The real objects are cheap, carry their own defaults, and cannot drift.
+    """
+    return KnowledgeStore(
+        domain_type=DomainType.CRAFT,
+        vyaptis={
+            f"V{i:02d}": Vyapti(
+                id=f"V{i:02d}", name=f"V{i:02d}",
+                statement=f"{p} implies some_consequent",
+                causal_status=CausalStatus.EMPIRICAL,
+                confidence=Confidence(existence=0.9, formulation=0.9,
+                                      evidence="theoretical"),
+                epistemic_status=EpistemicStatus.ESTABLISHED,
+                antecedents=[p], consequent="some_consequent",
+            )
             for i, p in enumerate(predicates)
-        }
-        self.synonym_table: dict[str, str] = {}
-        self.contrariness_pairs: list[list[str]] = []
+        },
+    )
 
 
 def test_coverage_does_not_match_a_predicate_to_its_own_negation():
