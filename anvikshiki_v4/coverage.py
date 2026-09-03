@@ -44,6 +44,7 @@ from pydantic import BaseModel, Field
 
 from .predicate_contrariness import (
     affirmative,
+    get_contrary,
     match_veto,
     negation_differs,
     normalize_negation,
@@ -78,6 +79,20 @@ class CoverageResult(BaseModel):
         ),
     )
     relevant_vyaptis: list[str] = Field(default_factory=list)
+    inert_predicates: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Matched predicates the base cannot do anything with as stated. "
+            "A predicate is inert when no rule takes it as an antecedent, no "
+            "rule concludes it, and no rule concludes its contrary — so it "
+            "can neither fire a rule nor rebut one. Matching is about "
+            "vocabulary and this is about machinery; the two are different "
+            "questions and a predicate can pass the first and fail the "
+            "second. Kept out of `unmatched_predicates` on purpose: the "
+            "vocabulary really does hold it, and saying otherwise would lose "
+            "the routing to `relevant_vyaptis` that retrieval depends on."
+        ),
+    )
     decision: str = "DECLINE"  # FULL / PARTIAL / DECLINE
 
 
@@ -102,6 +117,12 @@ class SemanticCoverageAnalyzer:
         self._synonym_table = synonym_table or knowledge_store.synonym_table
         self._vocab = self._build_vocabulary()
         self._pred_to_vyaptis = self._build_predicate_index()
+        self._antecedents = {
+            a for v in knowledge_store.vyaptis.values() for a in v.antecedents
+        }
+        self._consequents = {
+            v.consequent for v in knowledge_store.vyaptis.values() if v.consequent
+        }
 
     def _build_vocabulary(self) -> set[str]:
         """All predicates from antecedents + consequents across all vyaptis."""
@@ -121,6 +142,31 @@ class SemanticCoverageAnalyzer:
                     index.setdefault(pred, []).append(vid)
         return index
 
+    def _is_inert(self, pred: str) -> bool:
+        """Can any rule in this base do anything with `pred` as stated?
+
+        Three ways it can, and inert means none of them holds:
+
+          * some rule takes it as an antecedent  → it can help fire a rule
+          * some rule concludes it               → it can be derived, or agree
+          * some rule concludes its contrary     → it can raise a rebuttal
+
+        The third is why negation is not the test. `not_value_creation`
+        against a base whose rule concludes `value_creation` is the case the
+        module docstring calls the engine's most informative behaviour, and it
+        is not inert — the rebutting attack is exactly what the base has
+        machinery for. `not_attention_captured` against a base where
+        `attention_captured` is only ever an antecedent has no such
+        counterpart: nothing concludes it, so nothing can be rebutted, and
+        nothing takes the negation as an input. The base holds the word and
+        owns no reasoning that can consume it in this polarity.
+        """
+        return not (
+            pred in self._antecedents
+            or pred in self._consequents
+            or get_contrary(pred) in self._consequents
+        )
+
     def analyze(self, grounded_predicates: list[str]) -> CoverageResult:
         """
         Analyze coverage of grounded predicates against the KB.
@@ -137,6 +183,7 @@ class SemanticCoverageAnalyzer:
 
         matched: list[str] = []
         unmatched: list[str] = []
+        inert: list[str] = []
         details: dict[str, str] = {}
         relevant_vyapti_ids: set[str] = set()
 
@@ -149,6 +196,8 @@ class SemanticCoverageAnalyzer:
             layer, kb_name, query_name = hit
             matched.append(pred)
             details[pred] = self._match_type(layer, query_name, kb_name)
+            if self._is_inert(query_name):
+                inert.append(pred)
             for vid in self._pred_to_vyaptis.get(kb_name, []):
                 relevant_vyapti_ids.add(vid)
 
@@ -162,12 +211,28 @@ class SemanticCoverageAnalyzer:
         else:
             decision = "DECLINE"
 
+        # FULL is a claim that the base can reason about this query, not just
+        # that it recognises the words. When every predicate it matched is one
+        # the base owns no machinery for, that claim is false however high the
+        # ratio is — nothing can fire and nothing can be rebutted, so the
+        # argumentation layer will come back empty.
+        #
+        # Demoted rather than declined, and the difference is deliberate:
+        # DECLINE diverts to augmentation, which answers "can we invent a rule
+        # for this?" — a different question from "should we admit we have
+        # none?" The ratio, the matched list and the vyāpti routing are all
+        # left exactly as they were, because the vocabulary match is real and
+        # retrieval still wants the chapters these predicates point at.
+        if decision == "FULL" and matched and len(inert) == len(matched):
+            decision = "PARTIAL"
+
         return CoverageResult(
             coverage_ratio=ratio,
             matched_predicates=matched,
             unmatched_predicates=unmatched,
             match_details=details,
             relevant_vyaptis=sorted(relevant_vyapti_ids),
+            inert_predicates=inert,
             decision=decision,
         )
 
