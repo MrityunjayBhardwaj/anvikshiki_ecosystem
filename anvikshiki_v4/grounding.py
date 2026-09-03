@@ -240,6 +240,13 @@ def _consensus(
     sort order so the result does not depend on set iteration order — an
     ensemble that grounds differently on reruns cannot be compared against
     itself.
+
+    *It also counts vyāpti ids*, which have no entity and so key on
+    `(id, None)` — a binding like any other. That field kept unanimity after
+    this function was written for the predicate one, and one member of five
+    omitting an id dropped it from the consensus set. It was invisible
+    because `candidate_vyaptis` reached only the decay check, whose output
+    nothing on the query path read.
     """
     if not pred_sets:
         return set(), set()
@@ -381,7 +388,12 @@ class GroundingPipeline(dspy.Module):
 
         consensus_preds, disputed_preds = _consensus(all_pred_sets)
 
-        consensus_vyaptis = set.intersection(*all_vyapti_sets) if all_vyapti_sets else set()
+        # The same majority rule, for the same reason. This line kept
+        # `set.intersection` for three commits after the predicate line above
+        # gave it up, because an issue written from one field names one field
+        # — and it cost nothing while `candidate_vyaptis` fed only the decay
+        # check, whose output the engine discarded. It costs something now.
+        consensus_vyaptis, _ = _consensus(all_vyapti_sets)
 
         total = len(consensus_preds) + len(disputed_preds)
         confidence = len(consensus_preds) / max(total, 1)
