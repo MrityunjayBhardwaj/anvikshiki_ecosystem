@@ -10,7 +10,7 @@ Supports two entry points:
 from typing import Optional
 
 import dspy
-from .advisories import as_wire, unestablished_scope_advisories
+from .advisories import Advisory, as_wire, unestablished_scope_advisories
 from .schema import KnowledgeStore
 from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
@@ -104,7 +104,7 @@ def derivation_state(af, labels) -> dict:
     }
 
 
-def collect_advisories(knowledge_store, af, labels, grounding) -> list:
+def collect_advisories(knowledge_store, af, labels, grounding) -> list[Advisory]:
     """Every advisory this answer carries, from both sides of the boundary.
 
     Two producers with two different views, joined here because this is the

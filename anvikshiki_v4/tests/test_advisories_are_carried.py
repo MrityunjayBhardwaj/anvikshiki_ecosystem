@@ -191,6 +191,30 @@ class TestUnestablishedScope:
         assert "pricing_power(acme)" in v03[0].message
 
 
+def test_an_unlabelled_framework_raises_instead_of_advising_nothing(ks):
+    """The defect this check exists to report, committed by the check.
+
+    `af.labels` is `{}` until something computes it, so a caller that forgot
+    would have been handed an empty list — no rule reported as firing outside
+    its scope, because no rule was reported as firing at all. The framework's
+    own silence, read as a fact about the query. The same guard
+    `derivation_state` grew for the same reason, and it is needed here too
+    because the engine calls this one first.
+    """
+    af, _ = _af(ks, "gate_open(acme)")
+    af.labels.clear()
+    assert af.labels == {}, "fixture no longer demonstrates the unlabelled case"
+    with pytest.raises(ValueError, match="unlabelled framework"):
+        unestablished_scope_advisories(ks, af, af.labels)
+
+
+def test_an_empty_framework_is_not_an_error(ks):
+    """No arguments and no labels is a consistent state, not a forgotten
+    call — the clarification paths reach it legitimately."""
+    af, _ = _af(ks)
+    assert unestablished_scope_advisories(ks, af, {}) == []
+
+
 # ── #92: the grounding half, and that the two lists cannot drift ──
 
 class TestGroundingCarriesTypedAdvisories:

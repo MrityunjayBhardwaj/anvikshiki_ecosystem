@@ -123,6 +123,16 @@ def unestablished_scope_advisories(
     nothing is gated on the result — if firing is ever gated on scope, this
     is the line to revisit first.
     """
+    if af.arguments and not labels:
+        raise ValueError(
+            "unestablished_scope_advisories called on an unlabelled "
+            f"framework: {len(af.arguments)} arguments and no labels. Call "
+            "af.compute_grounded() first. Without this guard the answer "
+            "would be an empty list — no rule reported as firing outside its "
+            "scope because no rule was reported as firing at all, which is "
+            "the framework's own silence read as a fact about the query."
+        )
+
     established: set[tuple[str, Optional[str]]] = {
         (predicate_name(a.conclusion), predicate_entity(a.conclusion))
         for a in af.arguments.values()

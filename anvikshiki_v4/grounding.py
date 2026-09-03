@@ -146,7 +146,7 @@ class OntologyVocabulary(NamedTuple):
     scope_only: frozenset       # scope conditions and exclusions, and nothing else
 
     @property
-    def permitted(self) -> frozenset:
+    def permitted(self) -> frozenset[str]:
         return self.consumable | self.scope_only
 
 
@@ -191,7 +191,12 @@ def build_grounding_solver(knowledge_store: KnowledgeStore) -> DatalogEngine:
 
     solver = DatalogEngine(
         boolean_mode=True,
-        extra_vocabulary=ontology_vocabulary(knowledge_store).scope_only,
+        # The whole permitted set, not just the scope half. The rules
+        # already contribute the consumable names, so the union adds nothing
+        # — which is the point: passing the subset would make this correct
+        # only for as long as "the rules cover exactly the consumable names"
+        # stays true somewhere else.
+        extra_vocabulary=ontology_vocabulary(knowledge_store).permitted,
     )
     for v in knowledge_store.vyaptis.values():
         if not v.consequent:
