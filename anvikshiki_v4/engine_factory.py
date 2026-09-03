@@ -9,7 +9,7 @@ Runs the complete compile-time pipeline:
   5. T3aRetriever(chunks) → FAISS index
   6. SemanticCoverageAnalyzer(augmented_ks, synonym_table)
   7. AugmentationPipeline(augmented_ks) for T3b
-  8. GroundingPipeline(augmented_ks) for grounding
+  8. GroundingPipeline(augmented_ks, solver) for grounding
   9. AnvikshikiEngineV4 with all components wired
 
 Usage:
@@ -36,7 +36,7 @@ from .t3_compiler import TextChunk, compile_t3
 from .t3a_retriever import T3aRetriever
 from .coverage import SemanticCoverageAnalyzer
 from .kb_augmentation import AugmentationPipeline
-from .grounding import GroundingPipeline
+from .grounding import GroundingPipeline, build_grounding_solver
 from .engine_v4 import AnvikshikiEngineV4
 
 
@@ -189,7 +189,15 @@ def initialize_engine(
     augmentation_pipeline = AugmentationPipeline(active_ks)
 
     # Step 8: Build grounding pipeline
-    grounding_pipeline = GroundingPipeline(active_ks)
+    #
+    # With a solver. Without one, Layer 5 — solver-feedback refinement — was
+    # guarded on `self.engine is not None` and this was the only production
+    # construction site, so `refinement_rounds` was structurally 0 in the mode
+    # chosen precisely because it refines. Building it is pure construction:
+    # no I/O, no LLM, free per query.
+    grounding_pipeline = GroundingPipeline(
+        active_ks, datalog_engine=build_grounding_solver(active_ks)
+    )
 
     # Step 9: Assemble engine
     engine = AnvikshikiEngineV4(

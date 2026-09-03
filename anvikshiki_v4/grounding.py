@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import dspy
 from pydantic import BaseModel, Field
@@ -131,6 +131,80 @@ class CheckFaithfulness(dspy.Signature):
 # ─── Layer 1: Ontology Snippet Builder ───────────────────────
 
 
+class OntologyVocabulary(NamedTuple):
+    """What a grounded predicate is allowed to be called.
+
+    Two sets rather than one because the prompt says different things about
+    them — a consumable name can fire a rule or be concluded by one, while a
+    scope-only name says when a rule does or does not apply and can do
+    neither. The union is what may be *asserted*, and it is the union that
+    the solver's validator has to agree with. It did not, for as long as the
+    query path gave the grounder no solver and nothing had to.
+    """
+
+    consumable: frozenset       # antecedents and consequents
+    scope_only: frozenset       # scope conditions and exclusions, and nothing else
+
+    @property
+    def permitted(self) -> frozenset:
+        return self.consumable | self.scope_only
+
+
+def ontology_vocabulary(
+    knowledge_store: KnowledgeStore,
+    relevant_vyaptis: Optional[list[str]] = None,
+) -> OntologyVocabulary:
+    """The one place that decides what names a query may use."""
+    vyapti_ids = relevant_vyaptis or list(knowledge_store.vyaptis.keys())
+    consumable: set[str] = set()
+    scope: set[str] = set()
+    for vid in vyapti_ids:
+        v = knowledge_store.vyaptis.get(vid)
+        if not v:
+            continue
+        consumable.update(v.antecedents)
+        if v.consequent:
+            consumable.add(v.consequent)
+        scope.update(v.scope_conditions)
+        scope.update(v.scope_exclusions)
+    # A scope predicate that is also an antecedent or consequent is already
+    # assertable as one; listing it twice would say two different things
+    # about one word.
+    return OntologyVocabulary(frozenset(consumable), frozenset(scope - consumable))
+
+
+def build_grounding_solver(knowledge_store: KnowledgeStore) -> DatalogEngine:
+    """The solver Layer 5 needs, which the query path never built.
+
+    `GroundingPipeline` documents five layers and the fifth was guarded on
+    `self.engine is not None` — true at the one production construction site,
+    which passed no solver. `refinement_rounds` was structurally 0: a
+    predicate the solver would reject was never rejected, never fed back and
+    never refined, in the mode chosen precisely because it is not.
+
+    Constructed the way `kb_augmentation` already constructs one, with the
+    permitted vocabulary handed over explicitly so the validator and the
+    prompt cannot disagree. Pure construction — no I/O, no LLM, free per
+    query.
+    """
+    from .datalog_engine import EpistemicValue, Rule
+
+    solver = DatalogEngine(
+        boolean_mode=True,
+        extra_vocabulary=ontology_vocabulary(knowledge_store).scope_only,
+    )
+    for v in knowledge_store.vyaptis.values():
+        if not v.consequent:
+            continue
+        solver.add_rule(Rule(
+            vyapti_id=v.id, name=v.name, head=v.consequent,
+            body_positive=list(v.antecedents),
+            body_negative=list(v.scope_exclusions),
+            confidence=EpistemicValue.ESTABLISHED,
+        ))
+    return solver
+
+
 class OntologySnippetBuilder:
     """
     LAYER 1: Build constrained vocabulary from the knowledge store.
@@ -146,21 +220,12 @@ class OntologySnippetBuilder:
     ) -> str:
         snippet = "VALID PREDICATES — use ONLY these:\n\n"
         vyapti_ids = relevant_vyaptis or list(knowledge_store.vyaptis.keys())
-        all_predicates: set[str] = set()
-        scope_predicates: set[str] = set()
+        vocabulary = ontology_vocabulary(knowledge_store, relevant_vyaptis)
 
         for vid in vyapti_ids:
             v = knowledge_store.vyaptis.get(vid)
             if not v:
                 continue
-            all_predicates.update(v.antecedents)
-            if v.consequent:
-                all_predicates.add(v.consequent)
-            # Printed per rule below as SCOPE:/EXCLUDES: and, until now, never
-            # permitted — see the section built after the main list.
-            scope_predicates.update(v.scope_conditions)
-            scope_predicates.update(v.scope_exclusions)
-
             snippet += f"RULE {vid}: {v.name}\n"
             snippet += f"  IF: {', '.join(v.antecedents)}\n"
             snippet += f"  THEN: {v.consequent}\n"
@@ -170,13 +235,10 @@ class OntologySnippetBuilder:
             snippet += "\n"
 
         snippet += "\nALL VALID PREDICATE NAMES:\n"
-        for p in sorted(all_predicates):
+        for p in sorted(vocabulary.consumable):
             snippet += f"  - {p}(Entity)\n"
 
-        # A scope predicate that is also an antecedent or consequent is
-        # already assertable above; listing it twice would say two different
-        # things about one word.
-        scope_only = sorted(scope_predicates - all_predicates)
+        scope_only = sorted(vocabulary.scope_only)
         if scope_only:
             snippet += (
                 "\nSCOPE PREDICATES — the conditions named above under "
