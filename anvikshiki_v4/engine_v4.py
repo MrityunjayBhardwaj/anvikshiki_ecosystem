@@ -34,6 +34,12 @@ class SynthesizeResponse(dspy.Signature):
         desc="Structured uncertainty decomposition")
     retrieved_prose: str = dspy.InputField(
         desc="Relevant text from the knowledge base")
+    framework_support: str = dspy.InputField(
+        desc=(
+            "Whether the argumentation framework derived anything at all. "
+            "When it says NONE, no rule fired and no conclusion is supported "
+            "by the knowledge base — any answer is general knowledge, not "
+            "derived reasoning, and must not be presented as the latter."))
 
     response: str = dspy.OutputField(
         desc="Calibrated response with epistemic qualification. "
@@ -41,6 +47,78 @@ class SynthesizeResponse(dspy.Signature):
              "Explicitly flag CONTESTED and OPEN items.")
     sources_cited: list[str] = dspy.OutputField(
         desc="Source IDs actually used in the response")
+
+
+NO_DERIVATION_NOTICE = (
+    "Note: my knowledge base did not derive this. No rule fired, so nothing "
+    "below is supported by the framework's own reasoning or its cited "
+    "sources — treat it as general knowledge rather than as a grounded "
+    "conclusion."
+)
+
+
+def derivation_state(af, labels) -> dict:
+    """What the argumentation framework actually derived, as a state.
+
+    Both answering paths need this and both used to lack it. `accepted_str`
+    fell back to the string "No accepted conclusions." and the synthesizer was
+    asked the question anyway — which it answered fluently and without a
+    hedge, producing confident prose at exactly the moment the engine had
+    nothing. The only outward signal was an empty `sources` list, which reads
+    as "no citations needed" rather than "no reasoning happened", and nothing
+    was reading it.
+
+    A premise is not a derivation, and that distinction is the whole content
+    of this function. `extension_size` counts every argument labelled IN, and
+    premises are arguments, so a query that derived nothing reported an
+    extension of 3 — the facts handed in, counted back out. `extension_size`
+    is left as it is because it is on the wire and typed downstream;
+    `derived_count` here is the number that answers the question people were
+    asking it.
+    """
+    if af.arguments and not labels:
+        raise ValueError(
+            "derivation_state called on an unlabelled framework: "
+            f"{len(af.arguments)} arguments and no labels. Call "
+            "af.compute_grounded() first. Without this guard the answer "
+            "would be 'nothing was derived' — the framework's own silence "
+            "read as a fact about the query, which is the defect this "
+            "function exists to stop."
+        )
+
+    derived = sorted({
+        a.conclusion for aid, a in af.arguments.items()
+        if a.top_rule is not None
+        and labels.get(aid) == Label.IN
+        and not a.conclusion.startswith("_")
+    })
+    return {
+        "rule_backed": bool(derived),
+        "derived_conclusions": derived,
+        "derived_count": len(derived),
+        "premise_count": sum(
+            1 for a in af.arguments.values()
+            if a.top_rule is None and not a.conclusion.startswith("_")
+        ),
+    }
+
+
+NO_FRAMEWORK = {
+    "rule_backed": False,
+    "derived_conclusions": [],
+    "derived_count": 0,
+    "premise_count": 0,
+}
+
+
+def framework_support_line(derivation: dict) -> str:
+    """The synthesizer's view of the same state."""
+    if not derivation["rule_backed"]:
+        return "NONE — no rule fired and no conclusion is supported"
+    return (
+        f"{derivation['derived_count']} derived conclusion(s): "
+        f"{', '.join(derivation['derived_conclusions'])}"
+    )
 
 
 _DEFAULT_SYNTHESIS = DEFAULT_PARAMS.synthesis
@@ -219,7 +297,7 @@ class AnvikshikiEngineV4(dspy.Module):
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
                 violations=[], grounding_confidence=grounding.confidence,
-                extension_size=0, **af_view(),
+                extension_size=0, derivation=dict(NO_FRAMEWORK), **af_view(),
             )
 
         # STEP 2: Build argumentation framework
@@ -291,6 +369,9 @@ class AnvikshikiEngineV4(dspy.Module):
                     })
 
         # STEP 8: Synthesize response
+        derivation = derivation_state(af, labels)
+        framework_derived_nothing = not derivation["rule_backed"]
+
         accepted_str = "\n".join(
             f"- {conc}: {info['status'].value} "
             f"(pramana={info['tag'].pramana_type.name}, "
@@ -320,11 +401,22 @@ class AnvikshikiEngineV4(dspy.Module):
             defeated_arguments=defeated_str,
             uncertainty_report=uq_str,
             retrieved_prose="\n\n".join(retrieved_chunks[:5]),
+            framework_support=framework_support_line(derivation),
         )
 
+        # Prepended rather than requested. The instruction above tells the
+        # model to declare the fallback and the model may comply, but a
+        # guarantee that depends on the model complying is not a guarantee —
+        # and this is the one sentence the reader most needs to be able to
+        # rely on.
+        response_text = response.response
+        if framework_derived_nothing:
+            response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
+
         return dspy.Prediction(
-            response=response.response,
+            response=response_text,
             sources=response.sources_cited,
+            derivation=derivation,
             uncertainty=uncertainty,
             provenance=provenance,
             violations=violations,
@@ -360,7 +452,8 @@ class AnvikshikiEngineV4(dspy.Module):
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
                 violations=[], grounding_confidence=grounding.confidence,
-                extension_size=0, coverage=None, augmentation=None,
+                extension_size=0, derivation=dict(NO_FRAMEWORK),
+                coverage=None, augmentation=None,
                 contestation=None, **af_view(),
             )
 
@@ -406,7 +499,8 @@ class AnvikshikiEngineV4(dspy.Module):
                     ),
                     sources=[], uncertainty={}, provenance={},
                     violations=[], grounding_confidence=grounding.confidence,
-                    extension_size=0, coverage=coverage.model_dump(),
+                    extension_size=0, derivation=dict(NO_FRAMEWORK),
+                    coverage=coverage.model_dump(),
                     augmentation=augmentation,
                     contestation=None, **af_view(),
                 )
@@ -491,6 +585,22 @@ class AnvikshikiEngineV4(dspy.Module):
                     })
 
         # STEP 8: Synthesize
+        #
+        # Whether the framework derived anything is a state, not a sentence in
+        # a prompt. It used to be neither: `accepted_str` fell back to the
+        # string "No accepted conclusions." and the synthesizer was asked the
+        # question anyway, which it answered fluently and without a hedge —
+        # confident prose at exactly the moment the engine had nothing, with
+        # an empty `sources` list as the only signal and no caller reading it.
+        #
+        # A premise is not a derivation. `extension_size` counts every
+        # argument labelled IN and premises are arguments, so it reported 3
+        # for a query that derived nothing — the facts handed in, counted back
+        # out. It is left alone here because it is on the wire and typed
+        # downstream; `derivation` below is the field to read instead.
+        derivation = derivation_state(af, labels)
+        framework_derived_nothing = not derivation["rule_backed"]
+
         accepted_str = "\n".join(
             f"- {conc}: {info['status'].value} "
             f"(pramana={info['tag'].pramana_type.name}, "
@@ -520,11 +630,22 @@ class AnvikshikiEngineV4(dspy.Module):
             defeated_arguments=defeated_str,
             uncertainty_report=uq_str,
             retrieved_prose="\n\n".join(retrieved_chunks[:5]),
+            framework_support=framework_support_line(derivation),
         )
 
+        # Prepended rather than requested. The instruction in the signature
+        # tells the model to declare the fallback and the model may comply,
+        # but a guarantee that depends on the model complying is not a
+        # guarantee — and this is the one sentence the reader most needs to be
+        # able to rely on.
+        response_text = response.response
+        if framework_derived_nothing:
+            response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
+
         return dspy.Prediction(
-            response=response.response,
+            response=response_text,
             sources=response.sources_cited,
+            derivation=derivation,
             uncertainty=uncertainty,
             provenance=provenance,
             violations=violations,
@@ -558,6 +679,11 @@ class AnvikshikiEngineV4Phase1(dspy.Module):
             defeated_arguments="Phase 1: no argumentation framework",
             uncertainty_report=f"Grounding confidence: {grounding.confidence}",
             retrieved_prose="\n\n".join(retrieved_chunks[:5]),
+            # Phase 1 has no argumentation framework by construction, so the
+            # honest value is NONE for every query it answers — this variant
+            # exists to be the ungrounded baseline the others are measured
+            # against, and saying so is the whole point of it.
+            framework_support="NONE — Phase 1 runs without an argumentation framework",
         )
         # Normalize output to match Phase 2+ schema for downstream compatibility
         return dspy.Prediction(
@@ -568,6 +694,7 @@ class AnvikshikiEngineV4Phase1(dspy.Module):
             violations=[],
             grounding_confidence=grounding.confidence,
             extension_size=0,
+            derivation=dict(NO_FRAMEWORK),
             contestation=None,
             coverage=None,
             augmentation=None,
