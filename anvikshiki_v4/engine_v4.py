@@ -10,7 +10,12 @@ Supports two entry points:
 from typing import Optional
 
 import dspy
-from .advisories import Advisory, as_wire, unestablished_scope_advisories
+from .advisories import (
+    Advisory,
+    as_wire,
+    decayed_rule_advisories,
+    unestablished_scope_advisories,
+)
 from .schema import KnowledgeStore
 from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
@@ -109,17 +114,22 @@ def collect_advisories(knowledge_store, af, labels, grounding) -> list[Advisory]
 
     Two producers with two different views, joined here because this is the
     only place that holds both. The grounding pipeline saw the predicates and
-    can say the query asserts an exclusion, or that a rule it routed to has
-    decayed; the framework saw what actually fired and can say a rule
-    concluded something with its declared scope never established.
+    can say the query asserts an exclusion; the framework saw what actually
+    fired, and can say a rule concluded something with its declared scope
+    never established, or that a rule which took part is overdue for
+    verification. Decay moved to this side because "which rules decayed" is a
+    question about the rules that ran, and the grounding boundary was
+    answering it from a language model's guess at which rules would matter.
 
     Both were computed before this function existed and neither was read. The
     grounding half was attached to a result whose only production consumers
     sit inside the `clarification_needed` branch it never reaches; the
     framework half had not been written, because there was nowhere to put it.
     """
-    return list(grounding.advisories) + unestablished_scope_advisories(
-        knowledge_store, af, labels
+    return (
+        list(grounding.advisories)
+        + unestablished_scope_advisories(knowledge_store, af, labels)
+        + decayed_rule_advisories(knowledge_store, af, labels)
     )
 
 
