@@ -51,9 +51,29 @@ from pydantic import BaseModel, Field
 from .extraction_eval import _best_match_score, _description_overlap, _token_overlap
 from .predicate_contrariness import match_veto, text_veto
 
+# What a human writes in `human:`.
+#
+# MATCH / NO_MATCH state a fact about the two predicates. AGREE / DISAGREE
+# state a relation to the matcher's verdict, and that is the problem they were:
+# on a `near_miss` row `matcher_says_match` is False, so "these two mean the
+# same thing" had to be entered as `disagree`. Thirty-three of the shipped
+# sheet's thirty-eight rows are near misses, and the instruction printed at the
+# top of the sheet asks the judge for the fact — so answering the question as
+# asked inverted almost every row, silently and undetectably.
+#
+# The relative pair is still read, because a sheet already written in it means
+# exactly what it meant. Nothing registered depends on the spelling: every
+# quantity in the pre-registration is computed from `human_says_match`, which
+# is derived either way — `replay_mode` has always had to derive it, because a
+# verdict that flips under a mode switch would otherwise rewrite what the human
+# said.
+MATCH = "match"
+NO_MATCH = "no_match"
 AGREE = "agree"
 DISAGREE = "disagree"
 UNJUDGED = ""
+
+JUDGMENTS = (MATCH, NO_MATCH, AGREE, DISAGREE)
 
 
 class MatcherDecision(BaseModel):
@@ -72,18 +92,33 @@ class MatcherDecision(BaseModel):
     )
     human: str = Field(
         default=UNJUDGED,
-        description=f"{AGREE!r} or {DISAGREE!r}, filled in by a human",
+        description=(
+            f"{MATCH!r} or {NO_MATCH!r} — a fact about the two predicates, "
+            f"filled in by a human. {AGREE!r} and {DISAGREE!r} are also read, "
+            f"relative to `matcher_says_match`, for sheets written before the "
+            f"vocabulary said what it meant."
+        ),
     )
     note: str = ""
 
     @property
     def judged(self) -> bool:
-        return self.human in (AGREE, DISAGREE)
+        return self.human in JUDGMENTS
 
     @property
     def human_says_match(self) -> Optional[bool]:
+        """What the human said about the pair, however they spelled it.
+
+        The one quantity every registered figure is computed from. Stating it
+        directly is what the fact vocabulary buys; the relative one is resolved
+        against the verdict the row carried when it was judged.
+        """
         if not self.judged:
             return None
+        if self.human == MATCH:
+            return True
+        if self.human == NO_MATCH:
+            return False
         return (
             self.matcher_says_match
             if self.human == AGREE
@@ -322,11 +357,16 @@ def write_decision_sheet(
     path = Path(path)
     payload = {
         "instructions": (
-            "For each decision below, set `human:` to 'agree' or 'disagree'. "
-            "Judge whether the two predicates mean the same thing, reading the "
-            "descriptions — not whether the matcher's reasoning looks sensible. "
-            "Leave `human:` empty for anything you are not sure about; unjudged "
-            "rows are reported as unjudged and never counted as agreement."
+            "For each decision below, set `human:` to 'match' if the two "
+            "predicates mean the same thing and 'no_match' if they do not. "
+            "Judge the pair by reading the descriptions. Ignore "
+            "`matcher_says_match`, `score` and `kind`: those are what is being "
+            "measured, and a judgment copied back from them measures nothing. "
+            "Leave `human:` empty for anything you are unsure about; unjudged "
+            "rows are reported as unjudged and never counted either way. "
+            "`scripts/judge_decision_sheet.py` asks the same question one pair "
+            "at a time, in a shuffled order and without showing you the "
+            "matcher's verdict."
         ),
         "provenance": provenance.model_dump(),
         "decisions": [d.model_dump() for d in decisions],
@@ -358,10 +398,12 @@ def replay_mode(
     every mode, and the modes are compared on identical ground rather than each
     being judged against a sheet built to flatter it.
 
-    `human` is carried across unchanged; only the matcher's verdict is
-    recomputed. Where the recomputed verdict differs from the original, the
-    stored agree/disagree is reinterpreted against the new verdict — which is
-    why `human_says_match` is derived rather than stored.
+    What the human said is carried across unchanged; only the matcher's
+    verdict is recomputed. It is rewritten into the fact vocabulary on the way
+    through, which is what makes "unchanged" true by construction: a stored
+    agree/disagree means something different once the verdict beneath it moves,
+    so replaying it required a compensating flip, and a compensating flip is
+    only ever as reliable as the person maintaining it.
     """
     replayed: list[MatcherDecision] = []
     for d in decisions:
@@ -377,8 +419,7 @@ def replay_mode(
             "matcher_says_match": says_match,
             "score": round(score, 4),
             "human": (
-                UNJUDGED if truth is None
-                else (AGREE if truth == says_match else DISAGREE)
+                UNJUDGED if truth is None else (MATCH if truth else NO_MATCH)
             ),
         }))
     return replayed

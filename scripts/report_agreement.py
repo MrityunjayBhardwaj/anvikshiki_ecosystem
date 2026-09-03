@@ -4,6 +4,7 @@
 Step one of #10. Run after filling in `human:` on the sheet:
 
     python scripts/report_agreement.py
+    python scripts/report_agreement.py --sheet <path>
 
 Reports observed agreement, Cohen's kappa, and the two disagreement classes
 separately — they are not symmetric, and only one of them argues for adopting
@@ -12,6 +13,7 @@ a semantic encoder.
 
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -25,7 +27,9 @@ from anvikshiki_v4.instrument_validation import (
     replay_mode,
 )
 
-SHEET = REPO_ROOT / "traces" / "instrument_validation" / "decision_sheet_ch02.yaml"
+DEFAULT_SHEET = (
+    REPO_ROOT / "traces" / "instrument_validation" / "decision_sheet_ch02.yaml"
+)
 KAPPA_KILL = 0.6   # registered in discussions/instrument-validation-preregistration.md
 
 
@@ -34,14 +38,30 @@ def _line(label: str, value) -> None:
 
 
 def main() -> int:
-    if not SHEET.exists():
-        raise SystemExit(f"no sheet at {SHEET} — run run_instrument_validation.py first")
+    # Parsed rather than assumed. This script took no arguments and read one
+    # hardcoded path, so `--sheet <other>` ran silently against the default
+    # file and reported figures for a sheet the caller had not named — a
+    # report about the wrong artifact, indistinguishable from a report about
+    # the right one. `judge_decision_sheet.py` takes `--sheet`; two halves of
+    # one instrument have to mean the same thing by it.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sheet", type=Path, default=DEFAULT_SHEET)
+    sheet = parser.parse_args().sheet
 
-    loaded = read_decision_sheet(SHEET)
+    if not sheet.exists():
+        raise SystemExit(
+            f"no sheet at {sheet} — run run_instrument_validation.py first"
+        )
+
+    loaded = read_decision_sheet(sheet)
     decisions = loaded.decisions
     gold = load_gold()
 
-    print(f"sheet: {SHEET.relative_to(REPO_ROOT)}  ({len(decisions)} rows)\n")
+    try:
+        shown = sheet.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        shown = sheet
+    print(f"sheet: {shown}  ({len(decisions)} rows)\n")
 
     if loaded.provenance is None:
         print("This sheet records none of the parameters it was built with.")
