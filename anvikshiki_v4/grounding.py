@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import dspy
 from pydantic import BaseModel, Field
@@ -30,6 +30,7 @@ class GroundingMode(str, Enum):
     PARTIAL = "partial"   # N=3 ensemble + round-trip (no solver)
     FULL = "full"         # N=5 ensemble + round-trip + solver feedback
 
+from .advisories import Advisory, decay_advisory, scope_exclusion_advisory
 from .datalog_engine import DatalogEngine
 from .predicate_contrariness import (
     entity_divergence,
@@ -50,7 +51,27 @@ class GroundingResult(BaseModel):
     predicates: list[str] = Field(default_factory=list)
     confidence: float = 0.0
     disputed: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Human-readable text about this grounding. On the normal return "
+            "paths it is exactly `[a.message for a in advisories]`, derived at "
+            "the one place both are built so the two cannot drift. It is kept "
+            "as its own field because the clarification paths legitimately put "
+            "something else in it — a message about the grounding itself, "
+            "which is not a finding about any rule and so is not an advisory."
+        ),
+    )
+    advisories: list[Advisory] = Field(
+        default_factory=list,
+        description=(
+            "Structured findings about rules: scope exclusions the query "
+            "asserts, and rules whose verification has decayed. Computed on "
+            "every query since these checks were written and, until the "
+            "engine grew a field to carry them, read by nothing on the query "
+            "path."
+        ),
+    )
     refinement_rounds: int = 0
     clarification_needed: bool = False
 
@@ -110,6 +131,85 @@ class CheckFaithfulness(dspy.Signature):
 # ─── Layer 1: Ontology Snippet Builder ───────────────────────
 
 
+class OntologyVocabulary(NamedTuple):
+    """What a grounded predicate is allowed to be called.
+
+    Two sets rather than one because the prompt says different things about
+    them — a consumable name can fire a rule or be concluded by one, while a
+    scope-only name says when a rule does or does not apply and can do
+    neither. The union is what may be *asserted*, and it is the union that
+    the solver's validator has to agree with. It did not, for as long as the
+    query path gave the grounder no solver and nothing had to.
+    """
+
+    consumable: frozenset       # antecedents and consequents
+    scope_only: frozenset       # scope conditions and exclusions, and nothing else
+
+    @property
+    def permitted(self) -> frozenset[str]:
+        return self.consumable | self.scope_only
+
+
+def ontology_vocabulary(
+    knowledge_store: KnowledgeStore,
+    relevant_vyaptis: Optional[list[str]] = None,
+) -> OntologyVocabulary:
+    """The one place that decides what names a query may use."""
+    vyapti_ids = relevant_vyaptis or list(knowledge_store.vyaptis.keys())
+    consumable: set[str] = set()
+    scope: set[str] = set()
+    for vid in vyapti_ids:
+        v = knowledge_store.vyaptis.get(vid)
+        if not v:
+            continue
+        consumable.update(v.antecedents)
+        if v.consequent:
+            consumable.add(v.consequent)
+        scope.update(v.scope_conditions)
+        scope.update(v.scope_exclusions)
+    # A scope predicate that is also an antecedent or consequent is already
+    # assertable as one; listing it twice would say two different things
+    # about one word.
+    return OntologyVocabulary(frozenset(consumable), frozenset(scope - consumable))
+
+
+def build_grounding_solver(knowledge_store: KnowledgeStore) -> DatalogEngine:
+    """The solver Layer 5 needs, which the query path never built.
+
+    `GroundingPipeline` documents five layers and the fifth was guarded on
+    `self.engine is not None` — true at the one production construction site,
+    which passed no solver. `refinement_rounds` was structurally 0: a
+    predicate the solver would reject was never rejected, never fed back and
+    never refined, in the mode chosen precisely because it is not.
+
+    Constructed the way `kb_augmentation` already constructs one, with the
+    permitted vocabulary handed over explicitly so the validator and the
+    prompt cannot disagree. Pure construction — no I/O, no LLM, free per
+    query.
+    """
+    from .datalog_engine import EpistemicValue, Rule
+
+    solver = DatalogEngine(
+        boolean_mode=True,
+        # The whole permitted set, not just the scope half. The rules
+        # already contribute the consumable names, so the union adds nothing
+        # — which is the point: passing the subset would make this correct
+        # only for as long as "the rules cover exactly the consumable names"
+        # stays true somewhere else.
+        extra_vocabulary=ontology_vocabulary(knowledge_store).permitted,
+    )
+    for v in knowledge_store.vyaptis.values():
+        if not v.consequent:
+            continue
+        solver.add_rule(Rule(
+            vyapti_id=v.id, name=v.name, head=v.consequent,
+            body_positive=list(v.antecedents),
+            body_negative=list(v.scope_exclusions),
+            confidence=EpistemicValue.ESTABLISHED,
+        ))
+    return solver
+
+
 class OntologySnippetBuilder:
     """
     LAYER 1: Build constrained vocabulary from the knowledge store.
@@ -125,21 +225,12 @@ class OntologySnippetBuilder:
     ) -> str:
         snippet = "VALID PREDICATES — use ONLY these:\n\n"
         vyapti_ids = relevant_vyaptis or list(knowledge_store.vyaptis.keys())
-        all_predicates: set[str] = set()
-        scope_predicates: set[str] = set()
+        vocabulary = ontology_vocabulary(knowledge_store, relevant_vyaptis)
 
         for vid in vyapti_ids:
             v = knowledge_store.vyaptis.get(vid)
             if not v:
                 continue
-            all_predicates.update(v.antecedents)
-            if v.consequent:
-                all_predicates.add(v.consequent)
-            # Printed per rule below as SCOPE:/EXCLUDES: and, until now, never
-            # permitted — see the section built after the main list.
-            scope_predicates.update(v.scope_conditions)
-            scope_predicates.update(v.scope_exclusions)
-
             snippet += f"RULE {vid}: {v.name}\n"
             snippet += f"  IF: {', '.join(v.antecedents)}\n"
             snippet += f"  THEN: {v.consequent}\n"
@@ -149,13 +240,10 @@ class OntologySnippetBuilder:
             snippet += "\n"
 
         snippet += "\nALL VALID PREDICATE NAMES:\n"
-        for p in sorted(all_predicates):
+        for p in sorted(vocabulary.consumable):
             snippet += f"  - {p}(Entity)\n"
 
-        # A scope predicate that is also an antecedent or consequent is
-        # already assertable above; listing it twice would say two different
-        # things about one word.
-        scope_only = sorted(scope_predicates - all_predicates)
+        scope_only = sorted(vocabulary.scope_only)
         if scope_only:
             snippet += (
                 "\nSCOPE PREDICATES — the conditions named above under "
@@ -219,6 +307,13 @@ def _consensus(
     sort order so the result does not depend on set iteration order — an
     ensemble that grounds differently on reruns cannot be compared against
     itself.
+
+    *It also counts vyāpti ids*, which have no entity and so key on
+    `(id, None)` — a binding like any other. That field kept unanimity after
+    this function was written for the predicate one, and one member of five
+    omitting an id dropped it from the consensus set. It was invisible
+    because `candidate_vyaptis` reached only the decay check, whose output
+    nothing on the query path read.
     """
     if not pred_sets:
         return set(), set()
@@ -320,15 +415,16 @@ class GroundingPipeline(dspy.Module):
         if divergence is not None:
             return divergence
 
-        warnings: list[str] = []
-        warnings.extend(self._check_scope(candidate_preds))
-        warnings.extend(self._check_decay(candidate_vyaptis))
+        advisories: list[Advisory] = []
+        advisories.extend(self._check_scope(candidate_preds))
+        advisories.extend(self._check_decay(candidate_vyaptis))
 
         return GroundingResult(
             predicates=candidate_preds,
             confidence=1.0,
             disputed=[],
-            warnings=warnings,
+            warnings=[a.message for a in advisories],
+            advisories=advisories,
             refinement_rounds=0,
             clarification_needed=False,
         )
@@ -359,7 +455,12 @@ class GroundingPipeline(dspy.Module):
 
         consensus_preds, disputed_preds = _consensus(all_pred_sets)
 
-        consensus_vyaptis = set.intersection(*all_vyapti_sets) if all_vyapti_sets else set()
+        # The same majority rule, for the same reason. This line kept
+        # `set.intersection` for three commits after the predicate line above
+        # gave it up, because an issue written from one field names one field
+        # — and it cost nothing while `candidate_vyaptis` fed only the decay
+        # check, whose output the engine discarded. It costs something now.
+        consensus_vyaptis, _ = _consensus(all_vyapti_sets)
 
         total = len(consensus_preds) + len(disputed_preds)
         confidence = len(consensus_preds) / max(total, 1)
@@ -417,15 +518,16 @@ class GroundingPipeline(dspy.Module):
             return divergence
 
         # Deterministic scope/decay checks (no LLM)
-        warnings: list[str] = []
-        warnings.extend(self._check_scope(candidate_preds))
-        warnings.extend(self._check_decay(candidate_vyaptis))
+        advisories: list[Advisory] = []
+        advisories.extend(self._check_scope(candidate_preds))
+        advisories.extend(self._check_decay(candidate_vyaptis))
 
         return GroundingResult(
             predicates=candidate_preds,
             confidence=confidence,
             disputed=sorted(disputed_preds),
-            warnings=warnings,
+            warnings=[a.message for a in advisories],
+            advisories=advisories,
             refinement_rounds=refinement_rounds,
             clarification_needed=False,
         )
@@ -482,7 +584,7 @@ class GroundingPipeline(dspy.Module):
             clarification_needed=True,
         )
 
-    def _check_scope(self, predicates: list[str]) -> list[str]:
+    def _check_scope(self, predicates: list[str]) -> list[Advisory]:
         """Deterministic scope checking — no LLM.
 
         An exclusion applies the way the compiler says it applies
@@ -500,7 +602,7 @@ class GroundingPipeline(dspy.Module):
         A bare exclusion fact binds to `None`, which is a binding like any
         other, so a base written entirely in bare names reads as before.
         """
-        warnings: list[str] = []
+        warnings: list[Advisory] = []
         for vid, v in self.ks.vyaptis.items():
             for excl in v.scope_exclusions:
                 excl_name = predicate_name(excl)
@@ -514,14 +616,13 @@ class GroundingPipeline(dspy.Module):
                 ):
                     subject = with_entity(excl_name, entity)
                     warnings.append(
-                        f"SCOPE: {vid} excludes '{subject}', "
-                        f"which the query asserts"
+                        scope_exclusion_advisory(vid, subject)
                     )
         return warnings
 
-    def _check_decay(self, vyapti_ids: list[str]) -> list[str]:
+    def _check_decay(self, vyapti_ids: list[str]) -> list[Advisory]:
         """Deterministic decay checking — no LLM."""
-        warnings: list[str] = []
+        warnings: list[Advisory] = []
         now = datetime.now()
         for vid in vyapti_ids:
             v = self.ks.vyaptis.get(vid)
@@ -529,12 +630,14 @@ class GroundingPipeline(dspy.Module):
                 if v.last_verified:
                     age = (now - v.last_verified).days
                     if age > 180:
-                        warnings.append(
+                        warnings.append(decay_advisory(
+                            vid,
                             f"DECAY: {vid} last verified {age} days ago "
-                            f"({v.decay_condition})"
-                        )
+                            f"({v.decay_condition})",
+                        ))
                 else:
-                    warnings.append(
-                        f"DECAY: {vid} NEVER verified ({v.decay_condition})"
-                    )
+                    warnings.append(decay_advisory(
+                        vid,
+                        f"DECAY: {vid} NEVER verified ({v.decay_condition})",
+                    ))
         return warnings

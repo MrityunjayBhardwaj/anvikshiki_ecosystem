@@ -91,7 +91,7 @@ def test_asserting_the_exclusion_warns(checker, an_exclusion):
     vid, excl = an_exclusion
     warnings = checker._check_scope([f"{excl}(acme)"])
     assert len(warnings) == 1
-    assert vid in warnings[0]
+    assert vid in warnings[0].message
 
 
 def test_denying_the_exclusion_does_not_warn(checker, an_exclusion):
@@ -103,7 +103,7 @@ def test_denying_the_exclusion_does_not_warn(checker, an_exclusion):
 def test_the_warning_names_the_entity_it_was_observed_of(checker, an_exclusion):
     _, excl = an_exclusion
     (warning,) = checker._check_scope([f"{excl}(globex)"])
-    assert "globex" in warning, (
+    assert "globex" in warning.message, (
         "an exclusion is scoped to the entity it was observed of; a warning "
         "that does not name the entity cannot be acted on"
     )
@@ -118,8 +118,8 @@ def test_each_excluded_entity_warns_once(checker, an_exclusion):
     _, excl = an_exclusion
     warnings = checker._check_scope([f"{excl}(acme)", f"{excl}(globex)"])
     assert len(warnings) == 2
-    assert any("acme" in w for w in warnings)
-    assert any("globex" in w for w in warnings)
+    assert any("acme" in w.message for w in warnings)
+    assert any("globex" in w.message for w in warnings)
 
 
 def test_a_bare_exclusion_fact_still_warns(checker, an_exclusion):

@@ -10,6 +10,7 @@ Supports two entry points:
 from typing import Optional
 
 import dspy
+from .advisories import Advisory, as_wire, unestablished_scope_advisories
 from .schema import KnowledgeStore
 from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
@@ -101,6 +102,25 @@ def derivation_state(af, labels) -> dict:
             if a.top_rule is None and not a.conclusion.startswith("_")
         ),
     }
+
+
+def collect_advisories(knowledge_store, af, labels, grounding) -> list[Advisory]:
+    """Every advisory this answer carries, from both sides of the boundary.
+
+    Two producers with two different views, joined here because this is the
+    only place that holds both. The grounding pipeline saw the predicates and
+    can say the query asserts an exclusion, or that a rule it routed to has
+    decayed; the framework saw what actually fired and can say a rule
+    concluded something with its declared scope never established.
+
+    Both were computed before this function existed and neither was read. The
+    grounding half was attached to a result whose only production consumers
+    sit inside the `clarification_needed` branch it never reaches; the
+    framework half had not been written, because there was nowhere to put it.
+    """
+    return list(grounding.advisories) + unestablished_scope_advisories(
+        knowledge_store, af, labels
+    )
 
 
 NO_FRAMEWORK = {
@@ -296,7 +316,8 @@ class AnvikshikiEngineV4(dspy.Module):
             return dspy.Prediction(
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
-                violations=[], grounding_confidence=grounding.confidence,
+                violations=[], advisories=as_wire(grounding.advisories),
+                grounding_confidence=grounding.confidence,
                 extension_size=0, derivation=dict(NO_FRAMEWORK), **af_view(),
             )
 
@@ -369,6 +390,7 @@ class AnvikshikiEngineV4(dspy.Module):
                     })
 
         # STEP 8: Synthesize response
+        advisories = collect_advisories(self.ks, af, labels, grounding)
         derivation = derivation_state(af, labels)
         framework_derived_nothing = not derivation["rule_backed"]
 
@@ -420,6 +442,7 @@ class AnvikshikiEngineV4(dspy.Module):
             uncertainty=uncertainty,
             provenance=provenance,
             violations=violations,
+            advisories=as_wire(advisories),
             grounding_confidence=grounding.confidence,
             extension_size=sum(
                 1 for lbl in labels.values() if lbl == Label.IN
@@ -451,7 +474,8 @@ class AnvikshikiEngineV4(dspy.Module):
             return dspy.Prediction(
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
-                violations=[], grounding_confidence=grounding.confidence,
+                violations=[], advisories=as_wire(grounding.advisories),
+                grounding_confidence=grounding.confidence,
                 extension_size=0, derivation=dict(NO_FRAMEWORK),
                 coverage=None, augmentation=None,
                 contestation=None, **af_view(),
@@ -498,7 +522,8 @@ class AnvikshikiEngineV4(dspy.Module):
                         f"{aug_result.reason}"
                     ),
                     sources=[], uncertainty={}, provenance={},
-                    violations=[], grounding_confidence=grounding.confidence,
+                    violations=[], advisories=as_wire(grounding.advisories),
+                    grounding_confidence=grounding.confidence,
                     extension_size=0, derivation=dict(NO_FRAMEWORK),
                     coverage=coverage.model_dump(),
                     augmentation=augmentation,
@@ -598,6 +623,7 @@ class AnvikshikiEngineV4(dspy.Module):
         # for a query that derived nothing — the facts handed in, counted back
         # out. It is left alone here because it is on the wire and typed
         # downstream; `derivation` below is the field to read instead.
+        advisories = collect_advisories(active_ks, af, labels, grounding)
         derivation = derivation_state(af, labels)
         framework_derived_nothing = not derivation["rule_backed"]
 
@@ -649,6 +675,7 @@ class AnvikshikiEngineV4(dspy.Module):
             uncertainty=uncertainty,
             provenance=provenance,
             violations=violations,
+            advisories=as_wire(advisories),
             grounding_confidence=grounding.confidence,
             extension_size=sum(
                 1 for lbl in labels.values() if lbl == Label.IN
@@ -692,6 +719,7 @@ class AnvikshikiEngineV4Phase1(dspy.Module):
             uncertainty={},
             provenance={},
             violations=[],
+            advisories=as_wire(grounding.advisories),
             grounding_confidence=grounding.confidence,
             extension_size=0,
             derivation=dict(NO_FRAMEWORK),

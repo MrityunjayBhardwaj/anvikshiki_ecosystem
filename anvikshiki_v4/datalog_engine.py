@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from .predicate_contrariness import affirmative, normalize_negation
 
@@ -117,8 +117,23 @@ class DatalogEngine:
     This avoids re-deriving known facts every iteration.
     """
 
-    def __init__(self, boolean_mode: bool = True):
+    def __init__(
+        self,
+        boolean_mode: bool = True,
+        extra_vocabulary: Optional[Iterable[str]] = None,
+    ):
+        """
+        extra_vocabulary: predicate names that are valid to assert even
+            though no rule mentions them. Scope conditions are the case this
+            exists for: the grounder is told they are part of its permitted
+            vocabulary, and they appear in no rule head and no rule body, so
+            a validator built from the rules alone rejects exactly the names
+            the prompt asked for. Evaluation ignores them — a name nothing
+            consumes derives nothing — and that is the point: this says what
+            may be *said*, not what can be *concluded*.
+        """
         self.boolean_mode = boolean_mode
+        self.extra_vocabulary: frozenset[str] = frozenset(extra_vocabulary or ())
         self.facts: dict[tuple[str, str], EpistemicValue] = {}
         self.rules: list[Rule] = []
         self.hetvabhasa_checks: list[dict] = []
@@ -284,6 +299,14 @@ class DatalogEngine:
         Validate predicate strings against the known vocabulary.
         Used by Layer 5 of the grounding defense.
 
+        The vocabulary is the rules' names plus `extra_vocabulary`, and the
+        second half is not a courtesy. This validator and the prompt that
+        produced the predicates are two sides of one boundary, and they held
+        different ideas of what a valid name was for as long as neither had
+        to agree — the query path never gave the grounder a solver, so this
+        never ran on a grounded predicate. Every scope condition in the
+        shipped base was rejected here while being listed as permitted there.
+
         A predicate is looked up **as written** first, and only then by its
         affirmative form. `known_preds` is built from rule heads as well as
         bodies, so a negated name can legitimately be in it —
@@ -303,7 +326,7 @@ class DatalogEngine:
         Returns list of error messages (empty = all valid).
         """
         errors: list[str] = []
-        known_preds: set[str] = set()
+        known_preds: set[str] = set(self.extra_vocabulary)
         for rule in self.rules:
             known_preds.add(rule.head)
             known_preds.update(rule.body_positive)

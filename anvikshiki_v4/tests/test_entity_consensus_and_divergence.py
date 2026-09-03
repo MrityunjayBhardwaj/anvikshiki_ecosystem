@@ -41,6 +41,7 @@ was written.
 
 import pytest
 
+from anvikshiki_v4.schema import DecayRisk
 from anvikshiki_v4.grounding import (
     CONSENSUS_THRESHOLD,
     GroundingPipeline,
@@ -388,3 +389,73 @@ def test_every_non_clarifying_return_path_is_guarded():
                  and isinstance(n.func, ast.Attribute)
                  and n.func.attr == "_entity_divergence"]
         assert calls, f"{method.name} returns a grounding without the guard"
+
+
+# ── the sibling field, which kept unanimity ──────────────────
+#
+# `relevant_vyaptis` sat one line below the predicate consensus and was not
+# touched when that line gave up `set.intersection`, because an issue written
+# from one field names one field. It cost nothing at the time: the ids reached
+# only the decay check, and the decay check's output reached nothing. Now that
+# the advisory channel is live, one member of five omitting an id deletes a
+# finding four members produced.
+
+class _PerMemberGrounder:
+    """A different vyāpti list per ensemble member, predicates held fixed.
+
+    Fixed predicates because this is a law about the OTHER field: letting the
+    predicates vary too would make a failure ambiguous between the two.
+    """
+
+    def __init__(self, vyapti_sets):
+        self._vyapti_sets = list(vyapti_sets)
+        self.calls = 0
+
+    def __call__(self, **kwargs):
+        import types
+        relevant = self._vyapti_sets[self.calls % len(self._vyapti_sets)]
+        self.calls += 1
+        return types.SimpleNamespace(
+            predicates=["superior_information(acme)"],
+            relevant_vyaptis=list(relevant),
+        )
+
+
+FOUR_OF_FIVE = [["V01"], ["V01"], ["V01"], ["V01"], []]
+
+
+def _piped_vyaptis(vyapti_sets):
+    gp = GroundingPipeline.__new__(GroundingPipeline)
+    gp.ks = load_knowledge_store(KB_PATH)
+    gp.ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+    gp.ks.vyaptis["V01"].decay_condition = "regime change"
+    gp.ks.vyaptis["V01"].last_verified = None
+    gp.grounder = _PerMemberGrounder(vyapti_sets)
+    gp.engine = None
+    return gp
+
+
+def test_four_of_five_naming_a_vyapti_reaches_consensus():
+    result = _piped_vyaptis(FOUR_OF_FIVE)._forward_ensemble(
+        "q", "snippet", n=5, use_solver=False
+    )
+    assert [a.vyapti_id for a in result.advisories] == ["V01"], (
+        "the decay check is the only reader of these ids, and it can only "
+        "report on an id that survived the vote"
+    )
+
+
+def test_unanimity_would_have_deleted_it():
+    """The counterfactual, stated as its own law so the fix is not merely
+    asserted to be a fix. Same five members, the rule the line used to use."""
+    assert set.intersection(*[set(s) for s in FOUR_OF_FIVE]) == set()
+
+
+def test_a_genuine_minority_is_still_dropped():
+    """Majority, not "anyone said it". One member out of five naming a vyāpti
+    the others did not is exactly the divergent rollout the threshold exists
+    to discard."""
+    result = _piped_vyaptis(
+        [["V01"], [], [], [], []]
+    )._forward_ensemble("q", "snippet", n=5, use_solver=False)
+    assert result.advisories == []
