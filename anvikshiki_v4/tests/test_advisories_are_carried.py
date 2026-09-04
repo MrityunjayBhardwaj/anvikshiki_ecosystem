@@ -75,8 +75,9 @@ def ks():
     """V01 declares a scope condition nothing in the base can derive.
 
     `market_is_heterogeneous` is no rule's consequent and no rule's
-    antecedent, which is the shape every scope condition in both shipped
-    bases actually has — 0 of 5 in business, 0 of 4 in copywriting. It can
+    antecedent, which is the shape every scope condition in all three shipped
+    bases actually has — 0 of 5 in business, 0 of 4 in copywriting, 0 of 10
+    in non-fiction. It can
     only ever arrive as a grounded fact from the query, and that is what
     makes the advisory worth having rather than a formality.
 

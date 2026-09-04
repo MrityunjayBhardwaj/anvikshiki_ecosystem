@@ -180,8 +180,9 @@ def unestablished_scope_advisories(
     as something a rule derived. Both are arguments, so both are read off
     `af.arguments` — one source rather than two, which matters because a
     scope condition *could* in principle be derivable even though none in
-    either shipped base is (0 of 5 in business, 0 of 4 in copywriting: no
-    condition is any rule's consequent, and none is any rule's antecedent).
+    any shipped base is (0 of 5 in business, 0 of 4 in copywriting, 0 of 10
+    in non-fiction: no condition is any rule's consequent, and none is any
+    rule's antecedent).
     Every one of them has to arrive as a grounded fact from the query, which
     is what makes the advisory worth having rather than a formality.
 
