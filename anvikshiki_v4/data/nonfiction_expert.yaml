@@ -387,11 +387,15 @@ dependency_graph:
   C03: ["C04"]                       # insight → understanding
   C04: ["C05"]                       # understanding → action
   C05: ["C01"]                       # action → new observation  [THE CYCLE]
-  C06: ["C07", "C09"]                # mind-body problem → psychology, epistemology
-  C07: ["C08"]                       # psychology → dual-process theory
+  # "[Mind-body, Psychology, Epistemology] → Hard problem" is a three-way
+  # dependency; the schema is dict[str, list[str]], so it is three edges into
+  # C12 rather than one composite key. A composite would have become a graph
+  # node named for no concept, and _detect_concept_refs would have searched
+  # chapter text for it forever without a match.
+  C06: ["C07", "C09", "C12"]         # mind-body problem → psychology, epistemology, hard problem
+  C07: ["C08", "C12"]                # psychology → dual-process theory, hard problem
   C08: ["C10"]                       # dual-process → replication crisis
-  C09: ["C11"]                       # epistemology → problem of induction
-  C06_C07_C09: ["C12"]               # all three → hard problem of consciousness
+  C09: ["C11", "C12"]                # epistemology → problem of induction, hard problem
   C12: ["C13"]                       # hard problem → explanatory gap
   C13: ["C14"]                       # all ceilings → convergence point
   C15: ["C16"]                       # prakasa/vimarsa → icchā/jñāna/kriyā
@@ -411,8 +415,8 @@ dependency_graph:
   # in full form. Kept as a forward edge only so the graph stays acyclic.
 
 chapter_fingerprints:
-  opening:
-    chapter_id: opening
+  ch00:
+    chapter_id: ch00
     title: "Every Tool Came from Somewhere — This Is Where"
     key_terms: ["two_directions", "ascending_arc", "descending_arc", "tool_provenance"]
     anchoring_concepts: ["directional_limits"]
@@ -430,7 +434,7 @@ chapter_fingerprints:
     anchoring_concepts: ["first_ceiling", "observation_first"]
     vyaptis_introduced: ["V01", "V05"]
     hetvabhasas_active: []
-    prerequisites: ["opening"]
+    prerequisites: ["ch00"]
     forward_dependencies: ["ch02", "ch06"]
     epistemic_statuses: {V01: provisional, V05: established}
     difficulty_tier: "foundational"

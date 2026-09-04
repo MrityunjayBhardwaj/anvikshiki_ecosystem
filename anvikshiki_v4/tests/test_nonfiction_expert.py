@@ -104,7 +104,12 @@ class TestKnowledgeStoreLoading:
         assert len(nf_ks.threshold_concepts) == 3
 
     def test_chapter_fingerprints(self, nf_ks):
-        """Twenty-one: the opening plus Ch 1–20, exactly Step 2G's table."""
+        """Twenty-one: the opening (ch00) plus Ch 1–20, exactly Step 2G's table.
+
+        ch00 rather than `opening` because `build_chapter_overview` feeds
+        `sorted(keys())` straight into the grounder's prompt, and `opening`
+        sorts after `ch20` — the volume's first chapter would have been
+        presented last."""
         assert len(nf_ks.chapter_fingerprints) == 21
 
     def test_reference_bank(self, nf_ks):
