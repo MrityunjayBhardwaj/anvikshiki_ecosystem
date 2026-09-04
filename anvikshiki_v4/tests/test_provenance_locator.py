@@ -20,13 +20,33 @@ that honest.
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from anvikshiki_v4.extraction_schema import Provenance, StageAOutput
 
-REAL_TRACE = "traces/instrument_validation/stage_a_ch02.json"
+REAL_TRACE = Path("traces/instrument_validation/stage_a_ch02.json")
+
+# `traces/` is gitignored, so this file exists only on a machine that has
+# already run the pipeline. Reading it unguarded made the suite green here and
+# red in a fresh clone — measured on a worktree of the same commit: 853 passed
+# / 4 skipped with the trace present, 848 passed / 2 FAILED / 7 skipped
+# without it. Both sibling suites that read `traces/` already skip on absence;
+# these two opened the file directly. See #114.
+#
+# Skip rather than fixture: the point of these two laws is that the REAL run
+# on disk still parses. A fixture would keep them green while testing nothing
+# they were written to test.
+needs_real_trace = pytest.mark.skipif(
+    not REAL_TRACE.exists(),
+    reason=(
+        "traces/ is gitignored, so the real extraction trace is absent in a "
+        "fresh clone or worktree — see #114. These two laws check the run on "
+        "disk; the rest of this module stands on fixtures."
+    ),
+)
 DIGEST = "a" * 64
 
 
@@ -162,6 +182,7 @@ def test_an_explicit_timestamp_survives():
 
 # ── The real trace, and what it says about the span ──────────
 
+@needs_real_trace
 def test_the_real_extraction_trace_still_parses():
     """Read the run on disk, not a fixture.
 
@@ -172,7 +193,7 @@ def test_the_real_extraction_trace_still_parses():
     """
     import json
 
-    raw = json.load(open(REAL_TRACE))
+    raw = json.load(REAL_TRACE.open())
     out = StageAOutput.model_validate(raw)
     assert len(out.candidates) == 24, (
         "the trace changed shape; the count is asserted so this test cannot "
@@ -181,6 +202,7 @@ def test_the_real_extraction_trace_still_parses():
     assert all(c.provenance.chapter_id == "ch02" for c in out.candidates)
 
 
+@needs_real_trace
 def test_the_real_trace_carries_no_spans_at_all():
     """The honest current state, asserted so the next change has to face it.
 
@@ -194,7 +216,7 @@ def test_the_real_trace_carries_no_spans_at_all():
     """
     import json
 
-    out = StageAOutput.model_validate(json.load(open(REAL_TRACE)))
+    out = StageAOutput.model_validate(json.load(REAL_TRACE.open()))
     with_spans = [c for c in out.candidates if c.provenance.quote.strip()]
     assert len(out.candidates) == 24
     assert with_spans == [], (
