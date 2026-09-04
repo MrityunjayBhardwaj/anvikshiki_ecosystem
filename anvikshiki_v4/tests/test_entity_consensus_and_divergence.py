@@ -41,7 +41,6 @@ was written.
 
 import pytest
 
-from anvikshiki_v4.schema import DecayRisk
 from anvikshiki_v4.grounding import (
     CONSENSUS_THRESHOLD,
     GroundingPipeline,
@@ -396,9 +395,10 @@ def test_every_non_clarifying_return_path_is_guarded():
 # `relevant_vyaptis` sat one line below the predicate consensus and was not
 # touched when that line gave up `set.intersection`, because an issue written
 # from one field names one field. It cost nothing at the time: the ids reached
-# only the decay check, and the decay check's output reached nothing. Now that
-# the advisory channel is live, one member of five omitting an id deletes a
-# finding four members produced.
+# only the decay check, and the decay check's output reached nothing. Decay
+# now asks the framework which rules fired, so these ids no longer decide
+# anything — they are reported on the result as what the grounder itself
+# named, and one divergent rollout must not delete an id four members gave.
 
 class _PerMemberGrounder:
     """A different vyāpti list per ensemble member, predicates held fixed.
@@ -427,9 +427,6 @@ FOUR_OF_FIVE = [["V01"], ["V01"], ["V01"], ["V01"], []]
 def _piped_vyaptis(vyapti_sets):
     gp = GroundingPipeline.__new__(GroundingPipeline)
     gp.ks = load_knowledge_store(KB_PATH)
-    gp.ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
-    gp.ks.vyaptis["V01"].decay_condition = "regime change"
-    gp.ks.vyaptis["V01"].last_verified = None
     gp.grounder = _PerMemberGrounder(vyapti_sets)
     gp.engine = None
     return gp
@@ -439,10 +436,7 @@ def test_four_of_five_naming_a_vyapti_reaches_consensus():
     result = _piped_vyaptis(FOUR_OF_FIVE)._forward_ensemble(
         "q", "snippet", n=5, use_solver=False
     )
-    assert [a.vyapti_id for a in result.advisories] == ["V01"], (
-        "the decay check is the only reader of these ids, and it can only "
-        "report on an id that survived the vote"
-    )
+    assert result.relevant_vyaptis == ["V01"]
 
 
 def test_unanimity_would_have_deleted_it():
@@ -458,4 +452,4 @@ def test_a_genuine_minority_is_still_dropped():
     result = _piped_vyaptis(
         [["V01"], [], [], [], []]
     )._forward_ensemble("q", "snippet", n=5, use_solver=False)
-    assert result.advisories == []
+    assert result.relevant_vyaptis == []

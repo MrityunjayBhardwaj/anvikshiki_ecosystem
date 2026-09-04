@@ -38,6 +38,7 @@ from anvikshiki_v4.advisories import (
     Advisory,
     AdvisoryKind,
     as_wire,
+    decayed_rule_advisories,
     unestablished_scope_advisories,
 )
 from anvikshiki_v4.engine_v4 import AnvikshikiEngineV4, AnvikshikiEngineV4Phase1
@@ -235,37 +236,140 @@ class TestGroundingCarriesTypedAdvisories:
         assert advisory.vyapti_id == vid
         assert advisory.subject == f"{excl}(acme)"
 
-    def test_the_decay_check_returns_advisories(self, ks):
-        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
-        ks.vyaptis["V01"].decay_condition = "regime change"
-        (advisory,) = GroundingPipeline(ks)._check_decay(["V01"])
-        assert advisory.kind == AdvisoryKind.DECAY
-        assert advisory.vyapti_id == "V01"
-        assert "NEVER verified" in advisory.message
-
-    def test_a_stale_rule_is_reported_with_its_age(self, ks):
-        ks.vyaptis["V01"].decay_risk = DecayRisk.HIGH
-        ks.vyaptis["V01"].decay_condition = "regime change"
-        ks.vyaptis["V01"].last_verified = datetime.now() - timedelta(days=400)
-        (advisory,) = GroundingPipeline(ks)._check_decay(["V01"])
-        assert advisory.kind == AdvisoryKind.DECAY
-        assert "400 days ago" in advisory.message
-
-    def test_warnings_are_exactly_the_advisory_messages(self, ks):
+    def test_warnings_are_exactly_the_advisory_messages(self):
         """One source of truth. `warnings` is kept because the clarification
         paths legitimately put something else in it — a message about the
         grounding rather than a finding about a rule — but on the paths where
         both exist, one is derived from the other at the single site that
         builds them, so they cannot drift."""
-        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
-        ks.vyaptis["V01"].decay_condition = "regime change"
-        pipeline = GroundingPipeline(ks)
+        business = load_knowledge_store(
+            "anvikshiki_v4/data/business_expert.yaml"
+        )
+        excl = next(
+            e for v in business.vyaptis.values() for e in v.scope_exclusions
+        )
+        pipeline = GroundingPipeline(business)
         pipeline.grounder = lambda **kw: SimpleNamespace(
-            predicates=["gate_open(acme)"], relevant_vyaptis=["V01"],
+            predicates=[f"{excl}(acme)"], relevant_vyaptis=["V01"],
         )
         result = pipeline._forward_minimal("q", "snippet")
         assert result.advisories
         assert result.warnings == [a.message for a in result.advisories]
+
+    def test_the_grounders_own_rule_list_is_reported_not_dropped(self):
+        """It used to feed the decay check and nothing else. Decay now asks
+        the framework which rules fired, so this would have become a value
+        computed and discarded — the defect this whole channel exists to fix.
+        It is carried on the result instead, where a trace can see it."""
+        business = load_knowledge_store(
+            "anvikshiki_v4/data/business_expert.yaml"
+        )
+        pipeline = GroundingPipeline(business)
+        pipeline.grounder = lambda **kw: SimpleNamespace(
+            predicates=["superior_information(acme)"],
+            relevant_vyaptis=["V03", "V01"],
+        )
+        result = pipeline._forward_minimal("q", "snippet")
+        assert result.relevant_vyaptis == ["V03", "V01"]
+
+
+# ── #118: decay is a fact about the rules that fired ─────────
+
+class TestDecayAsksTheFramework:
+    """It used to be asked of `candidate_vyaptis` — the consensus of the
+    grounder's `relevant_vyaptis`, a language model's guess at which rules
+    would matter, produced before any rule runs. That is not the set of rules
+    that fired, and the two come apart in both directions.
+    """
+
+    def test_a_decayed_rule_that_fired_is_reported(self, ks):
+        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        af, labels = _af(ks, "gate_open(acme)")
+        (advisory,) = decayed_rule_advisories(ks, af, labels)
+        assert advisory.kind == AdvisoryKind.DECAY
+        assert advisory.vyapti_id == "V01"
+        assert "NEVER verified" in advisory.message
+
+    def test_a_decayed_rule_that_did_not_fire_is_not_reported(self, ks):
+        """The other direction, and the one a grounder list gets wrong for
+        free: V02 is decayed and took no part in this answer."""
+        ks.vyaptis["V02"].decay_risk = DecayRisk.CRITICAL
+        ks.vyaptis["V02"].decay_condition = "regime change"
+        af, labels = _af(ks, "gate_open(acme)")
+        assert decayed_rule_advisories(ks, af, labels) == []
+
+    def test_a_stale_rule_is_reported_with_its_age(self, ks):
+        ks.vyaptis["V01"].decay_risk = DecayRisk.HIGH
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        ks.vyaptis["V01"].last_verified = datetime.now() - timedelta(days=400)
+        af, labels = _af(ks, "gate_open(acme)")
+        (advisory,) = decayed_rule_advisories(ks, af, labels)
+        assert "400 days ago" in advisory.message
+
+    def test_a_recently_verified_rule_is_not_reported(self, ks):
+        ks.vyaptis["V01"].decay_risk = DecayRisk.HIGH
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        ks.vyaptis["V01"].last_verified = datetime.now() - timedelta(days=10)
+        af, labels = _af(ks, "gate_open(acme)")
+        assert decayed_rule_advisories(ks, af, labels) == []
+
+    @pytest.mark.parametrize("risk", [DecayRisk.LOW, DecayRisk.MODERATE])
+    def test_a_low_risk_rule_is_not_reported(self, ks, risk):
+        """The threshold is unchanged by this work. Whether `moderate` with a
+        stated decay condition ought to be reported is a live question and a
+        separate one; moving the check must not answer it by accident."""
+        ks.vyaptis["V01"].decay_risk = risk
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        af, labels = _af(ks, "gate_open(acme)")
+        assert decayed_rule_advisories(ks, af, labels) == []
+
+    def test_a_defeated_rule_is_not_reported(self, ks):
+        from anvikshiki_v4.schema_v4 import Label
+
+        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        af, labels = _af(ks, "gate_open(acme)")
+        defeated = {
+            aid: Label.OUT for aid, a in af.arguments.items()
+            if a.top_rule == "V01"
+        }
+        assert decayed_rule_advisories(ks, af, {**labels, **defeated}) == []
+
+    def test_one_advisory_per_rule_however_often_it_fired(self, ks):
+        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        af, labels = _af(ks, "gate_open(acme)", "gate_open(globex)")
+        assert len(decayed_rule_advisories(ks, af, labels)) == 1
+
+    def test_an_unlabelled_framework_raises(self, ks):
+        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+        af, _ = _af(ks, "gate_open(acme)")
+        af.labels.clear()
+        with pytest.raises(ValueError, match="unlabelled framework"):
+            decayed_rule_advisories(ks, af, af.labels)
+
+    def test_the_shipped_base_reproduces_the_reported_case(self):
+        """#118 as corrected, against the real copywriting base.
+
+        V09 is `high` risk, has never been verified, and asks in its own
+        decay condition to be re-evaluated annually against frontier models.
+        A query that fires it must say so — and the grounder naming some other
+        rule must not be able to suppress that.
+        """
+        copywriting = load_knowledge_store(
+            "anvikshiki_v4/data/copywriting_expert.yaml"
+        )
+        v09 = copywriting.vyaptis["V09"]
+        assert v09.decay_risk.value == "high" and v09.last_verified is None, (
+            "fixture no longer demonstrates the case it exists for"
+        )
+        af, labels = _af(
+            copywriting, *[f"{a}(brand)" for a in v09.antecedents]
+        )
+        assert "V09" in {a.top_rule for a in af.arguments.values()}
+        (advisory,) = decayed_rule_advisories(copywriting, af, labels)
+        assert advisory.vyapti_id == "V09"
 
 
 # ── #92: the channel reaches the caller ──────────────────────
@@ -379,6 +483,32 @@ class TestTheAdvisoryChannelIsLive:
         pred = _run(_engine(ks, ["gate_open(acme)"], [decayed]), path)
         assert {a["kind"] for a in pred.advisories} == {
             "decay", "unestablished_scope"
+        }
+
+    @BOTH_PATHS
+    def test_a_decayed_rule_reaches_the_prediction(self, ks, path):
+        """The reachability question, asked forward of the producer that just
+        moved. A check that reports correctly into a list nobody returns is
+        the defect this whole channel was opened to fix."""
+        ks.vyaptis["V01"].decay_risk = DecayRisk.CRITICAL
+        ks.vyaptis["V01"].decay_condition = "regime change"
+        pred = _run(_engine(ks, ["gate_open(acme)"]), path)
+        decay = [a for a in pred.advisories if a["kind"] == "decay"]
+        assert [a["vyapti_id"] for a in decay] == ["V01"]
+
+    @BOTH_PATHS
+    def test_the_shipped_decayed_rule_reaches_the_prediction(self, path):
+        """End to end on the real base, with only the language models stubbed:
+        a query that fires copywriting's V09 comes back carrying V09's decay."""
+        copywriting = load_knowledge_store(
+            "anvikshiki_v4/data/copywriting_expert.yaml"
+        )
+        antecedents = [
+            f"{a}(brand)" for a in copywriting.vyaptis["V09"].antecedents
+        ]
+        pred = _run(_engine(copywriting, antecedents), path)
+        assert "V09" in {
+            a["vyapti_id"] for a in pred.advisories if a["kind"] == "decay"
         }
 
     @BOTH_PATHS

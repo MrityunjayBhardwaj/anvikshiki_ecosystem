@@ -30,7 +30,7 @@ class GroundingMode(str, Enum):
     PARTIAL = "partial"   # N=3 ensemble + round-trip (no solver)
     FULL = "full"         # N=5 ensemble + round-trip + solver feedback
 
-from .advisories import Advisory, decay_advisory, scope_exclusion_advisory
+from .advisories import Advisory, scope_exclusion_advisory
 from .datalog_engine import DatalogEngine
 from .predicate_contrariness import (
     entity_divergence,
@@ -65,11 +65,22 @@ class GroundingResult(BaseModel):
     advisories: list[Advisory] = Field(
         default_factory=list,
         description=(
-            "Structured findings about rules: scope exclusions the query "
-            "asserts, and rules whose verification has decayed. Computed on "
-            "every query since these checks were written and, until the "
-            "engine grew a field to carry them, read by nothing on the query "
-            "path."
+            "Structured findings this boundary can make: scope exclusions the "
+            "query asserts. Decay is not among them — it is a fact about the "
+            "rules that fired, which only the framework knows."
+        ),
+    )
+    relevant_vyaptis: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Rule ids the grounder itself named as relevant, by majority vote "
+            "across the ensemble. Reported rather than acted on: it is a "
+            "language model's guess made before any rule runs, and the two "
+            "consumers that could want it both have something better — "
+            "retrieval uses the coverage analyser's deterministic list, and "
+            "the decay advisory uses the rules that actually fired. Carried "
+            "on the result so it is visible in a trace instead of computed "
+            "and dropped."
         ),
     )
     refinement_rounds: int = 0
@@ -417,7 +428,6 @@ class GroundingPipeline(dspy.Module):
 
         advisories: list[Advisory] = []
         advisories.extend(self._check_scope(candidate_preds))
-        advisories.extend(self._check_decay(candidate_vyaptis))
 
         return GroundingResult(
             predicates=candidate_preds,
@@ -425,6 +435,7 @@ class GroundingPipeline(dspy.Module):
             disputed=[],
             warnings=[a.message for a in advisories],
             advisories=advisories,
+            relevant_vyaptis=candidate_vyaptis,
             refinement_rounds=0,
             clarification_needed=False,
         )
@@ -457,9 +468,9 @@ class GroundingPipeline(dspy.Module):
 
         # The same majority rule, for the same reason. This line kept
         # `set.intersection` for three commits after the predicate line above
-        # gave it up, because an issue written from one field names one field
-        # — and it cost nothing while `candidate_vyaptis` fed only the decay
-        # check, whose output the engine discarded. It costs something now.
+        # gave it up, because an issue written from one field names one field.
+        # It decides what `relevant_vyaptis` reports, and unanimity let one
+        # divergent rollout delete an id four members produced.
         consensus_vyaptis, _ = _consensus(all_vyapti_sets)
 
         total = len(consensus_preds) + len(disputed_preds)
@@ -520,7 +531,6 @@ class GroundingPipeline(dspy.Module):
         # Deterministic scope/decay checks (no LLM)
         advisories: list[Advisory] = []
         advisories.extend(self._check_scope(candidate_preds))
-        advisories.extend(self._check_decay(candidate_vyaptis))
 
         return GroundingResult(
             predicates=candidate_preds,
@@ -528,6 +538,7 @@ class GroundingPipeline(dspy.Module):
             disputed=sorted(disputed_preds),
             warnings=[a.message for a in advisories],
             advisories=advisories,
+            relevant_vyaptis=candidate_vyaptis,
             refinement_rounds=refinement_rounds,
             clarification_needed=False,
         )
@@ -618,26 +629,4 @@ class GroundingPipeline(dspy.Module):
                     warnings.append(
                         scope_exclusion_advisory(vid, subject)
                     )
-        return warnings
-
-    def _check_decay(self, vyapti_ids: list[str]) -> list[Advisory]:
-        """Deterministic decay checking — no LLM."""
-        warnings: list[Advisory] = []
-        now = datetime.now()
-        for vid in vyapti_ids:
-            v = self.ks.vyaptis.get(vid)
-            if v and v.decay_risk.value in ("high", "critical"):
-                if v.last_verified:
-                    age = (now - v.last_verified).days
-                    if age > 180:
-                        warnings.append(decay_advisory(
-                            vid,
-                            f"DECAY: {vid} last verified {age} days ago "
-                            f"({v.decay_condition})",
-                        ))
-                else:
-                    warnings.append(decay_advisory(
-                        vid,
-                        f"DECAY: {vid} NEVER verified ({v.decay_condition})",
-                    ))
         return warnings

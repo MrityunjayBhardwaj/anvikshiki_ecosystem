@@ -28,6 +28,7 @@ parsing it back.
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 
@@ -76,14 +77,90 @@ def scope_exclusion_advisory(vyapti_id: str, subject: str) -> Advisory:
     )
 
 
-def decay_advisory(vyapti_id: str, message: str) -> Advisory:
-    """A rule whose last verification is old enough to matter, or absent."""
+DECAY_RISKS_REPORTED = ("high", "critical")
+DECAY_MAX_AGE_DAYS = 180
+
+
+def decay_advisory(vyapti) -> Optional[Advisory]:
+    """A rule whose last verification is old enough to matter, or absent.
+
+    `last_verified` is unset on all 20 rules across both shipped bases, so the
+    age branch below is currently unreachable in production and every advisory
+    this can produce is the never-verified one. That is an authoring gap
+    rather than a code one, and it is recorded here because an age check that
+    has never run against real data is a check nobody has confirmed.
+    """
+    if vyapti.decay_risk.value not in DECAY_RISKS_REPORTED:
+        return None
+
+    if vyapti.last_verified is None:
+        message = f"DECAY: {vyapti.id} NEVER verified ({vyapti.decay_condition})"
+    else:
+        age = (datetime.now() - vyapti.last_verified).days
+        if age <= DECAY_MAX_AGE_DAYS:
+            return None
+        message = (
+            f"DECAY: {vyapti.id} last verified {age} days ago "
+            f"({vyapti.decay_condition})"
+        )
+
     return Advisory(
         kind=AdvisoryKind.DECAY,
-        vyapti_id=vyapti_id,
+        vyapti_id=vyapti.id,
         subject=None,
         message=message,
     )
+
+
+def decayed_rule_advisories(
+    knowledge_store: KnowledgeStore,
+    af,
+    labels: dict,
+) -> list[Advisory]:
+    """Rules that participated in the answer and are overdue for verification.
+
+    **Asked of the framework, not of the grounder.** The decay check used to
+    receive `candidate_vyaptis` — the consensus of the grounder's
+    `relevant_vyaptis`, which is a language model's guess at which rules matter,
+    produced before the framework runs. It is not the set of rules that fired,
+    and the two come apart in both directions.
+
+    Measured on the base where decay can fire, no LLM:
+
+        V09  risk=high   ai_drafting_used -> human_judgment_value_increases
+             decay_condition: "Re-evaluate annually against frontier models…"
+
+        facts ['ai_drafting_used(brand)']   ->   V09 FIRES
+        decay asked about the rules that fired  ->  DECAY: V09 NEVER verified
+        decay asked about a grounder list ['V01'] ->  []
+
+    So the engine could answer using a rule that asks to be re-evaluated
+    annually, never verified, and say nothing about it — whenever the grounder
+    did not happen to name that rule. And it could report decay on a rule that
+    took no part in the answer.
+
+    Same reference set as `unestablished_scope_advisories` and for the same
+    reason: an advisory is about the reasoning that produced this answer.
+    """
+    if af.arguments and not labels:
+        raise ValueError(
+            "decayed_rule_advisories called on an unlabelled framework: "
+            f"{len(af.arguments)} arguments and no labels. Call "
+            "af.compute_grounded() first. Without this guard the answer would "
+            "be an empty list — no rule reported as decayed because no rule "
+            "was reported as firing at all."
+        )
+
+    fired = {
+        arg.top_rule for aid, arg in af.arguments.items()
+        if arg.top_rule is not None and labels.get(aid) == Label.IN
+    }
+    advisories = [
+        advisory for vid in sorted(fired)
+        if (vyapti := knowledge_store.vyaptis.get(vid)) is not None
+        and (advisory := decay_advisory(vyapti)) is not None
+    ]
+    return advisories
 
 
 def unestablished_scope_advisories(

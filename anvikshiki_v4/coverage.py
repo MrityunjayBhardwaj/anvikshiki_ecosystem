@@ -125,21 +125,58 @@ class SemanticCoverageAnalyzer:
         }
 
     def _build_vocabulary(self) -> set[str]:
-        """All predicates from antecedents + consequents across all vyaptis."""
+        """Every predicate name this base uses, in any of its four roles.
+
+        Antecedents and consequents are what a rule reasons *with*. Scope
+        conditions and exclusions are what a rule reasons *within*, and they
+        are just as much this base's vocabulary — the grounder is shown them
+        and told to assert one when the query states it holds.
+
+        Leaving them out meant coverage read the base's own answer to its own
+        question as a word it did not recognise. A live run produced
+        `commercial_enterprise(startup)` — a declared scope condition — and
+        coverage filed it under `unmatched_predicates`, which is not merely a
+        lower ratio: a query made only of scope conditions scored 0.00 and
+        routed DECLINE, and DECLINE diverts to augmentation, which asks
+        whether a rule can be *invented* for a predicate the base had already
+        declared.
+
+        What follows from admitting them is handled and not incidental. Every
+        scope predicate in both shipped bases is inert by construction — none
+        is any rule's antecedent, none is any rule's consequent, and none has
+        a contrary that is concluded — so `_is_inert` catches them and a query
+        made only of scope conditions demotes to PARTIAL rather than claiming
+        FULL. Matching says the base knows the word; inertness says no rule
+        can act on it. Both are true of a scope condition, and they were
+        exactly the two facts that needed separating.
+        """
         vocab: set[str] = set()
         for v in self.ks.vyaptis.values():
             vocab.update(v.antecedents)
             if v.consequent:
                 vocab.add(v.consequent)
+            vocab.update(v.scope_conditions)
+            vocab.update(v.scope_exclusions)
         return vocab
 
     def _build_predicate_index(self) -> dict[str, list[str]]:
-        """Map each predicate -> list of vyapti IDs that use it."""
+        """Map each predicate -> the vyapti IDs that use it, in any role.
+
+        This drives `relevant_vyaptis`, which drives which chapters retrieval
+        reaches for. A query asserting `heterogeneous_quality_market` is about
+        V03 — that is the rule that declared the condition — so routing it
+        nowhere would leave the query matched, inert, and pointed at no prose
+        either. The same omission one level along.
+        """
         index: dict[str, list[str]] = {}
         for vid, v in self.ks.vyaptis.items():
-            for pred in list(v.antecedents) + [v.consequent]:
-                if pred:
-                    index.setdefault(pred, []).append(vid)
+            roles = (
+                list(v.antecedents) + [v.consequent]
+                + list(v.scope_conditions) + list(v.scope_exclusions)
+            )
+            for pred in roles:
+                if pred and vid not in index.setdefault(pred, []):
+                    index[pred].append(vid)
         return index
 
     def _is_inert(self, pred: str) -> bool:
