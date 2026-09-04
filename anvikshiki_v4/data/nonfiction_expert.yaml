@@ -1,0 +1,800 @@
+# data/nonfiction_expert.yaml — Volume 0: The Ānvīkṣikī Cycle
+# Transcribed from guides/v325_new/non-fiction writing/vol_0/
+#   stage_2_knowledge_architecture.md  (vyāptis, hetvābhāsas, DAG, thresholds,
+#                                       chapter sequence, decay registry)
+#   stage3_reference_bank.md           (118 numbered references, chapter-keyed)
+# Domain: TYPE 5 (Interpretive/Humanistic) + TYPE 4 (Practical/Craft) hybrid,
+#         TYPE 3 (Empirical) secondary for Part 1 — the volume's own Stage 1
+#         classification, quoted rather than assigned.
+#
+# WHY THIS KB EXISTS (#21). Two domains show the architecture is not
+# single-sample. Three, in unrelated fields, starts to look like a property.
+# But this base is worth more than the count. Both existing bases were
+# authored BEFORE the scope advisories, the wired solver and coverage's
+# inertness demotion were merged. This one is the first the engine meets that
+# it has never been tuned against, so what it does here is evidence about the
+# engine rather than about the transcription.
+#
+# Authored 24 March 2026 for a human reader, with no engine in mind. Nothing
+# below was added, removed or reshaped to make the engine behave.
+#
+# ── FIVE TRANSLATIONS WERE UNAVOIDABLE. They are judgment calls, not copies.
+#
+#  1. IDENTIFIERS. The guide numbers its rules V0-1..V0-10 and its fallacies
+#     V0F-1..V0F-9. The schema and both sibling bases use V01../H01..; these
+#     are renumbered in order, with the guide's own id kept in `name` where it
+#     helps. No rule was reordered.
+#
+#  2. causal_status. The guide writes STRUCTURAL / CAUSAL / EMPIRICAL
+#     REGULARITY; the schema offers structural / regulatory / empirical /
+#     definitional. Mapping used throughout:
+#         STRUCTURAL           -> structural
+#         CAUSAL               -> empirical   (an observed, intervenable regularity)
+#         EMPIRICAL REGULARITY -> empirical   (observed, mechanism uncharacterised)
+#     CAUSAL and EMPIRICAL REGULARITY collapse onto one value, exactly as they
+#     did in copywriting_expert.yaml. The distinction the author drew survives
+#     only in confidence.evidence and epistemic_status.
+#
+#  3. epistemic_status. The guide states confidence in EXISTENCE and in
+#     FORMULATION separately, plus a "GUIDE RENDERING RULE" that says how the
+#     claim may be stated. That rendering rule is the honest signal, and it is
+#     what the status is read off:
+#         "State as structural regularity"  -> established
+#         "State as argued position"        -> provisional
+#         "Calibrated hedge"                -> provisional
+#         "Working hypothesis"              -> hypothesis
+#     This is why V04 and V06 are `hypothesis` while V05 and V08 are
+#     `established` — the author said so in as many words, and marking them
+#     all established would have thrown away the volume's most careful work.
+#
+#  4. antecedents / consequent. Every vyāpti is prose; no predicate is named
+#     anywhere in the source. Each predicate below is read off the statement
+#     and its scope paragraph. ONE chain is the author's own and there is only
+#     one: V01 ends at a ceiling question, and V03 opens "Wherever the Western
+#     ascending arc generates a ceiling question…". They share the predicate
+#     because the author wrote them sharing it. No second chain was
+#     manufactured to make the graph look richer.
+#
+#  5. decay_condition. Unlike either sibling base, this volume ships a DECAY
+#     MARKER REGISTRY (Step 2I) — seven claims with an explicit verification
+#     condition each. Those conditions are transcribed VERBATIM into
+#     `decay_condition`, and `decay_risk` is set from which markers touch a
+#     rule's anchoring chapters rather than from my reading. DM-4 names V06
+#     outright; DM-5 is V03's content. See the per-rule comments.
+#
+# ── WHAT IS DELIBERATELY ABSENT, so its absence is not read as an oversight:
+#
+#   * NO REBUTTING PAIR. business_expert.yaml has V11 concluding
+#     not_value_creation against V01's value_creation. Nothing among these ten
+#     concludes the negation of another, because the author never wrote one —
+#     the same finding as copywriting. Two unshaped bases in a row lacking a
+#     rebutting pair is itself a datum about how humans author these, and
+#     inventing one would have destroyed it.
+#
+#   * NO IDENTIFIERS in reference_bank — title / author / year only, and no
+#     resolution blocks. stage3_reference_bank.md carries ZERO DOIs and ZERO
+#     ISBNs across all 118 entries; there is nothing to transcribe. This is
+#     the same unretrofitted shape copywriting has, and #16's retrofit is the
+#     separate work. test_nonfiction_expert.py asserts that zero WITH its
+#     denominator so this bank cannot pass for one that has been checked.
+#
+#   * last_verified IS UNSET ON EVERY RULE. The source bank's own header says
+#     "Status: DRAFT — pending verification pass" (and #106 is open on exactly
+#     that). Setting a date would be inventing one. The consequence is worth
+#     stating plainly: the decay AGE branch still has no rule anywhere in the
+#     shipped set to fire on. What this base DOES newly supply is real
+#     decay_condition text, so the never-verified branch now carries the
+#     author's own words instead of a blank.
+#
+# ── ONE THING THIS BASE HAS THAT NEITHER SIBLING DOES: every one of the 118
+#    references in the source carries an evidence-class tag ([PEER-REVIEWED],
+#    [PRIMARY TEXT], [ADVERSARIAL], [META-ANALYSIS], …). The schema has no
+#    field for it, so it is NOT transcribed — recorded here so that a later
+#    reader knows the information exists upstream and was dropped at a schema
+#    boundary, not missing from the source.
+
+domain_type: INTERPRETIVE
+pramanas: ["pratyaksa", "anumana", "sabda", "upamana"]
+
+vyaptis:
+  # V0-1. "Confidence in EXISTENCE: high. FORMULATION: moderate."
+  # Rendering rule: "State as argued position … Not as settled fact." -> provisional
+  # Decay: anchors Ch 1–6, which DM-1 (COGITATE), DM-6 (panpsychism) and
+  # DM-7 (AI consciousness, "2026 state may shift substantially by 2028")
+  # all touch. Three markers on one rule is the highest in the volume.
+  V01:
+    id: V01
+    name: "Western Ceilings (V0-1)"
+    statement: "Wherever a Western empirical discipline is pursued honestly to the limit of its methods, it generates questions about consciousness, knowing, and the observer that its own methods cannot answer — because those methods were designed to investigate the observed, not the observer"
+    causal_status: structural
+    scope_conditions: ["empirical_discipline"]
+    scope_exclusions: ["formal_axiomatic_discipline"]
+    confidence: {existence: 0.9, formulation: 0.6, evidence: "observational"}
+    epistemic_status: provisional
+    decay_risk: high
+    decay_condition: "New major publications or policy decisions on AI consciousness; publication of COGITATE Phase 2 or major follow-up studies"
+    sources: ["src_chalmers_1995", "src_open_science_2015", "src_hume_enquiry", "src_walker_1942", "src_kandel_2021"]
+    antecedents: ["method_pursued_to_limit"]
+    consequent: "ceiling_question_generated"
+
+  # V0-2. "Confidence in EXISTENCE: moderate." Rendering: "Calibrated hedge:
+  # the two-direction framing illuminates a pattern — but it is a framing,
+  # not a proof." -> provisional. Decay via DM-3 (free energy principle, Ch 12).
+  V02:
+    id: V02
+    name: "Directional Limits (V0-2)"
+    statement: "Wherever an investigation begins from matter and works toward consciousness, it can map correlates and mechanisms but cannot explain experience; wherever it begins from consciousness and works toward matter, it can map the structure of experience but cannot produce the empirical precision of mechanism — neither direction alone is complete"
+    causal_status: structural
+    # The author's scope paragraph is about SCALE, not about the antecedent:
+    # "Holds for the broad sweep of each tradition. Individual thinkers
+    # (Bergson, Whitehead, Abhinavagupta, Friston) have attempted to work in
+    # both directions simultaneously." Naming the scope condition
+    # `single_direction_investigation` — the antecedent — was a transcription
+    # slip, and it made the predicate non-inert, which the shipped-base
+    # vocabulary law caught on its first run against this base.
+    scope_conditions: ["tradition_scale_claim"]
+    scope_exclusions: ["bidirectional_thinker"]
+    confidence: {existence: 0.7, formulation: 0.6, evidence: "theoretical"}
+    epistemic_status: provisional
+    decay_risk: moderate
+    decay_condition: "Major published refutation of the free energy principle, or abandonment by the cognitive science mainstream"
+    sources: ["src_thompson_2015", "src_thompson_2007", "src_varela_1991", "src_rao_paranjpe_2016"]
+    antecedents: ["single_direction_investigation"]
+    consequent: "incomplete_account"
+
+  # V0-3. THE ONE CHAIN: its antecedent is V01's consequent, because the
+  # author wrote it that way — "Wherever the Western ascending arc generates
+  # a ceiling question, the Indian descending arc has a framework that
+  # addresses that question."
+  # Decay: DM-5 is this rule's content — the six convergence mappings.
+  V03:
+    id: V03
+    name: "Complementary Arcs (V0-3)"
+    statement: "Wherever the Western ascending arc generates a ceiling question, the Indian descending arc has a framework that addresses that question — not because the Indian tradition is mystically superior, but because it started from the territory the Western tradition is trying to reach"
+    causal_status: structural
+    scope_conditions: ["mapped_convergence"]
+    scope_exclusions: ["unmapped_western_question"]
+    confidence: {existence: 0.7, formulation: 0.6, evidence: "theoretical"}
+    epistemic_status: provisional
+    decay_risk: high
+    decay_condition: "Formal analysis refuting individual convergence claims — whether any of the six mappings is shown to be structurally disanalogous"
+    sources: ["src_thompson_2015", "src_rao_paranjpe_2016", "src_albahari_2006", "src_larson_2005"]
+    antecedents: ["ceiling_question_generated"]
+    consequent: "descending_framework_available"
+
+  # V0-4. "FORMULATION: low-to-moderate — the historical traditions did not
+  # describe themselves this way." Rendering: "Working hypothesis" -> hypothesis.
+  V04:
+    id: V04
+    name: "Four Systems, One Cycle (V0-4)"
+    statement: "Wherever the four systems (Ānvīkṣikī, Sāṃkhya, Yoga, Lokāyata) are treated as separate philosophies rather than as four phases of one cycle, the practitioner cannot explain why the systems require each other — and systematically underuses whichever system maps to their weakest phase"
+    causal_status: structural
+    scope_conditions: ["kautilyan_four_system_frame"]
+    scope_exclusions: ["alternative_systems_reading"]
+    confidence: {existence: 0.7, formulation: 0.45, evidence: "theoretical"}
+    epistemic_status: hypothesis
+    decay_risk: low
+    sources: ["src_kautilya_arthasastra", "src_olivelle_2013", "src_bisht_anvikshiki", "src_varela_1996"]
+    antecedents: ["systems_treated_separately"]
+    consequent: "phase_underused"
+
+  # V0-5. "EXISTENCE: high. FORMULATION: high. Key uncertainty: Minimal."
+  # Rendering: "State as structural regularity." -> established.
+  V05:
+    id: V05
+    name: "Observation First (V0-5)"
+    statement: "Wherever inquiry begins with theory rather than direct observation (pratyakṣa), the resulting framework systematically encodes the inquirer's prior assumptions as if they were features of the domain — producing false cognition that is structurally invisible because it was built into the foundation"
+    causal_status: empirical
+    scope_conditions: ["empirical_craft_or_humanistic_domain"]
+    scope_exclusions: ["formal_axiomatic_discipline"]
+    confidence: {existence: 0.95, formulation: 0.9, evidence: "expert_consensus"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_gautama_nyayasutras", "src_franco_1994", "src_bhattacharya_2011", "src_popper_1959", "src_kuhn_1962"]
+    antecedents: ["theory_first_inquiry"]
+    consequent: "assumptions_encoded_invisibly"
+
+  # V0-6. The volume's most honest rule about itself. "Evidence: case-based —
+  # observed in one series' construction. Could be artifact of consistent
+  # authorial method." Rendering: "Working hypothesis" -> hypothesis.
+  # DM-4 names V0-6 explicitly, which is why this decay_condition is exact.
+  V06:
+    id: V06
+    name: "Scale Invariance of Inquiry (V0-6)"
+    statement: "Wherever the cycle (Observation → Inquiry → Insight → Understanding → Action → New Observation) is followed, it produces the same structural pattern regardless of scale — at the paragraph, chapter, volume, series, or engine-processing level"
+    causal_status: empirical
+    scope_conditions: ["anvikshiki_series_construction"]
+    scope_exclusions: ["independently_authored_inquiry_system"]
+    confidence: {existence: 0.65, formulation: 0.45, evidence: "case_based"}
+    epistemic_status: hypothesis
+    decay_risk: high
+    decay_condition: "Evidence from independently constructed inquiry frameworks — whether the pattern is observed in differently-authored inquiry systems"
+    sources: ["src_varela_1996", "src_friston_2010", "src_walker_1942"]
+    antecedents: ["cycle_followed"]
+    consequent: "scale_invariant_pattern"
+
+  # V0-7. "EXISTENCE: high. FORMULATION: high." Rendering: "State as
+  # structural regularity." -> established.
+  V07:
+    id: V07
+    name: "Tradition Grounds Tools (V0-7)"
+    statement: "Wherever an epistemic instrument (vyāpti, hetvābhāsa, pramāṇa classification, epistemic status) is deployed without understanding the philosophical tradition that produced it, the instrument's application degrades to mechanical rule-following — the user cannot evaluate edge cases, extend the tool to novel situations, or recognise when the tool's assumptions are violated"
+    causal_status: structural
+    scope_conditions: ["epistemic_instrument_deployed"]
+    scope_exclusions: ["self_contained_formal_tool"]
+    confidence: {existence: 0.9, formulation: 0.85, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_matilal_1985", "src_ganeri_2001", "src_adamson_ganeri_2020"]
+    antecedents: ["instrument_used_without_tradition"]
+    consequent: "mechanical_rule_following"
+
+  # V0-8. "EXISTENCE: high. FORMULATION: high." Rendering: "State as
+  # structural regularity." -> established.
+  V08:
+    id: V08
+    name: "Hetvābhāsa as Type Error (V0-8)"
+    statement: "Wherever a hetvābhāsa occurs, it is structurally a type error — the inference claims a relationship that does not hold because the middle term fails one of the five validity conditions; the five hetvābhāsa types are five distinct ways a type can fail to satisfy its contract"
+    causal_status: structural
+    scope_conditions: ["five_member_syllogism_form"]
+    scope_exclusions: ["inference_outside_syllogism_form"]
+    confidence: {existence: 0.9, formulation: 0.85, evidence: "theoretical"}
+    epistemic_status: established
+    decay_risk: low
+    sources: ["src_gautama_nyayasutras", "src_vatsyayana_nyayabhasya", "src_matilal_1968", "src_matilal_1985", "src_ganeri_2001"]
+    antecedents: ["hetvabhasa_occurs"]
+    consequent: "middle_term_contract_violated"
+
+  # V0-9. "Evidence: practitioner consensus — used implicitly across all
+  # volumes but never formally validated." Rendering: "Calibrated hedge"
+  # -> provisional. Loses precision on mixed signatures, which the author
+  # calls "the common case" — hence the unusually load-bearing exclusion.
+  V09:
+    id: V09
+    name: "The Guṇa Diagnostic (V0-9)"
+    statement: "Wherever a communication artifact fails to achieve its intended effect, the failure has a guṇa signature — excess tamas (flat, inert, formulaic), excess rajas (agitated, scattered, manipulative), or excess sattva without rajas (abstract, airless, disconnected from lived reality); diagnosing the imbalance identifies the category of corrective action"
+    causal_status: empirical
+    scope_conditions: ["communication_artifact"]
+    scope_exclusions: ["mixed_guna_signature"]
+    confidence: {existence: 0.7, formulation: 0.6, evidence: "practitioner_consensus"}
+    epistemic_status: provisional
+    decay_risk: moderate
+    decay_condition: "Whether three categories are sufficient, or whether finer-grained diagnostics prove more useful — the framework has never been formally validated"
+    sources: ["src_isvarakrsna_samkhyakarika", "src_larson_2005", "src_larson_bhattacharya_1987"]
+    antecedents: ["artifact_fails_intended_effect"]
+    consequent: "guna_imbalance_identified"
+
+  # V0-10. "EXISTENCE: high. FORMULATION: high. Key uncertainty: Minimal."
+  # Rendering: "State as structural regularity." -> established.
+  # Scope is the only one in the volume the author marks "Universal".
+  # Decay via DM-2, which anchors Ch 3 and Ch 11.
+  V10:
+    id: V10
+    name: "The Lokāyata Gate (V0-10)"
+    statement: "Wherever a knowledge claim is not subjected to the Lokāyata test (can it be grounded in direct perception or reliable inference; does acting on it produce the predicted result; is it in service of this-worldly benefit; would an honest Cārvāka find it credible), the claim's epistemic status is inflated"
+    causal_status: empirical
+    scope_conditions: ["knowledge_claim_asserted"]
+    scope_exclusions: []
+    confidence: {existence: 0.9, formulation: 0.85, evidence: "observational"}
+    epistemic_status: established
+    decay_risk: moderate
+    decay_condition: "Psychology pre-registered replication rates rising above 70%, which would show reforms sufficient and the structural diagnosis wrong"
+    sources: ["src_jayarasi_tattvopaplavasimha", "src_franco_1994", "src_bhattacharya_2011", "src_jayarasi_sep_2021"]
+    antecedents: ["claim_untested_by_lokayata"]
+    consequent: "epistemic_status_inflated"
+
+hetvabhasas:
+  # Nine fallacies, V0F-1..V0F-9. The author gives each a Nyāya type in its
+  # own heading; that type is kept in `name` because it is the author's
+  # classification, not mine, and it is the thing V08 says is structural.
+  H01:
+    id: H01
+    name: "The Tradition Bypass (V0F-1, asiddha — unestablished)"
+    description: "Using Ānvīkṣikī tools without understanding their philosophical tradition — applying them as arbitrary technical labels rather than as instruments with formal requirements. Attractive because the tools work even when misunderstood, which feels like understanding"
+    detection_signature: "instrument_applied_without_tradition_grounding"
+    correction_pattern: "A reader who memorises 'established means highly confident' without knowing it is a Lokāyata-informed concession will treat established claims as beyond question — the opposite of the intent. Teach the tradition's scope conditions and failure modes alongside the tool"
+    common_contexts: ["first_formal_requirements", "tool_adoption_without_reading", "checklist_application"]
+
+  H02:
+    id: H02
+    name: "The System Conflation (V0F-2, savyabhicāra — deviating)"
+    description: "Collapsing distinct systems — treating Sāṃkhya's guṇas as Yoga's kleśas, or equating Nyāya's pramāṇa with Yoga's pramāṇa-vṛtti. Attractive because the systems share terminology and address related questions"
+    detection_signature: "shared_term_treated_as_shared_meaning"
+    correction_pattern: "Sattva in Sāṃkhya is a quality of all Prakṛti; sattva in Yoga is a mental quality facilitating clear perception. Treating them as identical produces nonsense such as 'sattva is always good' — false in Sāṃkhya, where transcending the guṇas entirely is the goal. Name the axiomatic context before using the term"
+    common_contexts: ["guna_introduction", "cross_system_glossary", "comparative_summary"]
+
+  H03:
+    id: H03
+    name: "The Orientalist Reduction (V0F-3, viruddha — contradictory)"
+    description: "Treating Indian philosophy as a repository of wisdom to be appreciated rather than as rigorous argument to be evaluated. It contradicts the tradition's own self-understanding, and it protects the reader from the discomfort of genuine engagement"
+    detection_signature: "appreciation_language_without_argument_evaluation"
+    correction_pattern: "'The ancient Hindus intuitively understood consciousness' is Orientalist. 'Patanjali's five-vṛtti classification addresses a structural gap in Western psychology's taxonomy of mental states' is engagement. State the argument and let it be contested"
+    common_contexts: ["opening_framing", "popular_summary", "respectful_hedging"]
+
+  H04:
+    id: H04
+    name: "The Scientism Reduction (V0F-4, viruddha — contradictory)"
+    description: "Dismissing Indian philosophy as 'not empirical' or 'pre-scientific' — applying Type 2 pramāṇa standards to Type 5 content. Attractive because Western-educated readers have internalised empiricism as the default standard of rigour"
+    detection_signature: "empirical_standard_applied_to_interpretive_claim"
+    correction_pattern: "Dismissing vyāpti because 'it is not experimentally tested' misunderstands what vyāpti is — a claim of invariable concomitance within scope conditions, validated by positive and negative example, not by controlled experiment. Nyāya is differently rigorous, not less"
+    common_contexts: ["arc_transition", "science_trained_reader", "evidence_hierarchy_disputes"]
+
+  H05:
+    id: H05
+    name: "The False Equivalence (V0F-5, satpratipakṣa — counter-balanced)"
+    description: "Asserting identity between Indian and Western concepts: 'vyāpti IS modus ponens', 'pramāṇa IS justified true belief', 'buddhi IS the prefrontal cortex'. Each pair shares structural features but the differences are as significant as the convergences"
+    detection_signature: "cross_tradition_identity_claim"
+    correction_pattern: "Vyāpti requires both positive and negative example, is graded by epistemic status, and has five named failure modes. Modus ponens requires none of these. The equivalence erases exactly what makes vyāpti the richer instrument. Say 'structurally similar', and then say where it breaks"
+    common_contexts: ["convergence_chapter", "comparative_table", "reader_mapping_to_familiar"]
+
+  H06:
+    id: H06
+    name: "The Cherry-Pick (V0F-6, asiddha — unestablished)"
+    description: "Extracting a concept from its philosophical context and deploying it as if context-free. Attractive because isolation makes concepts portable, but concepts exist within systems of mutual definition"
+    detection_signature: "concept_used_outside_defining_system"
+    correction_pattern: "Using mindfulness (dhyāna) without the seven preceding limbs strips it of the ethical, physical and attentional foundation Patanjali treats as prerequisite. Extracting buddhi from the 25-tattva system loses the constraints that give it precision. Carry the dependencies or say you dropped them"
+    common_contexts: ["yoga_popularisation", "toolkit_extraction", "single_concept_borrowing"]
+
+  H07:
+    id: H07
+    name: "The Anachronism (V0F-7, bādhita — contradicted by perception)"
+    description: "Reading modern cognitive science into ancient texts, or reading ancient cosmological commitments as if they were empirical hypotheses. Modern mappings make ancient concepts feel relevant and validated, and the temporal distance is real"
+    detection_signature: "ancient_text_credited_with_modern_finding"
+    correction_pattern: "'Patanjali anticipated predictive processing' is anachronistic. 'Patanjali's vṛtti model and Friston's predictive processing address structurally similar problems from different directions and historical contexts' is honest. Name the distance"
+    common_contexts: ["convergence_chapter", "relevance_argument", "modern_validation_framing"]
+
+  H08:
+    id: H08
+    name: "The Premature Synthesis (V0F-8, savyabhicāra — deviating)"
+    description: "Claiming the two traditions say the same thing — suppressing genuine divergences to produce false unity. Unity feels like understanding and divergence feels like failure, but the divergences are features"
+    detection_signature: "unity_claimed_without_divergence_stated"
+    correction_pattern: "'Eastern and Western philosophy both seek truth' is premature synthesis. 'Both seek truth, but they disagree about what truth IS, how it is accessed, and what counts as evidence for it' is honest. The traditions diverge profoundly on metaphysics, on the scope of valid knowledge, and on consciousness"
+    common_contexts: ["convergence_chapter", "closing_synthesis", "audience_seeking_resolution"]
+
+  H09:
+    id: H09
+    name: "The Meta-Circularity Trap (V0F-9, satpratipakṣa — counter-balanced)"
+    description: "Using the series' own success as proof of the tradition's validity. The series works — but does it work because of its Ānvīkṣikī grounding, or despite it? The counter-evidence is genuine: a differently-grounded series might work equally well"
+    detection_signature: "framework_validated_by_its_own_output"
+    correction_pattern: "'The series has produced 13 completed volumes, therefore Ānvīkṣikī is the correct framework' is circular. 'The track record is consistent with the framework's claims — but a controlled comparison with alternative frameworks has not been conducted' is honest. Success is evidence, not proof"
+    common_contexts: ["meta_prompt_chapter", "self_assessment", "open_ground"]
+
+threshold_concepts:
+  - name: "The Ceiling Is Structural, Not a Failure"
+    reorganizes: ["western_scientific_findings", "unsolved_vs_unsolvable", "progress_expectation"]
+    prerequisites: ["hard_problem", "replication_crisis", "problem_of_induction", "explanatory_gap"]
+    troublesome_aspects: ["the reader was educated to believe science solves problems", "structural limits feel like giving up", "requires holding 'bounded' and 'not wrong' together"]
+
+  - name: "The Cycle Is One"
+    reorganizes: ["four_systems_relationship", "own_learning_process", "sequence_vs_cycle"]
+    prerequisites: ["anvikshiki", "samkhya", "yoga", "lokayata"]
+    troublesome_aspects: ["linear progression is the default mental model", "the cycle feels less orderly and less completable", "no terminal state to reach"]
+
+  - name: "The Map Is Not the Territory — and That Is Correct"
+    reorganizes: ["framework_completeness_expectation", "relationship_to_the_series", "granularity_gap"]
+    prerequisites: ["vyapti_corpus", "engine_instantiation", "formal_model_limits"]
+    troublesome_aspects: ["completeness feels safe", "permanent incompleteness feels unsatisfying", "lossy compression must be accepted as correct rather than tolerated"]
+
+dependency_graph:
+  # Vyāpti chain — the only one the author wrote. V01's consequent
+  # (ceiling_question_generated) is V03's antecedent, verbatim.
+  V01: ["V03"]
+  # Concept-level dependencies, transcribed from Step 2C's Core Dependency
+  # DAG. Key → concepts that depend on it, matching the direction used in
+  # both sibling bases.
+  C01: ["C02"]                       # observation → inquiry
+  C02: ["C03"]                       # inquiry → insight
+  C03: ["C04"]                       # insight → understanding
+  C04: ["C05"]                       # understanding → action
+  C05: ["C01"]                       # action → new observation  [THE CYCLE]
+  C06: ["C07", "C09"]                # mind-body problem → psychology, epistemology
+  C07: ["C08"]                       # psychology → dual-process theory
+  C08: ["C10"]                       # dual-process → replication crisis
+  C09: ["C11"]                       # epistemology → problem of induction
+  C06_C07_C09: ["C12"]               # all three → hard problem of consciousness
+  C12: ["C13"]                       # hard problem → explanatory gap
+  C13: ["C14"]                       # all ceilings → convergence point
+  C15: ["C16"]                       # prakasa/vimarsa → icchā/jñāna/kriyā
+  C16: ["C17"]                       # three powers → karma/samskara
+  C17: ["C18"]                       # samskara → pratiprasava
+  C19: ["C20"]                       # purusa|prakrti → buddhi/ahamkara/manas
+  C21: ["C22"]                       # pramana → vyapti
+  C22: ["C23"]                       # vyapti → hetvabhasa
+  C23: ["C24"]                       # hetvabhasa → vada/jalpa/vitanda
+  C25: ["C26"]                       # lokayata challenge → epistemic status framework
+  C26: ["C27"]                       # epistemic status → arthakriya
+  C14: ["C28"]                       # convergence map → the 6-node cycle NAMED
+  C28: ["C29", "C30"]                # cycle → engine + meta-prompt instantiation
+  # Circle 1 from Step 2C, recorded because the author records it: vyāpti and
+  # hetvābhāsa are mutually defining (C22 ↔ C23). The author's resolution is
+  # sequencing, not removal — simplified vyāpti, then hetvābhāsa, then vyāpti
+  # in full form. Kept as a forward edge only so the graph stays acyclic.
+
+chapter_fingerprints:
+  opening:
+    chapter_id: opening
+    title: "Every Tool Came from Somewhere — This Is Where"
+    key_terms: ["two_directions", "ascending_arc", "descending_arc", "tool_provenance"]
+    anchoring_concepts: ["directional_limits"]
+    vyaptis_introduced: ["V02", "V07"]
+    hetvabhasas_active: ["H03"]
+    prerequisites: []
+    forward_dependencies: ["ch01", "ch06"]
+    epistemic_statuses: {V02: provisional}
+    difficulty_tier: "foundational"
+
+  ch01:
+    chapter_id: ch01
+    title: "The Body Is a Machine — but Who Runs It?"
+    key_terms: ["cell_biology", "connectomics", "endocrine", "central_nervous_system"]
+    anchoring_concepts: ["first_ceiling", "observation_first"]
+    vyaptis_introduced: ["V01", "V05"]
+    hetvabhasas_active: []
+    prerequisites: ["opening"]
+    forward_dependencies: ["ch02", "ch06"]
+    epistemic_statuses: {V01: provisional, V05: established}
+    difficulty_tier: "foundational"
+
+  ch02:
+    chapter_id: ch02
+    title: "The Mind-Body Problem Is Not Unsolved — It Is Unsolvable from One Direction"
+    key_terms: ["descartes", "4e_cognition", "predictive_processing", "free_energy_principle"]
+    anchoring_concepts: ["observer_problem"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch01"]
+    forward_dependencies: ["ch05", "ch06", "ch12"]
+    epistemic_statuses: {}
+    difficulty_tier: "foundational"
+
+  ch03:
+    chapter_id: ch03
+    title: "Psychology Built Four Walls — and Left Out the Ceiling"
+    key_terms: ["freud", "adler", "jung", "behaviourism", "cognitive_revolution", "replication_crisis"]
+    anchoring_concepts: ["absent_lokayata"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch02"]
+    forward_dependencies: ["ch06", "ch11"]
+    epistemic_statuses: {}
+    difficulty_tier: "foundational"
+
+  ch04:
+    chapter_id: ch04
+    title: "Inference Cannot Justify Itself — and This Has Been Known for 2,500 Years"
+    key_terms: ["hume", "kant", "popper", "bayes", "problem_of_induction"]
+    anchoring_concepts: ["induction_limit"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch03"]
+    forward_dependencies: ["ch10", "ch11"]
+    epistemic_statuses: {}
+    difficulty_tier: "foundational"
+
+  ch05:
+    chapter_id: ch05
+    title: "The Hard Problem Is Not Hard Because We're Not Smart Enough — It's Hard Because of Where We're Standing"
+    key_terms: ["hard_problem", "iit", "gnwt", "cogitate", "panpsychism", "explanatory_gap"]
+    anchoring_concepts: ["hard_problem"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch02", "ch04"]
+    forward_dependencies: ["ch06", "ch12"]
+    epistemic_statuses: {}
+    difficulty_tier: "foundational"
+
+  ch06:
+    chapter_id: ch06
+    title: "The Ceilings Are Structural — and There Is Another Direction"
+    key_terms: ["convergence_point", "structural_limit", "direction_of_investigation"]
+    anchoring_concepts: ["ceiling_is_structural", "complementary_arcs"]
+    vyaptis_introduced: ["V03"]
+    hetvabhasas_active: ["H04"]
+    prerequisites: ["ch01", "ch02", "ch03", "ch04", "ch05"]
+    forward_dependencies: ["ch07", "ch12"]
+    epistemic_statuses: {V01: provisional, V03: provisional}
+    difficulty_tier: "intermediate"
+
+  ch07:
+    chapter_id: ch07
+    title: "What If You Started from Consciousness Instead of Matter?"
+    key_terms: ["kashmir_saivism", "spanda", "prakasa_vimarsa", "samskara", "pratiprasava"]
+    anchoring_concepts: ["descending_arc_origin"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch06"]
+    forward_dependencies: ["ch13", "ch14"]
+    epistemic_statuses: {}
+    difficulty_tier: "intermediate"
+
+  ch08:
+    chapter_id: ch08
+    title: "Twenty-Five Principles — and the Subscriber Is the First"
+    key_terms: ["samkhya", "purusa", "prakrti", "gunas", "buddhi", "ahamkara", "tattvas"]
+    anchoring_concepts: ["guna_diagnostic"]
+    vyaptis_introduced: ["V09"]
+    hetvabhasas_active: ["H02"]
+    prerequisites: ["ch07"]
+    forward_dependencies: ["ch12", "ch17"]
+    epistemic_statuses: {V09: provisional}
+    difficulty_tier: "intermediate"
+
+  ch09:
+    chapter_id: ch09
+    title: "The Discipline Western Psychology Never Built"
+    key_terms: ["yoga", "vrttis", "klesas", "eight_limbs", "samyama", "patanjali"]
+    anchoring_concepts: ["disciplined_perception"]
+    vyaptis_introduced: []
+    hetvabhasas_active: ["H06"]
+    prerequisites: ["ch08"]
+    forward_dependencies: ["ch12", "ch14"]
+    epistemic_statuses: {}
+    difficulty_tier: "intermediate"
+
+  ch10:
+    chapter_id: ch10
+    title: "The Science of Examination — and How Inference Can Be Honest About Its Limits"
+    key_terms: ["nyaya", "pramana", "vyapti", "hetvabhasa", "five_member_syllogism", "kautilya"]
+    anchoring_concepts: ["tradition_grounds_tools", "hetvabhasa_as_type_error", "four_systems_cycle"]
+    vyaptis_introduced: ["V04", "V08", "V10"]
+    hetvabhasas_active: ["H01"]
+    prerequisites: ["ch04", "ch09"]
+    forward_dependencies: ["ch11", "ch16"]
+    epistemic_statuses: {V04: hypothesis, V07: established, V08: established}
+    difficulty_tier: "advanced"
+
+  ch11:
+    chapter_id: ch11
+    title: "The Skeptic Who Keeps Every Other System Honest"
+    key_terms: ["lokayata", "carvaka", "jayarasi", "arthakriya", "epistemic_status_framework"]
+    anchoring_concepts: ["lokayata_gate"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch10"]
+    forward_dependencies: ["ch12", "ch19"]
+    epistemic_statuses: {V10: established, V05: established}
+    difficulty_tier: "advanced"
+
+  ch12:
+    chapter_id: ch12
+    title: "The Same Territory, Two Maps — and Neither Map Is Complete"
+    key_terms: ["structural_convergence", "binding_problem", "predictive_processing", "dual_process", "bayesian_priors"]
+    anchoring_concepts: ["convergence_map"]
+    vyaptis_introduced: []
+    hetvabhasas_active: ["H05", "H07", "H08"]
+    prerequisites: ["ch06", "ch11"]
+    forward_dependencies: ["ch14", "ch19"]
+    epistemic_statuses: {V02: provisional, V03: provisional}
+    difficulty_tier: "advanced"
+
+  ch13:
+    chapter_id: ch13
+    title: "Your Habits of Perception Are Your Karma — and Pratiprasava Is Root-Cause Analysis"
+    key_terms: ["karma", "samskara", "cognitive_bias", "pratiprasava", "root_cause"]
+    anchoring_concepts: ["pattern_constraint"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch07", "ch12"]
+    forward_dependencies: ["ch18"]
+    epistemic_statuses: {}
+    difficulty_tier: "advanced"
+
+  ch14:
+    chapter_id: ch14
+    title: "From Seeing to Asking to Recognizing — the First Half of the Cycle"
+    key_terms: ["observation", "inquiry", "insight", "jijnasa", "viveka", "compression"]
+    anchoring_concepts: ["the_cycle"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch10", "ch13"]
+    forward_dependencies: ["ch15"]
+    epistemic_statuses: {V04: hypothesis, V05: established}
+    difficulty_tier: "advanced"
+
+  ch15:
+    chapter_id: ch15
+    title: "Action Completes Knowledge — the Second Half, and Why It Feeds Back"
+    key_terms: ["understanding", "action", "kriya", "arthakriya", "feedback"]
+    anchoring_concepts: ["cycle_is_one"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch14"]
+    forward_dependencies: ["ch16"]
+    epistemic_statuses: {V04: hypothesis}
+    difficulty_tier: "advanced"
+
+  ch16:
+    chapter_id: ch16
+    title: "The Cycle Runs in Silicon Too — and the Engine's Rules Govern Themselves"
+    key_terms: ["datalog", "aspic_plus", "heyting_algebra", "engine", "self_governance"]
+    anchoring_concepts: ["scale_invariance", "engine_instantiation"]
+    vyaptis_introduced: ["V06"]
+    hetvabhasas_active: []
+    prerequisites: ["ch10", "ch15"]
+    forward_dependencies: ["ch17", "ch19"]
+    epistemic_statuses: {V06: hypothesis, V08: established}
+    difficulty_tier: "advanced"
+
+  ch17:
+    chapter_id: ch17
+    title: "Walker's Book Is the Cycle. The Meta-Prompt Is the Cycle. You Are Inside the Pattern."
+    key_terms: ["meta_prompt", "eight_stages", "meta_recursion", "walker"]
+    anchoring_concepts: ["meta_recursive_property"]
+    vyaptis_introduced: []
+    hetvabhasas_active: ["H09"]
+    prerequisites: ["ch16"]
+    forward_dependencies: ["ch18", "ch19"]
+    epistemic_statuses: {V06: hypothesis, V07: established, V09: provisional, V10: established}
+    difficulty_tier: "advanced"
+
+  ch18:
+    chapter_id: ch18
+    title: "Two Hundred Vyāptis and Still Lossy — Why Incompleteness Is Correct"
+    key_terms: ["granularity_gap", "lossy_compression", "formal_model_limits"]
+    anchoring_concepts: ["map_is_not_territory"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch17"]
+    forward_dependencies: ["ch19"]
+    epistemic_statuses: {}
+    difficulty_tier: "advanced"
+
+  ch19:
+    chapter_id: ch19
+    title: "The Questions That Stay Open Are the Point"
+    key_terms: ["meta_circularity", "productive_samsaya", "open_questions", "deliberate_openness"]
+    anchoring_concepts: ["deliberately_open"]
+    vyaptis_introduced: []
+    hetvabhasas_active: ["H09"]
+    prerequisites: ["ch18"]
+    forward_dependencies: ["ch20"]
+    epistemic_statuses: {V03: provisional, V06: hypothesis}
+    difficulty_tier: "advanced"
+
+  ch20:
+    chapter_id: ch20
+    title: "The Cycle Continues — and the Workshop Is Yours"
+    key_terms: ["continuation", "practitioner_handoff", "both_directions"]
+    anchoring_concepts: ["cycle_continues"]
+    vyaptis_introduced: []
+    hetvabhasas_active: []
+    prerequisites: ["ch19"]
+    forward_dependencies: []
+    epistemic_statuses: {}
+    difficulty_tier: "advanced"
+
+reference_bank:
+  # Transcribed from stage3_reference_bank.md, which holds 118 numbered
+  # references across chapters 1–20. The subset below is the one the ten
+  # vyāptis actually rest on: the anchor texts and primary sources of each
+  # rule's anchoring chapters. Selecting rather than transcribing all 118 is
+  # a judgment call, and it is the same call copywriting made — a reference
+  # bank is what the rules cite, not everything the volume read.
+  #
+  # TITLE / AUTHOR / YEAR ONLY. NO IDENTIFIERS, NO RESOLUTION BLOCKS. Not an
+  # omission: the source bank carries ZERO DOIs and ZERO ISBNs across all 118
+  # entries, so there is nothing to transcribe and inventing one would be the
+  # exact defect the citation tier exists to catch. #16's retrofit is separate
+  # work, and test_nonfiction_expert.py asserts this zero WITH its denominator.
+  #
+  # Several entries are classical texts with no meaningful single year — the
+  # Nyāya Sūtras, the Sāṃkhyakārikā, the Yoga Sūtras, the Arthaśāstra. Where
+  # the author cites a specific translation, the translation's year is used
+  # and the translator named; where the work itself is cited, `year` is
+  # omitted rather than guessed. That absence is correct, not a gap — the
+  # same shape #107's fourth resolution status was added for.
+
+  src_walker_1942:
+    title: "Diagnosis of Man"
+    author: "Walker"
+    year: 1942
+  src_kandel_2021:
+    title: "Principles of Neural Science, 6th ed."
+    author: "Kandel, Koester, Mack and Siegelbaum"
+    year: 2021
+  src_chalmers_1995:
+    title: "Facing Up to the Problem of Consciousness"
+    author: "Chalmers"
+    year: 1995
+  src_open_science_2015:
+    title: "Estimating the Reproducibility of Psychological Science"
+    author: "Open Science Collaboration"
+    year: 2015
+  src_hume_enquiry:
+    title: "An Enquiry Concerning Human Understanding"
+    author: "Hume"
+    year: 2000
+  src_popper_1959:
+    title: "The Logic of Scientific Discovery"
+    author: "Popper"
+    year: 2002
+  src_kuhn_1962:
+    title: "The Structure of Scientific Revolutions"
+    author: "Kuhn"
+    year: 2012
+  src_thompson_2015:
+    title: "Waking, Dreaming, Being: Self and Consciousness in Neuroscience, Meditation, and Philosophy"
+    author: "Thompson"
+    year: 2015
+  src_thompson_2007:
+    title: "Mind in Life: Biology, Phenomenology, and the Sciences of Mind"
+    author: "Thompson"
+    year: 2007
+  src_varela_1991:
+    title: "The Embodied Mind: Cognitive Science and Human Experience"
+    author: "Varela, Thompson and Rosch"
+    year: 1991
+  src_varela_1996:
+    title: "Neurophenomenology: A Methodological Remedy for the Hard Problem"
+    author: "Varela"
+    year: 1996
+  src_friston_2010:
+    title: "The Free-Energy Principle: A Unified Brain Theory?"
+    author: "Friston"
+    year: 2010
+  src_rao_paranjpe_2016:
+    title: "Psychology in the Indian Tradition"
+    author: "Rao and Paranjpe"
+    year: 2016
+  src_albahari_2006:
+    title: "Analytical Buddhism: The Two-Tiered Illusion of Self"
+    author: "Albahari"
+    year: 2006
+  src_kautilya_arthasastra:
+    title: "Arthaśāstra"
+    author: "Kauṭilya"
+  src_olivelle_2013:
+    title: "King, Governance, and Law in Ancient India: Kauṭilya's Arthaśāstra"
+    author: "Olivelle (trans.)"
+    year: 2013
+  src_bisht_anvikshiki:
+    title: "Ānvīkṣikī in Kauṭilya's Arthaśāstra"
+    author: "Bisht"
+  src_gautama_nyayasutras:
+    title: "Nyāya Sūtras"
+    author: "Gautama (Akṣapāda)"
+  src_vatsyayana_nyayabhasya:
+    title: "Nyāyabhāṣya"
+    author: "Vātsyāyana"
+  src_matilal_1985:
+    title: "Logic, Language and Reality: Indian Philosophy and Contemporary Issues"
+    author: "Matilal"
+    year: 1985
+  src_matilal_1968:
+    title: "The Navya-Nyāya Doctrine of Negation"
+    author: "Matilal"
+    year: 1968
+  src_ganeri_2001:
+    title: "Indian Logic: A Reader"
+    author: "Ganeri (ed.)"
+    year: 2001
+  src_adamson_ganeri_2020:
+    title: "Classical Indian Philosophy: A History of Philosophy Without Any Gaps"
+    author: "Adamson and Ganeri"
+    year: 2020
+  src_isvarakrsna_samkhyakarika:
+    title: "Sāṃkhyakārikā"
+    author: "Īśvarakṛṣṇa"
+  src_larson_2005:
+    title: "Classical Sāṃkhya: An Interpretation of Its History and Meaning"
+    author: "Larson"
+    year: 2005
+  src_larson_bhattacharya_1987:
+    title: "Encyclopedia of Indian Philosophies, Vol. IV: Sāṃkhya"
+    author: "Larson and Bhattacharya"
+    year: 1987
+  src_jayarasi_tattvopaplavasimha:
+    title: "Tattvopaplavasiṃha"
+    author: "Jayarāśi Bhaṭṭa"
+  src_franco_1994:
+    title: "Perception, Knowledge and Disbelief: A Study of Jayarāśi's Scepticism"
+    author: "Franco"
+    year: 1994
+  src_bhattacharya_2011:
+    title: "Studies on the Cārvāka/Lokāyata"
+    author: "Bhattacharya"
+    year: 2011
+  src_jayarasi_sep_2021:
+    title: "Jayarāśi (Stanford Encyclopedia of Philosophy)"
+    author: "Stanford Encyclopedia of Philosophy"
+    year: 2021
