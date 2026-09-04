@@ -447,6 +447,51 @@ class ValidationResult(BaseModel):
     datalog_errors: list[str] = Field(default_factory=list)
     coverage_ratio: float = 0.0
 
+    # ── Span grounding (#18) ──
+    #
+    # Before this, a predicate carrying a fabricated quotation passed every
+    # validation we had. The quote WAS checked at extraction — `diagnose` runs
+    # on every candidate — but the verdict only chose whether the rule's
+    # statement came from the quote or from the model's own description. A
+    # failing quote downgraded the statement and the predicate was admitted
+    # anyway. These fields exist so a drop is reported rather than silent.
+    span_dropped: list[str] = Field(
+        default_factory=list,
+        description="Ids dropped: no provenance entry had a verified span.",
+    )
+    span_unsourced: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Ids carrying no provenance at all. COUNTED, NOT DROPPED — an "
+            "unsourced proposal is a different failure from a fabricated "
+            "quotation, and dropping it is a policy change #18 does not ask "
+            "for. Reported so the decision is taken deliberately."
+        ),
+    )
+    span_drop_reasons: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Dropped ids keyed by `diagnose` verdict. Kept separate because "
+            "`span_verification` is explicit that a markup or punctuation "
+            "difference 'is not verbatim and is not accepted — but it is "
+            "also not an invented sentence', and folding it into one rate "
+            "puts a formatting artefact into the fabrication number. "
+            "`absent` is the verdict that means fabrication."
+        ),
+    )
+    span_checked: int = Field(
+        default=0,
+        description="Proposals the span gate examined — the denominator.",
+    )
+    span_drop_rate: float = 0.0
+    span_degraded: bool = Field(
+        default=False,
+        description=(
+            "Drop rate above SPAN_DROP_DEGRADED_AT. A degraded run means the "
+            "extractor is quoting badly, not that the source is bad."
+        ),
+    )
+
 
 # ─── Stage F: HITL Review ─────────────────────────────────────
 
