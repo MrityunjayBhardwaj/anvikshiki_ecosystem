@@ -68,6 +68,33 @@ def test_every_schema_status_is_named_in_the_prompt():
     )
 
 
+def test_the_prompt_declares_no_status_the_schema_will_reject():
+    """The other direction, and the one that bites.
+
+    The law above is quantified over VALID_STATUSES — it checks that the
+    schema's four words all appear in the prompt. That leaves the reverse
+    unguarded: a later edit adding a fifth word to the prompt's status block
+    passes every law here, and an author following it writes a status
+    `test_every_status_is_one_of_the_three` rejects, 55 entries later.
+
+    Asking which set a check is quantified over is the recurring finding in
+    this repo, so the status block is parsed and compared both ways rather
+    than searched for one membership at a time.
+    """
+    import re
+
+    block = re.search(r"```\n(resolved\b.*?)\n```", _prompt(), re.S)
+    assert block, "the four-status block is gone or no longer starts with `resolved`"
+
+    declared = {line.split()[0] for line in block.group(1).splitlines() if line.strip()}
+    assert declared == VALID_STATUSES, (
+        f"prompt declares {sorted(declared)}, schema accepts "
+        f"{sorted(VALID_STATUSES)}; "
+        f"only in prompt: {sorted(declared - VALID_STATUSES)}, "
+        f"only in schema: {sorted(VALID_STATUSES - declared)}"
+    )
+
+
 def test_the_prompt_names_every_identifier_field_the_schema_reads():
     """`test_every_resolved_entry_carries_an_identifier` accepts work_id, doi
     or url, and `test_a_resolved_entry_without_an_isbn_says_why` reads isbn_13
