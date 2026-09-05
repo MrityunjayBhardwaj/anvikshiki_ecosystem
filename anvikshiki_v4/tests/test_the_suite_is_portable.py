@@ -23,6 +23,7 @@ out of three attempts, and the failure is invisible to the person who
 introduces it — their machine has the file.
 """
 
+import ast
 from pathlib import Path
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -32,17 +33,54 @@ TESTS_DIR = Path(__file__).resolve().parent
 GUARDS = ("skipif", "pytest.skip")
 
 
+class _DocstringStripper(ast.NodeTransformer):
+    """Remove docstrings, so what a module says cannot pass for what it does."""
+
+    def _strip(self, node):
+        self.generic_visit(node)
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            body.pop(0)
+            if not body:
+                body.append(ast.Pass())
+        return node
+
+    visit_Module = _strip
+    visit_ClassDef = _strip
+    visit_FunctionDef = _strip
+    visit_AsyncFunctionDef = _strip
+
+
+def _code_only(text: str) -> str:
+    """The module with its prose removed.
+
+    `ast.unparse` drops comments on its own, so stripping docstring nodes is
+    the whole of the difference between naming the directory and reading it.
+    """
+    return ast.unparse(_DocstringStripper().visit(ast.parse(text)))
+
+
 def _modules_reading_ignored_artefacts():
+    """Modules that name the ignored directory in code.
+
+    Citing a trace in prose is the opposite of the problem — it is where a
+    measured number says it came from — so the match has to be against code.
+    A module that merely mentions `traces/` in a docstring reads nothing and
+    is portable already.
+    """
     hits = []
     for path in sorted(TESTS_DIR.glob("test_*.py")):
+        # This module names the directory in code in its own failure message.
         if path.name == Path(__file__).name:
             continue
-        text = path.read_text()
-        # Only count a module that actually names the ignored directory in
-        # code. This module's own prose mentions it constantly, which is why
-        # it excludes itself above.
-        if "traces/" in text:
-            hits.append((path.name, text))
+        code = _code_only(path.read_text())
+        if "traces/" in code:
+            hits.append((path.name, code))
     return hits
 
 
@@ -57,8 +95,8 @@ def test_every_module_reading_traces_guards_on_absence():
     """The law. A module may depend on an ignored artefact; it may not depend
     on it silently."""
     unguarded = [
-        name for name, text in _modules_reading_ignored_artefacts()
-        if not any(g in text for g in GUARDS)
+        name for name, code in _modules_reading_ignored_artefacts()
+        if not any(g in code for g in GUARDS)
     ]
     assert unguarded == [], (
         f"{unguarded} read from the gitignored traces/ directory without a "
@@ -82,3 +120,47 @@ def test_the_guard_is_watching_something():
         "is quantified over an empty set. Delete this module rather than "
         "leaving a check that cannot fail."
     )
+
+
+def test_prose_naming_the_directory_is_not_a_read():
+    """A docstring citing the trace a number came from is provenance, not a
+    dependency.
+
+    That citation is the behaviour we want more of — it is how a measured
+    claim says where it came from — and the first module to write one was
+    flagged as unportable for it. See #130.
+    """
+    prose_only = (
+        '"""Replaying the gate over traces/extraction_ch02/stage_d_ch02.json'
+        ' drops exactly one."""\n'
+        "def test_something():\n"
+        "    assert True\n"
+    )
+    assert "traces/" in prose_only, "the fixture must name the directory"
+    assert "traces/" not in _code_only(prose_only)
+
+
+def test_a_comment_naming_the_directory_is_not_a_read():
+    """Comments go the same way as docstrings, and `ast.unparse` drops them."""
+    commented = "# reads traces/extraction_ch02/stage_d_ch02.json one day\n" \
+                "def test_something():\n" \
+                "    assert True\n"
+    assert "traces/" in commented
+    assert "traces/" not in _code_only(commented)
+
+
+def test_a_real_read_survives_the_strip():
+    """The other direction, and the one that matters more.
+
+    Stripping prose must not be able to hide an actual dependency — a guard
+    that quietly stops flagging is worse than the bug it was written for,
+    because a loud failure becomes a silent absence.
+    """
+    reader = (
+        '"""A module with no prose mention at all."""\n'
+        "from pathlib import Path\n"
+        'TRACE = Path("traces/extraction_ch02/stage_d_ch02.json")\n'
+        "def test_something():\n"
+        "    assert TRACE.exists()\n"
+    )
+    assert "traces/" in _code_only(reader)
