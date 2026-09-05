@@ -43,8 +43,13 @@ from anvikshiki_v4.t2_compiler_v4 import load_knowledge_store
 BASES = {
     "business": "anvikshiki_v4/data/business_expert.yaml",
     "copywriting": "anvikshiki_v4/data/copywriting_expert.yaml",
+    "nonfiction": "anvikshiki_v4/data/nonfiction_expert.yaml",
 }
-BOTH_BASES = pytest.mark.parametrize("base", sorted(BASES))
+# Named for what it quantifies over, not for how many there happen to be.
+# It was BOTH_BASES while there were two, which is the same mistake #116 and
+# #118 were: a check whose reference set is baked into its own name stops
+# being re-read when the set grows.
+EVERY_BASE = pytest.mark.parametrize("base", sorted(BASES))
 
 
 def _vyapti(vid, antecedents, consequent, **kw):
@@ -73,7 +78,7 @@ def _exclusions(ks):
 
 class TestTheBasesOwnWordsAreRecognised:
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_every_declared_scope_condition_is_matched(self, ks):
         conditions = _conditions(ks)
         assert conditions, "this base declares no scope conditions"
@@ -83,7 +88,7 @@ class TestTheBasesOwnWordsAreRecognised:
         assert result.unmatched_predicates == []
         assert result.coverage_ratio == 1.0
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_every_declared_scope_exclusion_is_matched(self, ks):
         exclusions = _exclusions(ks)
         assert exclusions, "this base declares no scope exclusions"
@@ -92,7 +97,7 @@ class TestTheBasesOwnWordsAreRecognised:
         )
         assert result.unmatched_predicates == []
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_a_scope_condition_routes_to_the_rule_that_declared_it(self, ks):
         """Matching without routing would leave the query recognised, inert,
         and pointed at no prose either — the same omission one level along.
@@ -105,7 +110,7 @@ class TestTheBasesOwnWordsAreRecognised:
         result = SemanticCoverageAnalyzer(ks).analyze([f"{condition}(acme)"])
         assert set(declaring) <= set(result.relevant_vyaptis)
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_a_rule_is_listed_once_however_many_roles_a_predicate_has(self, ks):
         """The index appends per role now, so a predicate that is both an
         antecedent and a scope condition of one rule must not name it twice."""
@@ -119,7 +124,7 @@ class TestTheBasesOwnWordsAreRecognised:
 class TestVocabularyIsNotMachinery:
     """#113's distinction is what makes admitting these predicates safe."""
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_every_scope_predicate_in_a_shipped_base_is_inert(self, ks):
         """The property the whole treatment rests on, asserted rather than
         assumed. No scope predicate is any rule's antecedent, none is any
@@ -132,7 +137,7 @@ class TestVocabularyIsNotMachinery:
         ]
         assert not_inert == []
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_a_query_made_only_of_scope_predicates_does_not_claim_full(self, ks):
         """FULL is a claim the base can reason about this query. It cannot
         reason with a scope predicate — it can only be told one."""
@@ -143,7 +148,7 @@ class TestVocabularyIsNotMachinery:
         assert result.decision == "PARTIAL"
         assert len(result.inert_predicates) == len(result.matched_predicates)
 
-    @BOTH_BASES
+    @EVERY_BASE
     def test_a_scope_condition_beside_a_real_antecedent_routes_full(self, ks):
         """The mixed case, which is the common one: a query that says what it
         is about *and* that the rule's scope holds. Before, the second half
