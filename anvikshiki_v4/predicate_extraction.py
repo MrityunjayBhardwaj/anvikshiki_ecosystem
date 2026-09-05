@@ -37,7 +37,17 @@ from .extraction_schema import (
     SynonymCluster,
     ValidationResult,
 )
-from .span_verification import diagnose, is_discriminating
+from .span_verification import diagnose, is_discriminating, quote_appears_in
+
+
+# Above this share of proposals dropped for an unverifiable span, the run is
+# flagged degraded. The only measurement we have is the verbatim rate: 22 of
+# 24 quotes verbatim, 0 fabricated — a 2/24 failure rate of about 8%. This
+# ceiling is that, with headroom, and it is PERMITTED rather than VALIDATED:
+# a single 24-quote sample cannot calibrate a threshold, and no accuracy
+# figure is quotable until the instrument behind #10 is judged. Named here so
+# it is one edit to move rather than a number buried in a comparison.
+SPAN_DROP_DEGRADED_AT = 0.25
 from .schema import (
     AugmentationMetadata,
     AugmentationOrigin,
@@ -1129,6 +1139,83 @@ class StageEValidator:
     def __init__(self, knowledge_store: KnowledgeStore):
         self.ks = knowledge_store
 
+    @staticmethod
+    def _span_is_grounded(prov) -> bool:
+        """One provenance entry, all three of #18's checks.
+
+        `quote_found_in_source` was computed at extraction against the exact
+        section handed to the model, which is strictly stronger than
+        re-reading the source now and hoping it has not moved. It is trusted
+        when present; `quote_appears_in` is the fallback for a provenance
+        entry that reached here without the flag set, and it is the check
+        this module has had available and never used in the live path.
+        """
+        quote = (getattr(prov, "quote", "") or "").strip()
+        if not quote or not is_discriminating(quote):
+            return False
+        found = getattr(prov, "quote_found_in_source", None)
+        if found is None:
+            source = getattr(prov, "section_text", None)
+            found = quote_appears_in(quote, source) if source else False
+        if not found:
+            return False
+        # 3. the locator — and the set of things that COUNT as one is the
+        # whole difficulty here. The first version of this check asked for
+        # `doc_url` or `content_sha256`, which are the locators a web-sourced
+        # document would carry. Neither is set anywhere in production: they
+        # are fields waiting on the content-addressed snapshot store (#27).
+        # The corpus we actually extract from is the guide, and it locates a
+        # span by chapter and paragraph. Asking only for the web locators
+        # would have dropped EVERY predicate the pipeline has ever produced
+        # and reported it as a 100% fabrication rate — a check quantified
+        # over the wrong set, reading as a fact about the input.
+        return bool(getattr(prov, "chapter_id", None)
+                    or getattr(prov, "doc_url", None)
+                    or getattr(prov, "content_sha256", None))
+
+    def _gate_on_span_grounding(self, proposed, errors):
+        """Drop proposals whose quotation cannot be verified.
+
+        DROPPED, NOT DOWNGRADED. The downgrade is what already existed: a
+        failing quote meant the rule's statement came from the model's own
+        description instead, and the predicate was admitted regardless. That
+        makes a fabricated citation indistinguishable from an honest
+        paraphrase at every later stage.
+
+        A proposal survives if AT LEAST ONE of its provenance entries passes
+        all three checks — one good citation is enough to admit a rule, and
+        requiring every entry to pass would punish a rule for citing widely.
+        """
+        kept = []
+        for v in proposed:
+            provs = list(getattr(v, "provenance", None) or [])
+            if not provs:
+                # Not the same failure as a bad quote. See span_unsourced.
+                errors.span_unsourced.append(v.id)
+                kept.append(v)
+                continue
+            errors.span_checked += 1
+            if any(self._span_is_grounded(p) for p in provs):
+                kept.append(v)
+            else:
+                errors.span_dropped.append(v.id)
+                # Why, not just that. `absent` is the only verdict that means
+                # fabrication; markup and punctuation differences are real
+                # reasons not to accept a citation and are NOT evidence the
+                # model invented it.
+                reason = next(
+                    (p.quote_verdict for p in provs if p.quote_verdict),
+                    "unquoted" if not any((p.quote or "").strip() for p in provs)
+                    else "unverified",
+                )
+                errors.span_drop_reasons.setdefault(reason, []).append(v.id)
+        errors.span_drop_rate = (
+            len(errors.span_dropped) / errors.span_checked
+            if errors.span_checked else 0.0
+        )
+        errors.span_degraded = errors.span_drop_rate > SPAN_DROP_DEGRADED_AT
+        return kept
+
     def validate_and_merge(
         self,
         stage_d: StageDOutput,
@@ -1140,6 +1227,12 @@ class StageEValidator:
         augmented = self.ks.model_copy(deep=True)
 
         all_proposed = stage_d.new_vyaptis + stage_d.refinement_vyaptis
+
+        # Step 0: Span grounding (#18). Runs FIRST, so a predicate that is
+        # dropped here cannot go on to contribute an edge to the cycle graph
+        # or an orphan warning — a finding about a predicate we are not
+        # admitting is noise.
+        all_proposed = self._gate_on_span_grounding(all_proposed, errors)
 
         # Step 1: Check for DAG cycles
         adj: dict[str, set[str]] = {}

@@ -265,7 +265,15 @@ def test_provenance_survives_the_proposal_becoming_a_knowledge_base_rule():
 
 def test_the_whole_path_from_candidate_to_stored_rule_keeps_the_span():
     """End to end, with no model call: candidate → Stage D → Stage E → KB."""
-    candidate = _candidate("cash_burn_accelerating", quote="Burn rate doubled.")
+    # The quote has to clear MIN_DISCRIMINATING_LENGTH now that the span gate
+    # (#18) drops rather than downgrades. "Burn rate doubled." is 18
+    # characters and would be dropped — correctly, since a fragment that
+    # short cannot identify a passage. This test is about the span SURVIVING
+    # the path, not about short quotes being admitted, so the fixture grows.
+    candidate = _candidate(
+        "cash_burn_accelerating",
+        quote="Burn rate doubled while revenue stayed flat.",
+    )
     stage_d_out = _stage_d()(
         stage_a=StageAOutput(candidates=[candidate], chapter_id="ch02"),
         stage_b=StageBOutput(nodes={}),
@@ -275,7 +283,9 @@ def test_the_whole_path_from_candidate_to_stored_rule_keeps_the_span():
     stored = _validate(stage_d_out.new_vyaptis[0])
 
     assert stored is not None
-    assert [p.quote for p in stored.provenance] == ["Burn rate doubled."]
+    assert [p.quote for p in stored.provenance] == [
+        "Burn rate doubled while revenue stayed flat."
+    ]
     assert stored.provenance[0].chapter_id == "ch02"
 
 
