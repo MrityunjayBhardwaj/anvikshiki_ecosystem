@@ -56,13 +56,17 @@ class _DocstringStripper(ast.NodeTransformer):
     visit_AsyncFunctionDef = _strip
 
 
-def _code_only(text: str) -> str:
+def _code_only(text: str, filename: str = "<source>") -> str:
     """The module with its prose removed.
 
     `ast.unparse` drops comments on its own, so stripping docstring nodes is
     the whole of the difference between naming the directory and reading it.
+
+    The filename is carried only so that an unparseable module says which one
+    it was — this walks every test file in the tree, and a SyntaxError with no
+    name attached is a long hunt for a short problem.
     """
-    return ast.unparse(_DocstringStripper().visit(ast.parse(text)))
+    return ast.unparse(_DocstringStripper().visit(ast.parse(text, filename=filename)))
 
 
 def _modules_reading_ignored_artefacts():
@@ -78,7 +82,7 @@ def _modules_reading_ignored_artefacts():
         # This module names the directory in code in its own failure message.
         if path.name == Path(__file__).name:
             continue
-        code = _code_only(path.read_text())
+        code = _code_only(path.read_text(), filename=str(path))
         if "traces/" in code:
             hits.append((path.name, code))
     return hits
