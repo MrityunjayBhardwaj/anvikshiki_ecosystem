@@ -35,7 +35,7 @@ build-backend = "hatchling.build"
 packages = ["anvikshiki_v4"]
 
 [tool.pytest.ini_options]
-testpaths = ["anvikshiki_v4/tests"]
+testpaths = ["anvikshiki_v4/tests", "occam/tests"]
 markers = [
     "integration: requires LLM API (deselect with '-m not integration')",
 ]
