@@ -11,7 +11,10 @@ law is a property.
 """
 
 from .snapshot import Snapshot, SnapshotStore, body_address, capture, text_address
+from .spans import ADMITTED, VERDICTS, SpanRef, Tally, admit, classify, tally, verify
 
 __all__ = [
     "Snapshot", "SnapshotStore", "capture", "body_address", "text_address",
+    "SpanRef", "Tally", "VERDICTS", "ADMITTED",
+    "classify", "verify", "admit", "tally",
 ]
