@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .argue import ArgueResult, argue, argue_from_replies, norm_conclusion
 from .attack import AttackResult, attack, attack_from_replies
+from .conformal import ABSTAINED, Calibration
 from .gather import HttpGet, gather, urllib_get
 from .model import Model
 from .snapshot import Snapshot, SnapshotStore
@@ -130,8 +131,8 @@ class Answer(BaseModel):
 
 def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         n_sources: int = 3, params: Optional[Params] = None,
-        as_of: Optional[datetime] = None,
-        http_get: HttpGet = urllib_get) -> tuple[Answer, Artifact]:
+        as_of: Optional[datetime] = None, http_get: HttpGet = urllib_get,
+        calibration: Optional[Calibration] = None) -> tuple[Answer, Artifact]:
     """The whole pipeline. The clock is read once, here, and persisted."""
     params = (params or Params()).model_copy(update={"model": model.name})
     as_of = as_of or datetime.now(timezone.utc)
@@ -150,11 +151,13 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         gather_notes=tuple(notes), gather_replies=tuple(gather_replies),
                         argue_replies=tuple(argue_replies),
                         attack_replies=tuple(attack_replies))
-    return replay(artifact), artifact
+    return replay(artifact, calibration), artifact
 
 
-def replay(artifact: Artifact) -> Answer:
-    """Stages 4–7 from the artifact alone. Deterministic; no model."""
+def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Answer:
+    """Stages 4–7 from the artifact alone. Deterministic; no model.
+
+    With a calibration, the answer also carries a conformal status set."""
     if artifact.version != ARTIFACT_VERSION:
         raise ValueError(f"artifact version {artifact.version}, expected {ARTIFACT_VERSION}")
     snaps = [s.load() for s in artifact.snapshots]
@@ -166,7 +169,7 @@ def replay(artifact: Artifact) -> Answer:
     attacked = attack_from_replies(artifact.attack_replies, argued.arguments)
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
                      max_age_days=artifact.params.max_age_days)
-    return assemble(artifact, snaps, readable, argued, attacked, derived)
+    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration)
 
 
 def canonical(answer: Answer) -> str:
@@ -223,7 +226,8 @@ def _cited(aid: str, argued: ArgueResult, seen: frozenset = frozenset()) -> set[
 
 
 def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[Snapshot],
-             argued: ArgueResult, attacked: AttackResult, derived: StatusResult) -> Answer:
+             argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
+             calibration: Optional[Calibration] = None) -> Answer:
     by_id = argued.by_id()
     statuses = derived.statuses
     urls = {s.id: s.urls[0] for s in snaps}
@@ -325,8 +329,15 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         "retrieval_hits": Count(n=len(readable), of=len(snaps), population="snapshots gathered"),
     }
 
+    status_set: Optional[tuple[Status, ...]] = None
+    set_note = "no calibration set: the coverage guarantee is unavailable"
+    if calibration is not None:
+        derived_status = ans_status.status.value if ans_status and not abstained else ABSTAINED
+        status_set, set_note = calibration.predict(derived_status)
+
     return Answer(
         question=artifact.question,
+        status_set=status_set, status_set_note=set_note,
         conclusion=by_id[answer_id].conclusion if answer_id else None,
         answer_id=answer_id,
         status=ans_status.status if ans_status else None,
