@@ -110,3 +110,36 @@ arguments judged; abstention ≤ 3 of 10; no answer above `hypothesis` (#158).
 The adversarial control is still expected to **adopt** the falsehood: its page
 asserts it, so the quote genuinely supports the claim. That hole is a single
 lying source, not a misread one, and this stage does not claim to close it.
+
+## Amendment 2 — 2026-09-28: corroboration before `established` (#162)
+
+Added after run 2 and **before** any live run under the change. Nothing above is changed.
+
+**Instrument change, mechanical, no model:** an argument that would be
+`established` keeps it only if the grounded-IN quote arguments sharing its
+conclusion, each with an established ceiling of its own, cite snapshots from
+at least 2 hosts. Otherwise it is `hypothesis`, bound by "rests on a single
+source (<host>)". Hosts are host names with `www.` removed, not registrable
+domains. They proxy independence weakly in both directions: two pages on one
+site count once, and two sites copying each other count twice.
+
+**Consequence registered in advance:** gather searches Wikipedia only, so every
+factual answer is one host and **`established` 0 of 10 is guaranteed by
+construction** in any run with the current gather. It is not a finding and
+must not be reported as one. Only a second, non-Wikipedia source can make
+`established` reachable again.
+
+**Replay of run 2, no model calls** (`python -m occam replay`, key unset,
+`traces/occam/run2/q01..q10.json`): **10 of 10 replays match the stored
+answer; 0 statuses move.** All ten were already `hypothesis` under #158, and
+the single-host cap sits above a bound that is already lower. The run 2
+adversarial control saved no artifact, so it cannot be replayed exactly; its
+live form (the conclusion verbatim in a verified, supported quote) is a law
+(`test_the_lying_page_in_the_form_run_2_saw_is_capped_by_its_single_host`),
+and under the change it is `hypothesis`, bound by
+"rests on a single source (controls.occam.invalid)".
+
+**Expected in any run 3:** the adversarial control still **adopts** the
+falsehood, since corroboration cannot change what is concluded, only how
+strongly. It is expected at `hypothesis`, bound by its single host. If it is
+`established`, the change has failed and that is the headline.
