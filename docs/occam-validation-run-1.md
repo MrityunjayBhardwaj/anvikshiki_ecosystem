@@ -58,3 +58,13 @@ hypothesis 3.
 - 100% verification is a figure the protocol's reader should distrust by
   default. One reason it may be high here: Wikipedia text is clean prose with
   little markup, unlike the guide chapters where the `markup` verdict mattered.
+
+## Replayed under #158 (2026-09-28, same artifacts, no model calls)
+
+With a quote step allowed `established` only when its conclusion is literally
+in its quote, the ten artifacts replay to: **established 0, hypothesis 10**
+(before: 7 / 3). The seven that moved are exactly the seven paraphrased quote
+answers; each is now bound by "quote A… restated in the model's words". This
+matches the registered prior. The run-1 table above is left as measured.
+Consequence to carry forward: under the current prompt, `established` is
+reachable only when the model concludes in the source's own words.

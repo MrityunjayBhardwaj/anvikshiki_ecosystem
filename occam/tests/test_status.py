@@ -29,7 +29,9 @@ def world(fetched=NOW):
 def q(aid, snap, words):
     loc = locate(snap, words)
     assert loc.span is not None
-    return Argument(id=aid, conclusion=aid, kind="quote", span=loc.span,
+    # The conclusion is the quoted words themselves, so provenance alone
+    # decides the ceiling; restatement has its own laws below (#158).
+    return Argument(id=aid, conclusion=words, kind="quote", span=loc.span,
                     pramana=Pramana.SABDA, sample_ids=(0,))
 
 
@@ -217,3 +219,25 @@ def test_labels_already_respect_the_weakest_link_so_status_needs_no_second_pass(
                 if parent in cred:
                     assert sub in cred
     assert checked > 500
+
+
+
+def test_a_quote_whose_conclusion_restates_it_caps_at_hypothesis():
+    """#158, from run 1: all seven `established` answers were paraphrases
+    riding on a verified quote."""
+    store, s = world()
+    loc = locate(s, LONG1)
+    para = Argument(id="P", conclusion="Viability needs LTV above CAC.", kind="quote",
+                    span=loc.span, pramana=Pramana.SABDA, sample_ids=(0,))
+    r = derive([para], [], store, as_of=NOW)
+    assert r.statuses["P"].status == Status.HYPOTHESIS
+    assert r.statuses["P"].status_bound_by == ("quote P restated in the model's words",)
+
+
+def test_a_conclusion_inside_the_quote_is_established_full_stop_and_emphasis_aside():
+    from occam.spans import states
+    assert states("the words **LTV exceeds CAC** here", "LTV exceeds CAC.")
+    assert states(LONG1, "Customer lifetime value must exceed acquisition cost")
+    assert not states(LONG1, "customer lifetime value must exceed acquisition cost")  # case kept
+    assert not states(LONG1, "Lifetime value must beat acquisition cost")
+    assert not states(LONG1, ".")
