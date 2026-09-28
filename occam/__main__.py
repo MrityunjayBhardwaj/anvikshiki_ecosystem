@@ -4,6 +4,7 @@
     python -m occam replay FILE [--calibration CAL]
     python -m occam controls                 # the three validation controls, live
     python -m occam measure [--out DIR]      # the pre-registered factual set, live
+    python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
@@ -61,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("file")
     rp.add_argument("--calibration")
     sub.add_parser("controls")
+    sub.add_parser("probe-judge")
     ms = sub.add_parser("measure")
     ms.add_argument("--out", default="traces/occam/run1")
     cp = sub.add_parser("calibrate")
@@ -89,6 +91,23 @@ def main(argv: list[str] | None = None) -> int:
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
         return 1 if any(g.startswith(("VOID", "STOP")) for g in gates) else 0
+
+    if args.cmd == "probe-judge":
+        from .controls import probe_judge
+        from .model import OpenRouterModel
+        rows = probe_judge(OpenRouterModel(), as_of=datetime.now(timezone.utc))
+        for aid, what, exp, got, claim in rows:
+            print(f"{'ok ' if got == exp else 'MISS'} {aid} {what:22} expected {exp:17} got {got:17} {claim}")
+        agree = sum(r[2] == r[3] for r in rows)
+        neg = [r for r in rows if r[2] == "does_not_support"]
+        pos = [r for r in rows if r[2] == "supports"]
+        false_sup = sum(r[3] == "supports" for r in neg)
+        false_rej = sum(r[3] == "does_not_support" for r in pos)
+        unsure = sum(r[3] == "cannot_tell" for r in rows)
+        print(f"\nagreement {agree} of {len(rows)}; false 'supports' {false_sup} of {len(neg)} "
+              f"non-supporting pairs; false rejections {false_rej} of {len(pos)} supporting "
+              f"pairs; cannot_tell {unsure} of {len(rows)}")
+        return 0
 
     if args.cmd == "measure":
         from .controls import FACTUAL_QUESTIONS

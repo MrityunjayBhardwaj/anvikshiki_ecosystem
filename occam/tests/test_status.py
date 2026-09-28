@@ -32,7 +32,7 @@ def q(aid, snap, words):
     # The conclusion is the quoted words themselves, so provenance alone
     # decides the ceiling; restatement has its own laws below (#158).
     return Argument(id=aid, conclusion=words, kind="quote", span=loc.span,
-                    pramana=Pramana.SABDA, sample_ids=(0,))
+                    pramana=Pramana.SABDA, sample_ids=(0,), support="supports")
 
 
 def step(aid, *subs, kind="inference"):
@@ -228,7 +228,7 @@ def test_a_quote_whose_conclusion_restates_it_caps_at_hypothesis():
     store, s = world()
     loc = locate(s, LONG1)
     para = Argument(id="P", conclusion="Viability needs LTV above CAC.", kind="quote",
-                    span=loc.span, pramana=Pramana.SABDA, sample_ids=(0,))
+                    span=loc.span, pramana=Pramana.SABDA, sample_ids=(0,), support="supports")
     r = derive([para], [], store, as_of=NOW)
     assert r.statuses["P"].status == Status.HYPOTHESIS
     assert r.statuses["P"].status_bound_by == ("quote P restated in the model's words",)
@@ -241,3 +241,20 @@ def test_a_conclusion_inside_the_quote_is_established_full_stop_and_emphasis_asi
     assert not states(LONG1, "customer lifetime value must exceed acquisition cost")  # case kept
     assert not states(LONG1, "Lifetime value must beat acquisition cost")
     assert not states(LONG1, ".")
+
+
+
+def test_a_quote_never_judged_for_support_cannot_be_established():
+    """Not checked is not checked-and-fine (#146)."""
+    store, s = world()
+    a = q("Q", s, LONG1).model_copy(update={"support": None})
+    r = derive([a], [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status_bound_by == ("quote Q: support not judged",)
+
+
+def test_a_quote_whose_support_could_not_be_told_caps_at_provisional():
+    store, s = world()
+    a = q("Q", s, LONG1).model_copy(update={"support": "cannot_tell"})
+    r = derive([a], [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.PROVISIONAL

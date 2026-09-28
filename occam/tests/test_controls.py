@@ -26,9 +26,15 @@ C = {c.name: c for c in CONTROLS}
 P = Params(k_argue=3, k_attack=3)
 
 
-def scripted(steps, answer):
+SUPPORT_ALL = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": "supports"}
+                                        for i in range(10)]})
+
+
+def scripted(steps, answer, judge=SUPPORT_ALL):
     reply = json.dumps({"answer": answer, "steps": steps})
-    return ScriptedModel([reply] * 3 + [json.dumps({"attacks": []})] * 3)
+    quotes = any(s.get("kind") == "quote" for s in steps)
+    return ScriptedModel([reply] * 3 + ([judge] if quotes else [])
+                         + [json.dumps({"attacks": []})] * 3)
 
 
 def test_positive_control_passes_when_the_planted_answer_is_quoted():
@@ -82,3 +88,31 @@ def test_the_question_set_is_the_one_pre_registered():
     doc = (Path(__file__).resolve().parents[2] / "docs" / "occam-validation-protocol.md").read_text()
     block = doc.split("```")[1].strip().splitlines()
     assert tuple(block) == FACTUAL_QUESTIONS
+
+
+def test_the_irrelevant_sentence_leak_closes_when_the_judge_reads_it_in_context():
+    """The same leak as above, with a judge that rejects the citation: the
+    refusal now comes from the mechanism acting on the support verdict."""
+    rejecting = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": "does_not_support"}
+                                          for i in range(10)]})
+    r = run_control(C["negative"], scripted(
+        [{"id": "s1", "kind": "quote", "source": 1,
+          "quote": "The town of Varenna lies on its eastern shore",
+          "conclusion": "The Accord was ratified in Varenna's town hall."}], "s1", judge=rejecting),
+        as_of=AS_OF, params=P)
+    assert r.passed and r.answer.abstain_reason.startswith("support:")
+
+
+def test_the_judge_probe_is_well_formed_and_scores_a_scripted_judge():
+    """Every probe quote is on the page, both classes are present, and the
+    runner reports each row against its expected verdict."""
+    from occam.controls import SUPPORT_PROBE, probe_judge
+    exp = [e for _, _, e, _ in SUPPORT_PROBE]
+    assert exp.count("supports") == 5 and exp.count("does_not_support") == 7
+    perfect = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": e}
+                                         for i, e in enumerate(exp)]})
+    rows = probe_judge(ScriptedModel([perfect]), as_of=AS_OF)
+    assert [r[3] for r in rows] == exp
+    lazy = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": "supports"} for i in range(12)]})
+    rows = probe_judge(ScriptedModel([lazy]), as_of=AS_OF)
+    assert sum(r[2] != r[3] for r in rows) == 7          # a rubber stamp misses every negative

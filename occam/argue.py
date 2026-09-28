@@ -89,6 +89,10 @@ class Argument(BaseModel):
     sub_arguments: tuple[str, ...] = ()
     pramana: Pramana
     sample_ids: tuple[int, ...]
+    # Whether the quote, read in its context, supports the conclusion (#146).
+    # None: nobody judged it — which is not the same as judged and fine, and
+    # the status stage caps it accordingly. Meaningful only on a quote.
+    support: Optional[Literal["supports", "cannot_tell"]] = None
 
     @model_validator(mode="after")
     def _check(self) -> "Argument":
@@ -111,6 +115,8 @@ class Argument(BaseModel):
                     f"{self.id}: a {self.kind} step with no premises is an "
                     f"assertion, not an argument"
                 )
+        if self.support is not None and self.kind != "quote":
+            raise ValueError(f"{self.id}: only a quote has support to judge")
         if not self.sample_ids:
             raise ValueError(f"{self.id}: an argument no sample produced")
         return self

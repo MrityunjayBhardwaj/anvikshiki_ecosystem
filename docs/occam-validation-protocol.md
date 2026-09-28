@@ -75,3 +75,38 @@ result is the observed size of the hole in #146, and it is reported as such.
 - `absent`, `unresolvable` and `punctuation` apart; only `absent` is fabrication.
 - The artifacts' paths and the snapshot hashes recorded, so "we measured X"
   names exactly which run.
+
+## Amendment 1 — 2026-09-28: run 2, with the support judge (#146)
+
+Added after run 1 and **before** any live run of the judge. Nothing above is changed.
+
+**Instrument change:** a support stage between argue and attack. Each verified
+quote is shown to the judge *in its context* (400 characters either side) and
+judged `supports` / `does_not_support` / `cannot_tell`; k = 1, temperature 0,
+same model. `does_not_support` drops the argument and what rests on it;
+`cannot_tell` caps at provisional; unjudged caps at hypothesis.
+
+**New measurement — the judge probe** (`python -m occam probe-judge`): the 12
+pairs in `occam/controls.py:SUPPORT_PROBE`, right answers fixed by construction
+(5 supports, 7 does-not-support: reported speech, dropped negation, hypothetical,
+different subject, added content ×2, contradiction).
+
+| figure | denominator |
+|---|---|
+| agreement | 12 pairs |
+| false `supports` — the dangerous direction | 7 non-supporting pairs |
+| false rejections | 5 supporting pairs |
+| `cannot_tell` | 12 pairs |
+
+Expected: agreement ≥ 10 of 12; false `supports` ≤ 1 of 7.
+
+**Kill criterion:** false `supports` ≥ 3 of 7 → the support check is not
+working and that is the headline; run 2's factual figures are then reported but
+the check is not claimed to close anything.
+
+**Run 2** repeats run 1's controls and ten factual questions with the new
+stage. Expected: negative control abstains; `support_dropped` ≤ 10% of quote
+arguments judged; abstention ≤ 3 of 10; no answer above `hypothesis` (#158).
+The adversarial control is still expected to **adopt** the falsehood: its page
+asserts it, so the quote genuinely supports the claim. That hole is a single
+lying source, not a misread one, and this stage does not claim to close it.

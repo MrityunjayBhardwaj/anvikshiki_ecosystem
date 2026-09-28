@@ -60,10 +60,15 @@ def attacks(*edges):
 
 
 QUERIES = json.dumps({"queries": ["Unit economics", "Blitzscaling"]})
+# The judge approves every quote; ids it does not know are ignored.
+SUPPORT_ALL = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": "supports"}
+                                        for i in range(40)]})
 
 
-def ask(argue_replies, attack_replies, params=None, http_get=wiki):
-    model = ScriptedModel([QUERIES] + list(argue_replies) + list(attack_replies))
+def ask(argue_replies, attack_replies, params=None, http_get=wiki, judge=SUPPORT_ALL):
+    has_quotes = any('"kind": "quote"' in r for r in argue_replies)
+    model = ScriptedModel([QUERIES] + list(argue_replies) + ([judge] if has_quotes else [])
+                          + list(attack_replies))
     p = params or Params(k_argue=len(argue_replies), k_attack=len(attack_replies))
     return run("Is growth alone enough to make a business viable?", model,
                params=p, as_of=AS_OF, http_get=http_get)
@@ -101,7 +106,8 @@ def test_every_feature_carries_its_denominator_and_population():
     expected = {"k", "agree_frac", "n_positions", "verified_frac", "absent_frac",
                 "punctuation_frac", "unresolvable_frac", "direct_drops", "cascade_drops",
                 "n_snapshots", "n_hosts", "oldest_days", "chain_depth", "pramana_floor",
-                "attack_density", "minority_attacks", "retrieval_hits"}
+                "attack_density", "minority_attacks", "retrieval_hits",
+                "support_judged", "support_dropped", "support_cannot_tell", "support_cascade"}
     assert set(ans.counters) == expected
     for name, c in ans.counters.items():
         assert c.population, name
