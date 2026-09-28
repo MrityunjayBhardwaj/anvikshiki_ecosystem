@@ -10,7 +10,7 @@ from occam.attack import FALLACY_OF_TYPE, Attack
 from occam.snapshot import SnapshotStore, capture
 from occam.solve import Label
 from occam.spans import MIN_DISCRIMINATING_LENGTH, is_discriminating, locate
-from occam.status import TOP, derive
+from occam.status import MIN_HOSTS, TOP, derive
 from occam.types import STATUS_ORDER, Pramana, Status
 
 NOW = datetime(2026, 9, 28, tzinfo=timezone.utc)
@@ -24,6 +24,14 @@ def world(fetched=NOW):
     store = SnapshotStore()
     snap = store.put(capture(url="https://e.com/a", body=b"a", text=TEXT, fetched_at=fetched))
     return store, snap
+
+
+TEXT2 = TEXT + " A second page says the same, in its own document."
+
+
+def second(store, url="https://f.org/b", body=b"b", fetched=NOW, text=TEXT2):
+    """Another document saying the same things — a second host by default."""
+    return store.put(capture(url=url, body=body, text=text, fetched_at=fetched))
 
 
 def q(aid, snap, words):
@@ -55,7 +63,7 @@ SHORT = "LTV : CAC ≥ 3:1"
 
 def test_a_fresh_discriminating_quote_is_established_bound_by_the_top():
     store, s = world()
-    r = derive([q("Q", s, LONG1)], [], store, as_of=NOW)
+    r = derive([q("Q", s, LONG1), q("R", second(store), LONG1)], [], store, as_of=NOW)
     st = r.statuses["Q"]
     assert st.status == Status.ESTABLISHED and st.status_bound_by == (TOP,)
 
@@ -153,7 +161,8 @@ def test_a_defeated_argument_is_rejected_and_so_is_what_rests_on_it():
     store, s = world()
     # Equal pramāṇa, so strength decides: B (established) defeats A
     # (provisional, short quote), and A's attack on B fails.
-    r = derive([q("A", s, SHORT), step("I", "A"), q("B", s, LONG3)],
+    r = derive([q("A", s, SHORT), step("I", "A"), q("B", s, LONG3),
+                q("B2", second(store), LONG3)],
                [atk("B", "A"), atk("A", "B")], store, as_of=NOW)
     assert r.statuses["A"].rejected and r.statuses["I"].rejected
     assert r.statuses["B"].status == Status.ESTABLISHED
@@ -258,3 +267,97 @@ def test_a_quote_whose_support_could_not_be_told_caps_at_provisional():
     a = q("Q", s, LONG1).model_copy(update={"support": "cannot_tell"})
     r = derive([a], [], store, as_of=NOW)
     assert r.statuses["Q"].status == Status.PROVISIONAL
+
+
+# ── corroboration (#162) ───────────────────────────────────
+
+def test_one_source_caps_at_hypothesis_and_names_the_host():
+    """The adversarial control: one page, every check passed, still a lie."""
+    store, s = world()
+    r = derive([q("Q", s, LONG1)], [], store, as_of=NOW)
+    st = r.statuses["Q"]
+    assert st.status == Status.HYPOTHESIS
+    assert st.status_bound_by == ("rests on a single source (e.com)",)
+    assert st.ceiling == Status.ESTABLISHED      # provenance unchanged; strength unchanged
+
+
+def test_two_hosts_saying_the_same_thing_are_both_established():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store), LONG1)], [], store, as_of=NOW)
+    assert MIN_HOSTS == 2
+    assert {r.statuses[i].status for i in "QR"} == {Status.ESTABLISHED}
+
+
+def test_two_pages_on_one_host_do_not_corroborate():
+    """Hosts, not snapshots: a site cannot vouch for itself."""
+    store, s = world()
+    other = second(store, url="https://e.com/other")
+    assert other.id != s.id
+    r = derive([q("Q", s, LONG1), q("R", other, LONG1)], [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status_bound_by == ("rests on a single source (e.com)",)
+
+
+def test_www_is_the_same_host():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store, url="https://www.e.com/x"), LONG1)],
+               [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+
+
+def test_a_different_conclusion_is_not_corroboration():
+    store, s = world()
+    # Q has two documents but one host; R, on another host, says something else.
+    # Its host must not be lent to Q.
+    same_site = second(store, url="https://e.com/other", body=b"c")
+    r = derive([q("Q", s, LONG1), q("Q2", same_site, LONG1), q("R", second(store), LONG2)],
+               [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["R"].status == Status.HYPOTHESIS
+
+
+def test_a_defeated_source_does_not_vouch_for_a_surviving_one():
+    store, s = world()
+    f = second(store)
+    # R (f.org) is attacked by an unattacked quote and cannot answer back.
+    r = derive([q("Q", s, LONG1), q("R", f, LONG1), q("K", s, LONG3)],
+               [atk("K", "R")], store, as_of=NOW)
+    assert r.statuses["R"].rejected
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+
+
+def test_a_weaker_argument_on_another_host_does_not_lift_one_to_the_top():
+    store, s = world()
+    unjudged = q("R", second(store), LONG1).model_copy(update={"support": None})
+    r = derive([q("Q", s, LONG1), unjudged], [], store, as_of=NOW)
+    assert r.statuses["R"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status_bound_by == ("rests on a single source (e.com)",)
+
+
+def test_an_undecided_source_does_not_corroborate():
+    store, s = world()
+    f = second(store)
+    # R and K defeat each other: R is undecided in grounded, so not IN.
+    r = derive([q("Q", s, LONG1), q("R", f, LONG1), q("K", f, LONG3)],
+               [atk("K", "R"), atk("R", "K")], store, as_of=NOW)
+    assert r.statuses["R"].status == Status.CONTESTED
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+
+
+def test_one_document_fetched_from_a_mirror_does_not_corroborate_itself():
+    """#165: identical bytes from two hosts merge into one snapshot with both
+    URLs. Two hosts, one document, one argument — still one source."""
+    store, s = world()
+    m = second(store, url="https://mirror.net/a", body=b"a", text=TEXT)
+    assert m.id == s.id and len(m.urls) == 2
+    r = derive([q("Q", m, LONG1)], [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status_bound_by == ("rests on a single source (e.com, mirror.net)",)
+
+
+def test_the_same_text_in_different_bytes_on_another_host_does_not_corroborate():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store, text=TEXT), LONG1)], [], store,
+               as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS

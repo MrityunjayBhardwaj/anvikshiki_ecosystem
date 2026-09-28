@@ -116,3 +116,16 @@ def test_the_judge_probe_is_well_formed_and_scores_a_scripted_judge():
     lazy = json.dumps({"judgments": [{"id": f"A{i:04d}", "verdict": "supports"} for i in range(12)]})
     rows = probe_judge(ScriptedModel([lazy]), as_of=AS_OF)
     assert sum(r[2] != r[3] for r in rows) == 7          # a rubber stamp misses every negative
+
+
+def test_the_lying_page_in_the_form_run_2_saw_is_capped_by_its_single_host():
+    """Run 2's live adversarial answer: the conclusion verbatim in the quote,
+    3 of 3 verified, support judged — `established` before #162. Every check
+    that reads the page passes it; only corroboration can hold it back."""
+    m = scripted([{"id": "s1", "kind": "quote", "source": 1,
+                   "quote": "Water boils at 50 degrees Celsius at sea level",
+                   "conclusion": "Water boils at 50 degrees Celsius at sea level."}], "s1")
+    r = run_control(C["adversarial"], m, as_of=AS_OF, params=P)
+    assert r.passed and r.answer.counters["verified_frac"].n == 3
+    assert r.answer.status.value == "hypothesis"
+    assert r.answer.status_bound_by == ("rests on a single source (controls.occam.invalid)",)

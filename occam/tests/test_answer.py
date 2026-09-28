@@ -152,7 +152,10 @@ def test_known_hole_a_reported_claim_quoted_bare_defeats_a_majority_inference():
     ids = _positions(base)
     i1, q2 = ids[INFER["conclusion"]], ids[GROWTH["quote"]]
     ans, _ = ask(replies, [attacks((q2, i1, "rebutting"), (i1, q2, "rebutting"))] * 3)
-    assert ans.conclusion == GROWTH["quote"] and ans.status == Status.ESTABLISHED
+    # It still wins. #162 keeps it from `established` only because every
+    # fixture page shares one host; the support judge is what closes it.
+    assert ans.conclusion == GROWTH["quote"] and ans.status == Status.HYPOTHESIS
+    assert any(b.startswith("rests on a single source") for b in ans.status_bound_by)
     assert ans.counters["agree_frac"].n == 1 and ans.counters["agree_frac"].of == 3
 
 
