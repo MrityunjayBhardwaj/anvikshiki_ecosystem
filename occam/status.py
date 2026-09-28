@@ -43,7 +43,7 @@ never by an empty tuple, which would read as "nothing constrains this".
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Mapping, Optional, Sequence
+from typing import Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
