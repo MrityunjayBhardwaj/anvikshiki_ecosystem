@@ -80,7 +80,10 @@ def test_a_sourced_answer_comes_back_with_a_status_and_a_tree_to_the_bytes():
     assert not ans.abstained
     assert ans.conclusion == "Growth alone does not make a business viable."
     assert ans.status == Status.HYPOTHESIS              # an inference over a quote
-    assert ans.status_bound_by == (f"inference step {ans.answer_id}",)
+    leaf_id = ans.derivation["sub_arguments"][0]["id"]
+    # Tied at hypothesis: the inference, and the leaf's paraphrase of its quote.
+    assert set(ans.status_bound_by) == {f"inference step {ans.answer_id}",
+                                        f"quote {leaf_id} restated in the model's words"}
     leaf = ans.derivation["sub_arguments"][0]
     assert leaf["kind"] == "quote" and leaf["span"]["verdict"] == "ok"
     text = next(s for s in art.snapshots if s.id == leaf["span"]["snapshot_id"]).text
@@ -132,16 +135,18 @@ def test_two_inferences_in_mutual_defeat_are_both_contested():
 def test_known_hole_a_reported_claim_quoted_bare_defeats_a_majority_inference():
     """Recorded, not endorsed (#146). Source 2 says 'Proponents claim that
     rapid growth alone can make a company viable…'. Quoted without
-    'Proponents claim', it is a verified quote (ceiling established) and
-    beats the inference (ceiling hypothesis) at equal pramāṇa — though one
-    sample of three proposed it. Every check passes. The adversarial control
-    in #145 exists to size exactly this."""
-    replies = [argue_reply([VIABLE, INFER], "i1")] * 2 + [argue_reply([GROWTH], "q2")]
+    'Proponents claim', and concluded in exactly those words, it is a
+    verified quote that states its conclusion (ceiling established) and beats
+    the inference (ceiling hypothesis) at equal pramāṇa — though one sample
+    of three proposed it. #158 closed the paraphrased form of this; the
+    verbatim form needs the support check."""
+    verbatim = {**GROWTH, "conclusion": GROWTH["quote"]}
+    replies = [argue_reply([VIABLE, INFER], "i1")] * 2 + [argue_reply([verbatim], "q2")]
     base, _ = ask(replies, [attacks()] * 3)
     ids = _positions(base)
-    i1, q2 = ids[INFER["conclusion"]], ids[GROWTH["conclusion"]]
+    i1, q2 = ids[INFER["conclusion"]], ids[GROWTH["quote"]]
     ans, _ = ask(replies, [attacks((q2, i1, "rebutting"), (i1, q2, "rebutting"))] * 3)
-    assert ans.conclusion == GROWTH["conclusion"] and ans.status == Status.ESTABLISHED
+    assert ans.conclusion == GROWTH["quote"] and ans.status == Status.ESTABLISHED
     assert ans.counters["agree_frac"].n == 1 and ans.counters["agree_frac"].of == 3
 
 
@@ -296,3 +301,15 @@ def test_titles_are_deduplicated_across_queries_up_to_n():
     model = ScriptedModel([json.dumps({"queries": ["a", "b", "c"]})])
     snaps, _, _ = gather("q", at=AS_OF, n=2, http_get=wiki, model=model)
     assert len(snaps) == 2 and len({s.urls[0] for s in snaps}) == 2
+
+
+
+def test_the_paraphrased_reported_claim_no_longer_wins():
+    """#158 narrowed the hole: paraphrased, the reported claim caps at
+    hypothesis like the inference it fights, and the standoff is contested."""
+    replies = [argue_reply([VIABLE, INFER], "i1")] * 2 + [argue_reply([GROWTH], "q2")]
+    base, _ = ask(replies, [attacks()] * 3)
+    ids = _positions(base)
+    i1, q2 = ids[INFER["conclusion"]], ids[GROWTH["conclusion"]]
+    ans, _ = ask(replies, [attacks((q2, i1, "rebutting"), (i1, q2, "rebutting"))] * 3)
+    assert ans.status == Status.CONTESTED

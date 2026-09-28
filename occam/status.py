@@ -6,7 +6,9 @@ labelled it. No caller supplies a status; `Argument` refuses the field.
 
 Ceilings — what the provenance allows
 ─────────────────────────────────────
-    quote leaf, verified, discriminating, fresh   ESTABLISHED
+    quote leaf, verified, discriminating, fresh,
+      and its conclusion literally in the quote   ESTABLISHED
+    quote whose conclusion restates it            HYPOTHESIS   the words are the model's (#158)
     quote from a snapshot older than max_age      HYPOTHESIS   stale
     quote whose snapshot cannot be found          HYPOTHESIS   freshness unknown — never "fresh"
     inference step                                HYPOTHESIS   the step is the model's
@@ -51,7 +53,7 @@ from .argue import Argument
 from .attack import Attack
 from .snapshot import SnapshotStore
 from .solve import Label, SolveResult, solve
-from .spans import is_discriminating
+from .spans import is_discriminating, states
 from .types import STATUS_ORDER, Status, rank
 
 __all__ = ["ArgStatus", "StatusResult", "derive", "ceilings", "MAX_AGE_DAYS"]
@@ -92,6 +94,11 @@ def _own_ceiling(a: Argument, store: SnapshotStore, as_of: datetime,
     if a.kind == "inference":
         return Status.HYPOTHESIS, (f"inference step {a.id}",)
     bounds: list[tuple[Status, str]] = []
+    if not states(a.span.quote, a.conclusion):
+        # The quote verified; the conclusion is the model's restatement of it.
+        # A restatement is an inference over the quote, so it caps where every
+        # other model inference does (#158).
+        bounds.append((Status.HYPOTHESIS, f"quote {a.id} restated in the model's words"))
     if not is_discriminating(a.span.quote):
         bounds.append((Status.PROVISIONAL, f"quote {a.id} too short to discriminate"))
     snap = store.get(a.span.snapshot_id)

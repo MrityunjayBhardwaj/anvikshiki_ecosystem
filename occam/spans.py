@@ -65,7 +65,7 @@ from .snapshot import Snapshot, SnapshotStore
 __all__ = [
     "SpanRef", "Verdict", "VERDICTS", "ADMITTED", "Tally", "Located",
     "classify", "verify", "locate", "admit", "tally",
-    "is_discriminating", "MIN_DISCRIMINATING_LENGTH",
+    "is_discriminating", "MIN_DISCRIMINATING_LENGTH", "states",
 ]
 
 Verdict = Literal["ok", "markup", "punctuation", "absent", "unresolvable"]
@@ -141,6 +141,20 @@ def _project_map(text: str, *, markup: bool = False,
 def is_discriminating(quote: str) -> bool:
     """Whether the quote is long enough that finding it means something."""
     return len(_project(quote)) >= MIN_DISCRIMINATING_LENGTH
+
+
+def states(quote: str, conclusion: str) -> bool:
+    """Whether the conclusion is literally among the quoted words.
+
+    Same projection as verification — whitespace collapsed, emphasis ignored,
+    case kept — and a final full stop on the conclusion ignored, since a
+    sentence ending is form, not content. Anything else is a restatement:
+    the model's words, however faithful, and so the model's inference (#158).
+    """
+    claim = _project(conclusion, markup=True)
+    if claim.endswith("."):
+        claim = claim[:-1].rstrip()
+    return bool(claim) and claim in _project(quote, markup=True)
 
 
 def classify(quote: str, text: str) -> Verdict:
