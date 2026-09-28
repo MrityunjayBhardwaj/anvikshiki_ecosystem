@@ -35,6 +35,28 @@ every preferred extension (see solve.py; a law checks it). So `contested`
 here is the reachable version of the same idea — undecided sceptically,
 defended credulously — and `open` is undecided with no defence at all.
 
+Corroboration — what one source cannot give (#162)
+──────────────────────────────────────────────────
+A ceiling reads one argument's provenance, and no reading of one document can
+catch that document lying: the adversarial control's page really does say
+water boils at 50 °C, and every check above passes it. So `established`
+also needs a second host. An argument that would be established keeps it
+only if the grounded-IN quote arguments sharing its conclusion (normalised as
+argue merges them), each with an established ceiling of its own, cite
+snapshots from at least MIN_HOSTS hosts. Otherwise it is a hypothesis, bound
+by "rests on a single source (<host>)".
+
+It is applied after solving, to the status and not the ceiling, for two
+reasons. It is a fact about the set of surviving arguments, and survival is
+what solving decides — counting a defeated page as corroboration would let a
+rejected source vouch for an accepted one. And the ceiling is the argument's
+strength in the attack graph: one well-quoted page is exactly as strong
+against a rival as it was, it simply is not enough on its own to be the top.
+
+Hosts are a proxy for independence, and a weak one in both directions: two
+pages on one site count once, and two sites copying each other count twice.
+Every Wikipedia-only answer is one host, so it tops out at hypothesis.
+
 `status_bound_by` is the deliverable
 ────────────────────────────────────
 It names every constraint sitting at the minimum, which is the same thing as
@@ -51,16 +73,17 @@ from typing import Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
-from .argue import Argument
+from .argue import Argument, norm_conclusion
 from .attack import Attack
-from .snapshot import SnapshotStore
+from .snapshot import Snapshot, SnapshotStore, host
 from .solve import Label, SolveResult, solve
 from .spans import is_discriminating, states
 from .types import STATUS_ORDER, Status, rank
 
-__all__ = ["ArgStatus", "StatusResult", "derive", "ceilings", "MAX_AGE_DAYS"]
+__all__ = ["ArgStatus", "StatusResult", "derive", "ceilings", "MAX_AGE_DAYS", "MIN_HOSTS"]
 
 MAX_AGE_DAYS = 365
+MIN_HOSTS = 2
 
 TOP = "top of the lattice"
 
@@ -89,6 +112,14 @@ class StatusResult(BaseModel):
     statuses: dict[str, ArgStatus]
 
 
+def _snapshot(a: Argument, store: SnapshotStore) -> Optional[Snapshot]:
+    snap = store.get(a.span.snapshot_id)
+    if snap is None:
+        for other in store.ids_for_text(a.span.text_sha256):
+            return store.get(other)
+    return snap
+
+
 def _own_ceiling(a: Argument, store: SnapshotStore, as_of: datetime,
                  max_age_days: int) -> tuple[Status, tuple[str, ...]]:
     if a.kind == "analogy":
@@ -107,11 +138,7 @@ def _own_ceiling(a: Argument, store: SnapshotStore, as_of: datetime,
         bounds.append((Status.HYPOTHESIS, f"quote {a.id} restated in the model's words"))
     if not is_discriminating(a.span.quote):
         bounds.append((Status.PROVISIONAL, f"quote {a.id} too short to discriminate"))
-    snap = store.get(a.span.snapshot_id)
-    if snap is None:
-        for other in store.ids_for_text(a.span.text_sha256):
-            snap = store.get(other)
-            break
+    snap = _snapshot(a, store)
     if snap is None:
         bounds.append((Status.HYPOTHESIS, f"quote {a.id}: snapshot not held, freshness unknown"))
     else:
@@ -176,6 +203,22 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
                              (f"{aid} undecided sceptically but defended in a preferred extension",))
         else:
             by_label[aid] = (Status.OPEN, (f"{aid} undecided and defended in no preferred extension",))
+
+    # Corroboration (#162): see the module docstring.
+    corroborators: dict[str, set[str]] = {}
+    for a in arguments:
+        if (a.kind == "quote" and solved.grounded[a.id] == Label.IN
+                and ceil[a.id][0] == Status.ESTABLISHED):
+            snap = _snapshot(a, store)
+            corroborators.setdefault(norm_conclusion(a.conclusion), set()).update(
+                host(u) for u in snap.urls)
+    for a in arguments:
+        st, _ = by_label[a.id]
+        if st == Status.ESTABLISHED:
+            hosts = corroborators[norm_conclusion(a.conclusion)]
+            if len(hosts) < MIN_HOSTS:
+                by_label[a.id] = (Status.HYPOTHESIS,
+                                  (f"rests on a single source ({', '.join(sorted(hosts))})",))
 
     # No second weakest-link pass over labels. Lifting attacks to the
     # arguments containing their targets already orders the labels: a parent

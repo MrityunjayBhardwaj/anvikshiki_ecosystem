@@ -46,10 +46,20 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from typing import Iterator, Optional
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-__all__ = ["Snapshot", "SnapshotStore", "body_address", "text_address"]
+__all__ = ["Snapshot", "SnapshotStore", "body_address", "text_address", "host"]
+
+
+def host(url: str) -> str:
+    """The host name a URL was served from, `www.` removed. Not a registrable
+    domain: `en.wikipedia.org` and `de.wikipedia.org` are two hosts. One
+    definition, because the `n_hosts` counter and the corroboration rule in
+    status.py must count the same thing."""
+    h = (urlparse(url).hostname or url).lower()
+    return h[4:] if h.startswith("www.") else h
 
 
 def body_address(body: bytes) -> str:

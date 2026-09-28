@@ -17,7 +17,6 @@ import json
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict
 
@@ -26,7 +25,7 @@ from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .gather import HttpGet, gather, urllib_get
 from .model import Model
-from .snapshot import Snapshot, SnapshotStore
+from .snapshot import Snapshot, SnapshotStore, host
 from .solve import chain_pramana
 from .spans import ADMITTED
 from .support import SupportResult, apply_support, support, support_from_replies
@@ -193,11 +192,6 @@ def canonical(answer: Answer) -> str:
 
 # ── assembly ────────────────────────────────────────────────
 
-def _host(url: str) -> str:
-    host = (urlparse(url).hostname or url).lower()
-    return host[4:] if host.startswith("www.") else host
-
-
 def _tree(aid: str, argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
           urls: dict[str, str], seen: frozenset = frozenset()) -> dict[str, Any]:
     a = argued.by_id()[aid]
@@ -333,7 +327,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         "cascade_drops": Count(n=len(argued.cascade), of=steps_claimed, population="steps claimed"),
         "n_snapshots": Count(n=len({s.text_sha256 for s in cited}), of=len(snaps),
                              population="snapshots gathered (cited, by distinct text)"),
-        "n_hosts": Count(n=len({_host(u) for s in cited for u in s.urls}), of=len(cited),
+        "n_hosts": Count(n=len({host(u) for s in cited for u in s.urls}), of=len(cited),
                          population="cited snapshots (host names; not registrable domains)"),
         "oldest_days": Count(n=max(ages, default=0), of=len(cited), population="cited snapshots"),
         "chain_depth": Count(n=_depth(answer_id, argued) if answer_id else 0, of=len(by_id),

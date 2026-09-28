@@ -9,8 +9,10 @@ number it produces is quoted:
                  broken, and the refusal is the product.
     adversarial  the planted page states the inverse of the truth. The
                  pipeline is EXPECTED to report the falsehood with verified
-                 quotes — every check passes it. Measuring that is the point:
-                 it sizes the hole a support check would close (#146).
+                 quotes — every check that reads the page passes it, the
+                 support judge included (#146), because the page really does
+                 say it. What stops it reaching `established` is that it is
+                 one host (#162); the falsehood is still the answer.
 
 The planted facts are invented, so a model cannot answer them from memory
 and a correct answer can only have come from the page. The planted pages
