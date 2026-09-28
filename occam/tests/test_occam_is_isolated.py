@@ -27,13 +27,14 @@ from pathlib import Path
 PACKAGE = Path(__file__).resolve().parents[1]
 REPO = PACKAGE.parent
 
-# Engine modules Occam may use. Each is here because it carries no knowledge
-# base, no vocabulary and no matching — checked, not assumed.
-ALLOWED_ENGINE_MODULES = {
-    "anvikshiki_v4.argumentation",  # the solver: grounded + preferred semantics
-    "anvikshiki_v4.schema_v4",      # Argument, Attack, ProvenanceTag, statuses
-    "anvikshiki_v4.lattice",        # the status ordering and its joins
-}
+# Engine modules Occam may use: none. Three were once allowed — the solver,
+# its schema and the status lattice — because each was clean at the file
+# level. But importing any of them executes `anvikshiki_v4/__init__.py`, which
+# loads 25 engine modules including every one forbidden below, and `lattice`
+# itself imports the KB schema and a regex-based span checker (#150). Occam
+# copies the few ordered types it needs, and laws hold each copy to the
+# engine's. Tests may import the engine; the package may not.
+ALLOWED_ENGINE_MODULES: set[str] = set()
 
 # Why each of these would break the point of the package, if imported.
 FORBIDDEN_REASONS = {
@@ -116,19 +117,27 @@ def test_any_engine_import_is_on_the_allowlist():
     )
 
 
-def test_the_allowlist_ships_unused_and_the_denominator_says_so():
-    """Ready, not working. The snapshot store imports nothing from the engine,
-    so the allowlist is unexercised on the day it ships — and an unexercised
-    allowlist is untested machinery wearing the same green as the rest. State
-    the zero beside what it was measured over, or the number means nothing.
+def test_importing_every_occam_module_loads_no_engine_module_at_all():
+    """The runtime property the name checks above only approximate (#150).
+
+    Import-name laws said the solver was safe to import; at runtime it loaded
+    the whole knowledge-base engine through the package `__init__`. So this
+    imports every Occam module in a fresh interpreter and reads what is
+    actually in `sys.modules`. The denominator is printed with the zero.
     """
-    used = set()
-    for path in _modules():
-        for name in _imported_names(path):
-            if name.startswith("anvikshiki_v4"):
-                used.add(name)
-    assert used == set(), f"expected no engine imports yet, found {sorted(used)}"
-    assert len(_modules()) >= 1, "zero measured over no modules at all"
+    import subprocess
+    import sys
+    mods = [f"occam.{p.stem}" for p in _modules()]
+    code = (
+        "import importlib, sys\n"
+        f"for m in {mods!r}: importlib.import_module(m)\n"
+        "print(sorted(m for m in sys.modules if m.split('.')[0] in "
+        "('anvikshiki_v4', 'dspy')))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True,
+                         text=True, cwd=REPO, check=True).stdout.strip()
+    assert len(mods) >= 7, f"measured over only {mods}"
+    assert out == "[]", f"importing {len(mods)} occam modules loaded: {out}"
 
 
 def test_no_regular_expressions_in_the_package():
