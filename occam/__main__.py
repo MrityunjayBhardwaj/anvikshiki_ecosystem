@@ -2,6 +2,8 @@
 
     python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE]
     python -m occam replay FILE [--calibration CAL]
+    python -m occam controls                 # the three validation controls, live
+    python -m occam measure [--out DIR]      # the pre-registered factual set, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
@@ -58,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("replay")
     rp.add_argument("file")
     rp.add_argument("--calibration")
+    sub.add_parser("controls")
+    ms = sub.add_parser("measure")
+    ms.add_argument("--out", default="traces/occam/run1")
     cp = sub.add_parser("calibrate")
     cp.add_argument("labels")
     cp.add_argument("--population", required=True)
@@ -67,6 +72,53 @@ def main(argv: list[str] | None = None) -> int:
     cal = None
     if getattr(args, "calibration", None):
         cal = Calibration.model_validate_json(Path(args.calibration).read_text())
+
+    if args.cmd == "controls":
+        from .controls import CONTROLS, run_control, verdict
+        from .model import OpenRouterModel
+        model, now = OpenRouterModel(), datetime.now(timezone.utc)
+        results = []
+        for c in CONTROLS:
+            r = run_control(c, model, as_of=now)
+            results.append(r)
+            vf = r.answer.counters["verified_frac"]
+            print(f"{c.name:12} {'PASS' if r.passed else 'FAIL'}  {r.observed}  "
+                  f"(verified {vf.n:g} of {vf.of} quotes)")
+            if not r.passed:
+                print(f"{'':12} → {c.failure_means}")
+        gates = verdict(results)
+        print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
+        return 1 if any(g.startswith(("VOID", "STOP")) for g in gates) else 0
+
+    if args.cmd == "measure":
+        from .controls import FACTUAL_QUESTIONS
+        from .model import OpenRouterModel
+        model, outdir = OpenRouterModel(), Path(args.out)
+        outdir.mkdir(parents=True, exist_ok=True)
+        pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
+        claimed = abstained = 0
+        statuses: dict[str, int] = {}
+        for i, q in enumerate(FACTUAL_QUESTIONS, 1):
+            answer, artifact = run(q, model)
+            f = outdir / f"q{i:02d}.json"
+            f.write_text(json.dumps({"artifact": artifact.model_dump(mode="json"),
+                                     "answer": json.loads(canonical(answer))}, indent=1))
+            c = answer.counters
+            for v in ("absent", "punctuation", "unresolvable"):
+                pooled[v] += int(c[f"{v}_frac"].n)
+            pooled["ok"] += int(c["verified_frac"].n)
+            claimed += c["verified_frac"].of
+            abstained += answer.abstained
+            key = "abstained" if answer.abstained else answer.status.value
+            statuses[key] = statuses.get(key, 0) + 1
+            print(f"q{i:02d} [{key:11}] verified {c['verified_frac'].n:g} of {c['verified_frac'].of}"
+                  f", absent {c['absent_frac'].n:g}  {answer.conclusion or answer.abstain_reason}"[:200])
+        print(f"\npooled over {claimed} quotes claimed: verified {pooled['ok']}, absent "
+              f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
+              f"{pooled['unresolvable']}")
+        print(f"abstained {abstained} of {len(FACTUAL_QUESTIONS)}; statuses {statuses}")
+        print(f"artifacts: {outdir}/")
+        return 0
 
     if args.cmd == "calibrate":
         examples = []
