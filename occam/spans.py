@@ -63,8 +63,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .snapshot import Snapshot, SnapshotStore
 
 __all__ = [
-    "SpanRef", "Verdict", "VERDICTS", "ADMITTED", "Tally",
-    "classify", "verify", "admit", "tally",
+    "SpanRef", "Verdict", "VERDICTS", "ADMITTED", "Tally", "Located",
+    "classify", "verify", "locate", "admit", "tally",
 ]
 
 Verdict = Literal["ok", "markup", "punctuation", "absent", "unresolvable"]
@@ -98,8 +98,20 @@ def _project(text: str, *, markup: bool = False, punctuation: bool = False) -> s
     means verbatim, and every loosening of a match rule in this repo has cost
     more than it bought.
     """
+    return _project_map(text, markup=markup, punctuation=punctuation)[0]
+
+
+def _project_map(text: str, *, markup: bool = False,
+                 punctuation: bool = False) -> tuple[str, list[int]]:
+    """`_project`, plus where each output character came from in `text`.
+
+    The map is what lets offsets be *computed* rather than asked for: find
+    the projected quote in the projected text, then read the original
+    positions of its first and last characters.
+    """
     out: list[str] = []
-    for ch in text:
+    origin: list[int] = []
+    for i, ch in enumerate(text):
         if markup and ch in _MARKUP:
             continue
         for c in (_PUNCTUATION_FOLD.get(ch, ch) if punctuation else ch):
@@ -110,9 +122,11 @@ def _project(text: str, *, markup: bool = False, punctuation: bool = False) -> s
             elif punctuation and c == "-" and out and out[-1] == "-":
                 continue
             out.append(c)
+            origin.append(i)
     if out and out[-1] == " ":
         out.pop()
-    return "".join(out)
+        origin.pop()
+    return "".join(out), origin
 
 
 def classify(quote: str, text: str) -> Verdict:
@@ -260,6 +274,71 @@ def verify(span: SpanRef, store: SnapshotStore) -> SpanRef:
             ),
         })
     return span.model_copy(update={"checked": True, "verdict": verdict, "reason": ""})
+
+
+class Located(BaseModel):
+    """The outcome of placing a claimed quote in a snapshot.
+
+    `span` is present whenever the words could be placed — including a
+    `punctuation` miss, whose location is known even though it is dropped —
+    and absent for `absent` and `unresolvable`, which have nowhere to point.
+    The verdict is carried here as well as on the span so that a miss with no
+    location is still counted.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    snapshot_id: str
+    quote: str
+    verdict: Verdict
+    span: Optional[SpanRef] = None
+    reason: str = ""
+
+
+def locate(snapshot: Optional[Snapshot], quote: str, *,
+           snapshot_id: str = "") -> Located:
+    """Turn a claimed quote into offsets, mechanically, and verify it.
+
+    The model supplies words; this supplies where they are. Asking a model
+    for character offsets instead would make the quote `text[start:end]` by
+    construction — always present, so `absent` could never fire and the
+    fabrication count would be connected to nothing (see #139).
+
+    The first occurrence is taken. Which occurrence does not change the
+    verdict, and the rule is deterministic, so a replay lands on the same one.
+    """
+    sid = snapshot.id if snapshot is not None else snapshot_id
+    if snapshot is None:
+        return Located(snapshot_id=sid, quote=quote, verdict="unresolvable",
+                       reason=f"snapshot {sid or '(none named)'} is not held")
+    if not snapshot.text.strip():
+        return Located(snapshot_id=sid, quote=quote, verdict="unresolvable",
+                       reason=f"snapshot yielded no text: {snapshot.empty_reason}")
+    if not _project(quote):
+        return Located(snapshot_id=sid, quote=quote, verdict="absent",
+                       reason="empty quote")
+
+    verdict = classify(quote, snapshot.text)
+    if verdict == "absent":
+        return Located(snapshot_id=sid, quote=quote, verdict="absent")
+
+    space = {"ok": {}, "markup": {"markup": True}}.get(verdict)
+    candidates = [space] if space is not None else [
+        {"punctuation": True}, {"markup": True, "punctuation": True}]
+    for kw in candidates:
+        ptext, origin = _project_map(snapshot.text, **kw)
+        pquote = _project(quote, **kw)
+        pos = ptext.find(pquote)
+        if pos >= 0:
+            start, end = origin[pos], origin[pos + len(pquote) - 1] + 1
+            break
+    else:  # classify found it, so one of the spaces must — say so if not
+        raise AssertionError(f"classify said {verdict} but no projection places {quote!r}")
+
+    span = SpanRef(snapshot_id=sid, text_sha256=snapshot.text_sha256,
+                   start=start, end=end, quote=quote,
+                   checked=verdict in ADMITTED, verdict=verdict)
+    return Located(snapshot_id=sid, quote=quote, verdict=verdict, span=span)
 
 
 def admit(spans: Iterable[SpanRef]) -> tuple[tuple[SpanRef, ...], tuple[SpanRef, ...]]:
