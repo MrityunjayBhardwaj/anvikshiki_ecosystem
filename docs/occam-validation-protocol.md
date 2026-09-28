@@ -118,10 +118,15 @@ Added after run 2 and **before** any live run under the change. Nothing above is
 **Instrument change, mechanical, no model:** an argument that would be
 `established` keeps it only if the grounded-IN quote arguments sharing its
 conclusion, each with an established ceiling of its own, cite snapshots from
-at least 2 hosts. Otherwise it is `hypothesis`, bound by "rests on a single
+at least 2 hosts **and** at least 2 distinct texts. Otherwise it is `hypothesis`, bound by "rests on a single
 source (<host>)". Hosts are host names with `www.` removed, not registrable
 domains. They proxy independence weakly in both directions: two pages on one
 site count once, and two sites copying each other count twice.
+
+*Revised before any live run (#165):* the text condition was added after
+review found that identical bytes fetched from a mirror merge into one
+snapshot carrying both URLs, so hosts alone let one document corroborate
+itself. Identical text is one source, as `snapshot.py` already counts it.
 
 **Consequence registered in advance:** gather searches Wikipedia only, so every
 factual answer is one host and **`established` 0 of 10 is guaranteed by

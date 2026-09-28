@@ -26,9 +26,12 @@ def world(fetched=NOW):
     return store, snap
 
 
-def second(store, url="https://f.org/b", body=b"b", fetched=NOW):
-    """The same text served from another place — a second host by default."""
-    return store.put(capture(url=url, body=body, text=TEXT, fetched_at=fetched))
+TEXT2 = TEXT + " A second page says the same, in its own document."
+
+
+def second(store, url="https://f.org/b", body=b"b", fetched=NOW, text=TEXT2):
+    """Another document saying the same things — a second host by default."""
+    return store.put(capture(url=url, body=body, text=text, fetched_at=fetched))
 
 
 def q(aid, snap, words):
@@ -304,7 +307,11 @@ def test_www_is_the_same_host():
 
 def test_a_different_conclusion_is_not_corroboration():
     store, s = world()
-    r = derive([q("Q", s, LONG1), q("R", second(store), LONG2)], [], store, as_of=NOW)
+    # Q has two documents but one host; R, on another host, says something else.
+    # Its host must not be lent to Q.
+    same_site = second(store, url="https://e.com/other", body=b"c")
+    r = derive([q("Q", s, LONG1), q("Q2", same_site, LONG1), q("R", second(store), LONG2)],
+               [], store, as_of=NOW)
     assert r.statuses["Q"].status == Status.HYPOTHESIS
     assert r.statuses["R"].status == Status.HYPOTHESIS
 
@@ -335,4 +342,22 @@ def test_an_undecided_source_does_not_corroborate():
     r = derive([q("Q", s, LONG1), q("R", f, LONG1), q("K", f, LONG3)],
                [atk("K", "R"), atk("R", "K")], store, as_of=NOW)
     assert r.statuses["R"].status == Status.CONTESTED
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+
+
+def test_one_document_fetched_from_a_mirror_does_not_corroborate_itself():
+    """#165: identical bytes from two hosts merge into one snapshot with both
+    URLs. Two hosts, one document, one argument — still one source."""
+    store, s = world()
+    m = second(store, url="https://mirror.net/a", body=b"a", text=TEXT)
+    assert m.id == s.id and len(m.urls) == 2
+    r = derive([q("Q", m, LONG1)], [], store, as_of=NOW)
+    assert r.statuses["Q"].status == Status.HYPOTHESIS
+    assert r.statuses["Q"].status_bound_by == ("rests on a single source (e.com, mirror.net)",)
+
+
+def test_the_same_text_in_different_bytes_on_another_host_does_not_corroborate():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store, text=TEXT), LONG1)], [], store,
+               as_of=NOW)
     assert r.statuses["Q"].status == Status.HYPOTHESIS

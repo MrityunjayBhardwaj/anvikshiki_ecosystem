@@ -43,8 +43,11 @@ water boils at 50 °C, and every check above passes it. So `established`
 also needs a second host. An argument that would be established keeps it
 only if the grounded-IN quote arguments sharing its conclusion (normalised as
 argue merges them), each with an established ceiling of its own, cite
-snapshots from at least MIN_HOSTS hosts. Otherwise it is a hypothesis, bound
-by "rests on a single source (<host>)".
+snapshots from at least MIN_HOSTS hosts and MIN_HOSTS distinct texts.
+Otherwise it is a hypothesis, bound by "rests on a single source (<hosts>)".
+Texts too, because identical text is one source (see snapshot.py): the same
+bytes fetched from a mirror merge into one snapshot carrying both URLs, and
+counting its hosts alone would let one document vouch for itself (#165).
 
 It is applied after solving, to the status and not the ceiling, for two
 reasons. It is a fact about the set of surviving arguments, and survival is
@@ -205,20 +208,26 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             by_label[aid] = (Status.OPEN, (f"{aid} undecided and defended in no preferred extension",))
 
     # Corroboration (#162): see the module docstring.
-    corroborators: dict[str, set[str]] = {}
+    hosts_of: dict[str, set[str]] = {}
+    texts_of: dict[str, set[str]] = {}
     for a in arguments:
         if (a.kind == "quote" and solved.grounded[a.id] == Label.IN
                 and ceil[a.id][0] == Status.ESTABLISHED):
             snap = _snapshot(a, store)
-            corroborators.setdefault(norm_conclusion(a.conclusion), set()).update(
-                host(u) for u in snap.urls)
+            key = norm_conclusion(a.conclusion)
+            hosts_of.setdefault(key, set()).update(host(u) for u in snap.urls)
+            texts_of.setdefault(key, set()).add(snap.text_sha256)
     for a in arguments:
         st, _ = by_label[a.id]
         if st == Status.ESTABLISHED:
-            hosts = corroborators[norm_conclusion(a.conclusion)]
-            if len(hosts) < MIN_HOSTS:
+            key = norm_conclusion(a.conclusion)
+            hosts = hosts_of[key]
+            if len(hosts) < MIN_HOSTS or len(texts_of[key]) < MIN_HOSTS:
                 by_label[a.id] = (Status.HYPOTHESIS,
                                   (f"rests on a single source ({', '.join(sorted(hosts))})",))
+    # ≥2 hosts and ≥2 distinct texts together mean two different documents on
+    # two different hosts: a mirror adds a host but no text (#165), a second
+    # page on one site adds a text but no host.
 
     # No second weakest-link pass over labels. Lifting attacks to the
     # arguments containing their targets already orders the labels: a parent
