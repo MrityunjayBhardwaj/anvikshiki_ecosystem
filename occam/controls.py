@@ -28,7 +28,8 @@ from pydantic import BaseModel, ConfigDict
 from .answer import Answer, Params, run
 from .model import Model
 
-__all__ = ["Control", "CONTROLS", "ControlResult", "FACTUAL_QUESTIONS", "run_control", "verdict"]
+__all__ = ["Control", "CONTROLS", "ControlResult", "FACTUAL_QUESTIONS", "SUPPORT_PROBE",
+           "probe_judge", "run_control", "verdict"]
 
 PLANTED_URL = "https://controls.occam.invalid/{name}"
 
@@ -145,3 +146,68 @@ def verdict(results: list[ControlResult]) -> list[str]:
             out.append(f"HEADLINE: verified-quote fraction {vf.n:g} of {vf.of} < 0.5 on "
                        f"the positive control — the model is not really citing")
     return out
+
+
+# ── the support judge's probe (#146) ────────────────────────
+# One planted page, twelve quote/claim pairs whose right answer is fixed by
+# how they were built. Registered in docs/occam-validation-protocol.md
+# (amendment 1) before the first live run of the judge.
+
+PROBE_PAGE = (
+    "The Harlow Dam was completed in 1962. Critics argued that the dam would flood "
+    "the valley within a decade. The valley never flooded. Engineers did not expect "
+    "the spillway to fail. If the reservoir had been filled in winter, the town might "
+    "have been evacuated. The nearby Brenn Bridge was painted red in 1970. The dam "
+    "generates 40 megawatts of electricity for the region."
+)
+
+# (quote, claim, expected, what it tests)
+SUPPORT_PROBE: tuple[tuple[str, str, str, str], ...] = (
+    ("The Harlow Dam was completed in 1962", "The Harlow Dam was completed in 1962.",
+     "supports", "verbatim"),
+    ("The dam generates 40 megawatts of electricity for the region",
+     "The dam produces 40 MW of power for the region.", "supports", "faithful paraphrase"),
+    ("The valley never flooded", "The valley did not flood.", "supports", "faithful paraphrase"),
+    ("Critics argued that the dam would flood the valley within a decade",
+     "Critics argued the dam would flood the valley.", "supports", "correct attribution"),
+    ("Engineers did not expect the spillway to fail",
+     "Engineers did not expect the spillway to fail.", "supports", "negated, kept negated"),
+    ("the dam would flood the valley within a decade",
+     "The dam flooded the valley within a decade.", "does_not_support", "reported speech"),
+    ("Engineers did not expect the spillway to fail",
+     "Engineers expected the spillway to fail.", "does_not_support", "negation dropped"),
+    ("the town might have been evacuated", "The town was evacuated.",
+     "does_not_support", "hypothetical"),
+    ("was painted red in 1970", "The Harlow Dam was painted red in 1970.",
+     "does_not_support", "different subject"),
+    ("The dam generates 40 megawatts of electricity for the region",
+     "The dam generates 40 megawatts and is the region's largest power source.",
+     "does_not_support", "adds content"),
+    ("The Harlow Dam was completed in 1962",
+     "The Harlow Dam was completed in 1962 after a decade of construction.",
+     "does_not_support", "adds content"),
+    ("The valley never flooded", "The valley flooded once.", "does_not_support", "contradiction"),
+)
+
+
+def probe_judge(model: Model, *, as_of: datetime, k: int = 1,
+                temperature: float = 0.0) -> list[tuple[str, str, str, str, str]]:
+    """Run the judge over the probe. Rows: (id, what, expected, got, claim)."""
+    from .argue import Argument, ArgueResult
+    from .snapshot import capture
+    from .spans import locate
+    from .support import support
+    from .types import Pramana
+    snap = capture(url=PLANTED_URL.format(name="probe"), body=PROBE_PAGE.encode(),
+                   text=PROBE_PAGE, fetched_at=as_of)
+    args = []
+    for i, (quote, claim, _, _) in enumerate(SUPPORT_PROBE):
+        loc = locate(snap, quote)
+        assert loc.verdict == "ok", f"probe quote {i} is not on the page: {quote!r}"
+        args.append(Argument(id=f"A{i:04d}", conclusion=claim, kind="quote", span=loc.span,
+                             pramana=Pramana.SABDA, sample_ids=(0,)))
+    argued = ArgueResult(k=1, arguments=tuple(args), answers=(None,), answer_notes=("",),
+                         located=(), malformed=(), dropped=(), cascade=())
+    _, res = support(model, argued, [snap], k=k, temperature=temperature)
+    return [(a.id, what, exp, res.verdicts[a.id], claim)
+            for a, (_, claim, exp, what) in zip(args, SUPPORT_PROBE)]

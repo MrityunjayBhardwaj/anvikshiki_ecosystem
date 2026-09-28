@@ -9,6 +9,8 @@ Ceilings — what the provenance allows
     quote leaf, verified, discriminating, fresh,
       and its conclusion literally in the quote   ESTABLISHED
     quote whose conclusion restates it            HYPOTHESIS   the words are the model's (#158)
+    quote whose support was never judged          HYPOTHESIS   not checked is not checked-and-fine
+    quote whose support the judge could not tell  PROVISIONAL  (#146; does_not_support is dropped)
     quote from a snapshot older than max_age      HYPOTHESIS   stale
     quote whose snapshot cannot be found          HYPOTHESIS   freshness unknown — never "fresh"
     inference step                                HYPOTHESIS   the step is the model's
@@ -94,6 +96,10 @@ def _own_ceiling(a: Argument, store: SnapshotStore, as_of: datetime,
     if a.kind == "inference":
         return Status.HYPOTHESIS, (f"inference step {a.id}",)
     bounds: list[tuple[Status, str]] = []
+    if a.support is None:
+        bounds.append((Status.HYPOTHESIS, f"quote {a.id}: support not judged"))
+    elif a.support == "cannot_tell":
+        bounds.append((Status.PROVISIONAL, f"quote {a.id}: support could not be judged"))
     if not states(a.span.quote, a.conclusion):
         # The quote verified; the conclusion is the model's restatement of it.
         # A restatement is an inference over the quote, so it caps where every

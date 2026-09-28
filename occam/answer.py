@@ -29,6 +29,7 @@ from .model import Model
 from .snapshot import Snapshot, SnapshotStore
 from .solve import chain_pramana
 from .spans import ADMITTED
+from .support import SupportResult, apply_support, support, support_from_replies
 from .status import MAX_AGE_DAYS, StatusResult, derive
 from .types import Status, rank
 
@@ -58,6 +59,8 @@ class Params(BaseModel):
     k_attack: int = 3
     t_argue: float = 0.7
     t_attack: float = 0.2
+    k_support: int = 1
+    t_support: float = 0.0
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -105,6 +108,7 @@ class Artifact(BaseModel):
     gather_notes: tuple[str, ...] = ()
     gather_replies: tuple[str, ...] = ()      # the model's search queries, for audit
     argue_replies: tuple[str, ...]
+    support_replies: tuple[str, ...] = ()     # empty: support was never judged
     attack_replies: tuple[str, ...]
 
 
@@ -140,16 +144,22 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                                           http_get=http_get, model=model)
     readable = [s for s in snaps if s.text.strip()]
     argue_replies: list[str] = []
+    support_replies: list[str] = []
     attack_replies: list[str] = []
     if readable:
         argue_replies, argued = argue(model, question, readable, k=params.k_argue,
                                       temperature=params.t_argue, max_chars=params.max_chars)
+        support_replies, judged = support(model, argued, readable, k=params.k_support,
+                                          temperature=params.t_support)
+        if support_replies:
+            argued, _ = apply_support(argued, judged)
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
     artifact = Artifact(question=question, as_of=as_of, params=params,
                         snapshots=tuple(StoredSnapshot.of(s) for s in snaps),
                         gather_notes=tuple(notes), gather_replies=tuple(gather_replies),
                         argue_replies=tuple(argue_replies),
+                        support_replies=tuple(support_replies),
                         attack_replies=tuple(attack_replies))
     return replay(artifact, calibration), artifact
 
@@ -166,10 +176,14 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
         store.put(s)
     readable = [s for s in snaps if s.text.strip()]
     argued = argue_from_replies(artifact.argue_replies, readable)
+    judged: Optional[SupportResult] = None
+    if artifact.support_replies:
+        argued, judged = apply_support(argued,
+                                       support_from_replies(artifact.support_replies, argued))
     attacked = attack_from_replies(artifact.attack_replies, argued.arguments)
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
                      max_age_days=artifact.params.max_age_days)
-    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration)
+    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged)
 
 
 def canonical(answer: Answer) -> str:
@@ -227,7 +241,8 @@ def _cited(aid: str, argued: ArgueResult, seen: frozenset = frozenset()) -> set[
 
 def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[Snapshot],
              argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
-             calibration: Optional[Calibration] = None) -> Answer:
+             calibration: Optional[Calibration] = None,
+             judged: Optional[SupportResult] = None) -> Answer:
     by_id = argued.by_id()
     statuses = derived.statuses
     urls = {s.id: s.urls[0] for s in snaps}
@@ -280,6 +295,9 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
             reason = "argue: every sample was malformed"
         elif positions:
             reason = "solve: every proposed answer was defeated"
+        elif any("does not support its claim" in n for n in argued.answer_notes):
+            reason = ("support: every proposed answer rested on a quote that, read in "
+                      "context, does not support its claim")
         elif any(n.startswith("answer step") for n in argued.answer_notes):
             reason = ("check: every proposed answer was dropped — its quote or a premise "
                       "failed span verification")
@@ -327,6 +345,20 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                                   of=len(attacked.minority) + len(attacked.attacks),
                                   population="distinct edges proposed"),
         "retrieval_hits": Count(n=len(readable), of=len(snaps), population="snapshots gathered"),
+        "support_judged": Count(n=len(judged.verdicts) if judged else 0,
+                                of=len(judged.verdicts) if judged else
+                                sum(1 for a in by_id.values() if a.kind == "quote"),
+                                population="verified quote arguments"),
+        "support_dropped": Count(n=len(judged.dropped) if judged else 0,
+                                 of=len(judged.verdicts) if judged else 0,
+                                 population="quote arguments judged"),
+        "support_cannot_tell": Count(n=sum(v == "cannot_tell" for v in judged.verdicts.values())
+                                     if judged else 0,
+                                     of=len(judged.verdicts) if judged else 0,
+                                     population="quote arguments judged"),
+        "support_cascade": Count(n=len(judged.cascade) if judged else 0,
+                                 of=len(judged.verdicts) if judged else 0,
+                                 population="quote arguments judged (arguments lost with them)"),
     }
 
     status_set: Optional[tuple[Status, ...]] = None
