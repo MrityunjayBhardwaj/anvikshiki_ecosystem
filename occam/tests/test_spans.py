@@ -235,6 +235,11 @@ def test_the_tally_writes_every_zero_and_names_its_denominator():
     assert "of 0 spans verified" in str(t)
 
 
+def test_a_rate_over_nothing_is_none_not_zero():
+    """An empty run must not report a clean fabrication rate."""
+    assert tally([]).absent_frac is None
+
+
 # ── one meaning of "verbatim", held in step with the engine's ──
 
 # (quote, source). Covers every verdict, and the combined miss that the engine

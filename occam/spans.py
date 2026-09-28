@@ -289,13 +289,16 @@ class Tally(BaseModel):
     total: int
     counts: dict[str, int]
 
-    def frac(self, verdict: str) -> float:
+    def frac(self, verdict: str) -> Optional[float]:
+        """`None` over zero spans. A rate of 0.0 from a run that verified
+        nothing would read as "no fabrication" — the empty loop printing as
+        the clean result."""
         if verdict not in VERDICTS:
             raise KeyError(verdict)
-        return self.counts[verdict] / self.total if self.total else 0.0
+        return self.counts[verdict] / self.total if self.total else None
 
     @property
-    def absent_frac(self) -> float:
+    def absent_frac(self) -> Optional[float]:
         """The fabrication rate — `absent` over every span verified."""
         return self.frac("absent")
 
