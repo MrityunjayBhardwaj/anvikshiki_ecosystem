@@ -63,7 +63,7 @@ PRAMANA_OF_KIND: dict[str, Pramana] = {
     "analogy": Pramana.UPAMANA,
 }
 
-MAX_SOURCE_CHARS = 12_000
+MAX_SOURCE_CHARS = 40_000
 
 
 def norm_conclusion(s: str) -> str:
