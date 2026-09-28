@@ -65,9 +65,18 @@ from .snapshot import Snapshot, SnapshotStore
 __all__ = [
     "SpanRef", "Verdict", "VERDICTS", "ADMITTED", "Tally", "Located",
     "classify", "verify", "locate", "admit", "tally",
+    "is_discriminating", "MIN_DISCRIMINATING_LENGTH",
 ]
 
 Verdict = Literal["ok", "markup", "punctuation", "absent", "unresolvable"]
+
+# A quote shorter than this, whitespace collapsed, cannot discriminate:
+# "economics." occurs in most chapters of a business guide, so finding it says
+# nothing about whether the model read the claim there. Found and
+# discriminating are different questions and are answered separately — the
+# verdict stays honest about found-ness, and the status stage caps a leaf
+# resting on a short quote (#148). Same number as the engine's, held by a law.
+MIN_DISCRIMINATING_LENGTH = 24
 VERDICTS: tuple[str, ...] = ("ok", "markup", "punctuation", "absent", "unresolvable")
 ADMITTED = frozenset({"ok", "markup"})
 
@@ -127,6 +136,11 @@ def _project_map(text: str, *, markup: bool = False,
         out.pop()
         origin.pop()
     return "".join(out), origin
+
+
+def is_discriminating(quote: str) -> bool:
+    """Whether the quote is long enough that finding it means something."""
+    return len(_project(quote)) >= MIN_DISCRIMINATING_LENGTH
 
 
 def classify(quote: str, text: str) -> Verdict:

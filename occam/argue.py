@@ -72,9 +72,15 @@ def norm_conclusion(s: str) -> str:
 
 
 class Argument(BaseModel):
-    """One argument after merging: a located quote, or a step over premises."""
+    """One argument after merging: a located quote, or a step over premises.
 
-    model_config = ConfigDict(frozen=True)
+    Unknown fields are refused rather than ignored. There is no `status`
+    here and there must never be one a caller can pass: status is computed
+    in `status.py` and nowhere else, and a silently ignored `status=` would
+    let a caller believe it had set one.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     conclusion: str
