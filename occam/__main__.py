@@ -2,7 +2,7 @@
 
     python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE]
     python -m occam replay FILE [--calibration CAL]
-    python -m occam controls                 # the three validation controls, live
+    python -m occam controls [--out DIR]     # the three validation controls, live
     python -m occam measure [--out DIR]      # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
@@ -23,7 +23,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .answer import Answer, Artifact, Params, canonical, replay, run
+from .answer import Answer, Artifact, Params, canonical, replay, run, stored_run
 from .conformal import ABSTAINED, Calibration, Example, fit
 
 
@@ -61,7 +61,8 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("replay")
     rp.add_argument("file")
     rp.add_argument("--calibration")
-    sub.add_parser("controls")
+    ct = sub.add_parser("controls")
+    ct.add_argument("--out")
     sub.add_parser("probe-judge")
     ms = sub.add_parser("measure")
     ms.add_argument("--out", default="traces/occam/run1")
@@ -79,10 +80,13 @@ def main(argv: list[str] | None = None) -> int:
         from .controls import CONTROLS, run_control, verdict
         from .model import OpenRouterModel
         model, now = OpenRouterModel(), datetime.now(timezone.utc)
+        outdir = Path(args.out or f"traces/occam/controls-{now:%Y%m%dT%H%M%SZ}")
+        outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
             r = run_control(c, model, as_of=now)
             results.append(r)
+            (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
             print(f"{c.name:12} {'PASS' if r.passed else 'FAIL'}  {r.observed}  "
                   f"(verified {vf.n:g} of {vf.of} quotes)")
@@ -90,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{'':12} → {c.failure_means}")
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
+        print(f"artifacts: {outdir}/")
         return 1 if any(g.startswith(("VOID", "STOP")) for g in gates) else 0
 
     if args.cmd == "probe-judge":
@@ -119,9 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         statuses: dict[str, int] = {}
         for i, q in enumerate(FACTUAL_QUESTIONS, 1):
             answer, artifact = run(q, model)
-            f = outdir / f"q{i:02d}.json"
-            f.write_text(json.dumps({"artifact": artifact.model_dump(mode="json"),
-                                     "answer": json.loads(canonical(answer))}, indent=1))
+            (outdir / f"q{i:02d}.json").write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
                 pooled[v] += int(c[f"{v}_frac"].n)
@@ -165,8 +168,7 @@ def main(argv: list[str] | None = None) -> int:
                                calibration=cal)
         out = Path(args.out or f"traces/occam/{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json")
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps({"artifact": artifact.model_dump(mode="json"),
-                                   "answer": json.loads(canonical(answer))}, indent=1))
+        out.write_text(stored_run(answer, artifact))
         _show(answer)
         print(f"\nartifact: {out}")
         return 0

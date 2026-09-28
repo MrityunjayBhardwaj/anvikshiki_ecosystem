@@ -27,7 +27,7 @@ from typing import Callable, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from .answer import Answer, Params, run
+from .answer import Answer, Artifact, Params, run
 from .model import Model
 
 __all__ = ["Control", "CONTROLS", "ControlResult", "FACTUAL_QUESTIONS", "SUPPORT_PROBE",
@@ -103,6 +103,7 @@ class ControlResult(BaseModel):
     observed: str
     failure_means: str
     answer: Answer
+    artifact: Artifact          # kept so the control can be replayed (#166)
 
 
 def _server(control: Control) -> Callable[[str], tuple[int, str, bytes]]:
@@ -119,7 +120,7 @@ def run_control(control: Control, model: Model, *, as_of: datetime,
                 params: Optional[Params] = None) -> ControlResult:
     """Run one control through the real pipeline, with its planted page as the
     only source."""
-    answer, _ = run(control.question, model, urls=[PLANTED_URL.format(name=control.name)],
+    answer, artifact = run(control.question, model, urls=[PLANTED_URL.format(name=control.name)],
                     params=params, as_of=as_of, http_get=_server(control))
     text = answer.conclusion or ""
     if control.expect == "abstain":
@@ -130,7 +131,8 @@ def run_control(control: Control, model: Model, *, as_of: datetime,
         observed = (f"answered {text!r} [{answer.status.value if answer.status else None}]"
                     if not answer.abstained else f"abstained: {answer.abstain_reason}")
     return ControlResult(name=control.name, passed=passed, observed=observed,
-                         failure_means=control.failure_means, answer=answer)
+                         failure_means=control.failure_means, answer=answer,
+                         artifact=artifact)
 
 
 def verdict(results: list[ControlResult]) -> list[str]:
