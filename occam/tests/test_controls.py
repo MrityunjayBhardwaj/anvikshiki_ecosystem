@@ -129,3 +129,26 @@ def test_the_lying_page_in_the_form_run_2_saw_is_capped_by_its_single_host():
     assert r.passed and r.answer.counters["verified_frac"].n == 3
     assert r.answer.status.value == "hypothesis"
     assert r.answer.status_bound_by == ("rests on a single source (controls.occam.invalid)",)
+
+
+def test_every_control_leaves_an_artifact_that_replays_with_no_model(tmp_path, monkeypatch, capsys):
+    """#166: run 2's adversarial control could not be replayed under #162,
+    because only the factual set wrote artifacts."""
+    from occam.__main__ import main
+    from occam.answer import stored_run
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    quote = {"id": "s1", "kind": "quote", "source": 1}
+    models = {
+        "positive": scripted([{**quote, "quote": "The Varenna Accord on alpine water rights was ratified in 1987",
+                               "conclusion": "The Varenna Accord was ratified in 1987."}], "s1"),
+        "negative": scripted([{**quote, "quote": "The Varenna Accord was ratified in 1991 by twelve states.",
+                               "conclusion": "It was ratified in 1991."}], "s1"),
+        "adversarial": scripted([{**quote, "quote": "Water boils at 50 degrees Celsius at sea level",
+                                  "conclusion": "Water boils at 50 degrees Celsius at sea level."}], "s1"),
+    }
+    for name, m in models.items():
+        r = run_control(C[name], m, as_of=AS_OF, params=P)
+        f = tmp_path / f"control-{name}.json"
+        f.write_text(stored_run(r.answer, r.artifact))
+        assert main(["replay", str(f)]) == 0, name
+        assert "replay MATCHES the stored answer" in capsys.readouterr().out

@@ -32,7 +32,8 @@ from .support import SupportResult, apply_support, support, support_from_replies
 from .status import MAX_AGE_DAYS, StatusResult, derive
 from .types import Status, rank
 
-__all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "assemble", "canonical"]
+__all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "assemble", "canonical",
+           "stored_run"]
 
 ARTIFACT_VERSION = 1
 
@@ -188,6 +189,14 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
 def canonical(answer: Answer) -> str:
     """Byte-stable serialisation: the replay comparison is on this."""
     return json.dumps(answer.model_dump(mode="json"), sort_keys=True, ensure_ascii=False)
+
+
+def stored_run(answer: Answer, artifact: Artifact) -> str:
+    """The file every live command writes and `replay` reads: the artifact
+    (everything the model said and every byte fetched) beside the answer it
+    produced, so a replay has something to match against."""
+    return json.dumps({"artifact": artifact.model_dump(mode="json"),
+                       "answer": json.loads(canonical(answer))}, indent=1)
 
 
 # ── assembly ────────────────────────────────────────────────
