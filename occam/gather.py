@@ -24,7 +24,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
-from .snapshot import Snapshot, capture
+from .snapshot import WIKIPEDIA_EXTRACTOR, Snapshot, capture
 
 if TYPE_CHECKING:
     from .model import Model
@@ -119,8 +119,8 @@ def fetch(url: str, *, at: datetime, http_get: HttpGet = urllib_get) -> Snapshot
 def _wiki_page(title: str, *, at: datetime, http_get: HttpGet) -> Snapshot:
     page_url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(title.replace(" ", "_"))
     api = WIKI_API + "?" + urllib.parse.urlencode({
-        "action": "query", "prop": "extracts", "explaintext": "1", "redirects": "1",
-        "titles": title, "format": "json",
+        "action": "query", "prop": "extracts|revisions", "explaintext": "1", "redirects": "1",
+        "rvprop": "ids|timestamp", "titles": title, "format": "json",
     })
     try:
         status, _, body = http_get(api)
@@ -133,14 +133,15 @@ def _wiki_page(title: str, *, at: datetime, http_get: HttpGet) -> Snapshot:
         text = next(iter(pages.values())).get("extract", "") or ""
     except (ValueError, KeyError, StopIteration, AttributeError):
         return capture(url=page_url, body=body, text="", fetched_at=at,
-                       media_type="application/json", extractor="wikipedia-extracts/1",
+                       media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR,
                        empty_reason="Wikipedia response had no extract")
     if not text.strip():
         return capture(url=page_url, body=body, text="", fetched_at=at,
-                       media_type="application/json", extractor="wikipedia-extracts/1",
+                       media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR,
                        empty_reason="Wikipedia extract was empty")
     return capture(url=page_url, body=body, text=text, fetched_at=at,
-                   media_type="application/json", extractor="wikipedia-extracts/1")
+                   media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR)
+
 
 
 def wikipedia_search(query: str, n: int, *, http_get: HttpGet = urllib_get) -> list[str]:

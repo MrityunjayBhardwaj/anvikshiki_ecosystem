@@ -322,3 +322,78 @@ def test_the_paraphrased_reported_claim_no_longer_wins():
     i1, q2 = ids[INFER["conclusion"]], ids[GROWTH["conclusion"]]
     ans, _ = ask(replies, [attacks((q2, i1, "rebutting"), (i1, q2, "rebutting"))] * 3)
     assert ans.status == Status.CONTESTED
+
+
+# ── the source's own version id (#169) ─────────────────────
+
+def wiki_with_revisions(url):
+    q = parse_qs(urlparse(url).query)
+    if q.get("list") == ["search"]:
+        return wiki(url)
+    assert "revisions" in q["prop"][0].split("|")        # asked in the same request
+    title = q["titles"][0]
+    return 200, "application/json", json.dumps({"query": {"pages": {"1": {
+        "title": title, "extract": PAGES.get(title, ""),
+        "revisions": [{"revid": 1000 + len(title), "parentid": 1, "timestamp": "2026-09-20T18:27:40Z"}],
+    }}}}).encode()
+
+
+def test_a_wikipedia_quote_carries_the_revision_it_was_read_from():
+    ans, art = ask(AGREE, NO_ATTACKS, http_get=wiki_with_revisions)
+    rev = "https://en.wikipedia.org/w/index.php?oldid=" + str(1000 + len("Unit economics"))
+    assert [s["revision_url"] for s in ans.snapshots] == [rev]
+    leaf = ans.derivation["sub_arguments"][0]
+    assert leaf["span"]["revision_url"] == rev
+    assert {s.revision_url for s in art.snapshots} >= {rev}          # stored, so replay keeps it
+    again = replay(Artifact.model_validate_json(art.model_dump_json()))
+    assert canonical(again) == canonical(ans)
+
+
+def test_no_revision_is_absent_not_invented():
+    ans, art = ask(AGREE, NO_ATTACKS)                                 # the API sent none
+    assert all(s.revision_url is None for s in art.snapshots)
+    assert all("revision_url" not in s for s in ans.snapshots)
+    assert "revision_url" not in ans.derivation["sub_arguments"][0]["span"]
+
+
+def test_the_cli_says_when_a_source_cannot_be_rechecked(capsys):
+    from occam.__main__ import _show
+    ans, _ = ask(AGREE, NO_ATTACKS)
+    _show(ans)
+    assert "not recorded — cannot be re-checked" in capsys.readouterr().out
+    ans, _ = ask(AGREE, NO_ATTACKS, http_get=wiki_with_revisions)
+    _show(ans)
+    assert "revision: https://en.wikipedia.org/w/index.php?oldid=" in capsys.readouterr().out
+
+
+def test_a_revision_url_the_bytes_do_not_vouch_for_is_refused():
+    """#171: the revision is derived from the hashed body, so editing it in an
+    artifact must fail to load, as editing the body or text does."""
+    import pytest
+    from pydantic import ValidationError
+    _, art = ask(AGREE, NO_ATTACKS, http_get=wiki_with_revisions)
+    d = json.loads(art.model_dump_json())
+    d["snapshots"][0]["revision_url"] = "https://en.wikipedia.org/w/index.php?oldid=1"
+    with pytest.raises(ValidationError, match="revision_url"):
+        replay(Artifact.model_validate(d))
+    d["snapshots"][0]["revision_url"] = None                  # dropping it is tampering too
+    with pytest.raises(ValidationError, match="revision_url"):
+        replay(Artifact.model_validate(d))
+
+
+def test_a_stored_wikipedia_snapshot_still_yields_its_revision():
+    """The extractor name is persisted in every artifact, so the rule that
+    derives the revision must keep recognising the stored spelling, not just
+    whatever the constant says today."""
+    import base64
+    from occam.answer import StoredSnapshot
+    body = json.dumps({"query": {"pages": {"1": {"title": "T", "extract": "Some text.",
+                                                 "revisions": [{"revid": 42}]}}}}).encode()
+    import hashlib
+    stored = StoredSnapshot(
+        id="sha256:" + hashlib.sha256(body).hexdigest(), urls=("https://en.wikipedia.org/wiki/T",),
+        fetched_at=AS_OF, media_type="application/json", body_b64=base64.b64encode(body).decode(),
+        text="Some text.", text_sha256=hashlib.sha256(b"Some text.").hexdigest(),
+        extractor="wikipedia-extracts/1", empty_reason=None,
+        revision_url="https://en.wikipedia.org/w/index.php?oldid=42")
+    assert stored.load().revision_url == "https://en.wikipedia.org/w/index.php?oldid=42"

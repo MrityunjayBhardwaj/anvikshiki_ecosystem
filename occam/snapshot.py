@@ -44,6 +44,7 @@ the difference is unrecoverable. So `empty_reason` is mandatory whenever
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 from typing import Iterator, Optional
 from urllib.parse import urlparse
@@ -60,6 +61,27 @@ def host(url: str) -> str:
     status.py must count the same thing."""
     h = (urlparse(url).hostname or url).lower()
     return h[4:] if h.startswith("www.") else h
+
+
+WIKIPEDIA_EXTRACTOR = "wikipedia-extracts/1"
+
+
+def revision_address(body: bytes, extractor: str) -> Optional[str]:
+    """The permanent URL of the version these bytes are, when the bytes say (#169).
+
+    Derived, never accepted, like the two hashes: the revision id sits inside
+    the served bytes, so a snapshot whose `revision_url` disagreed with its own
+    body would be pointing a reader at some other version (#171). Only a
+    Wikipedia API response carries one today; anything else is None.
+    """
+    if extractor != WIKIPEDIA_EXTRACTOR:
+        return None
+    try:
+        page = next(iter(json.loads(body)["query"]["pages"].values()))
+        rid = page["revisions"][0]["revid"]
+    except (ValueError, KeyError, IndexError, TypeError, StopIteration, AttributeError):
+        return None
+    return f"https://en.wikipedia.org/w/index.php?oldid={rid}" if isinstance(rid, int) else None
 
 
 def body_address(body: bytes) -> str:
@@ -113,6 +135,16 @@ class Snapshot(BaseModel):
             "only actionable if you can see what it changed to."
         ),
     )
+    revision_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "A permanent address for exactly the version read, when the source "
+            "has one (a Wikipedia oldid). The content hashes prove an artifact "
+            "agrees with itself; this lets anyone else fetch the same version "
+            "and check the quote against the source (#169). None: the source "
+            "gave none — not that the page cannot change."
+        ),
+    )
     empty_reason: Optional[str] = Field(
         default=None,
         description=(
@@ -140,6 +172,13 @@ class Snapshot(BaseModel):
             )
         if not self.urls:
             raise ValueError("a snapshot with no URL cannot be re-fetched or disputed")
+        if self.revision_url != revision_address(self.body, self.extractor):
+            raise ValueError(
+                f"revision_url {self.revision_url!r} is not what the body says "
+                f"({revision_address(self.body, self.extractor)!r}). It is the "
+                f"pointer a reader follows to check a quote at its source, so one "
+                f"that disagrees with the hashed bytes points them elsewhere (#171)."
+            )
         if not self.text.strip() and not self.empty_reason:
             raise ValueError(
                 "empty text with no reason. A paywall, a robots exclusion, a "
@@ -167,8 +206,8 @@ def capture(
 ) -> Snapshot:
     """Build a snapshot, computing both addresses rather than accepting them.
 
-    The only supported way to make one. Taking hashes from a caller would let a
-    snapshot claim an address it does not have, and the address is the single
+    The only supported way to make one. Taking hashes (or a revision) from a
+    caller would let a snapshot claim an address it does not have, and the address is the single
     thing every downstream guarantee rests on.
     """
     return Snapshot(
@@ -181,6 +220,7 @@ def capture(
         text_sha256=text_address(text),
         extractor=extractor,
         empty_reason=empty_reason,
+        revision_url=revision_address(body, extractor),
     )
 
 
