@@ -113,6 +113,16 @@ class Snapshot(BaseModel):
             "only actionable if you can see what it changed to."
         ),
     )
+    revision_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "A permanent address for exactly the version read, when the source "
+            "has one (a Wikipedia oldid). The content hashes prove an artifact "
+            "agrees with itself; this lets anyone else fetch the same version "
+            "and check the quote against the source (#169). None: the source "
+            "gave none — not that the page cannot change."
+        ),
+    )
     empty_reason: Optional[str] = Field(
         default=None,
         description=(
@@ -164,6 +174,7 @@ def capture(
     media_type: str = "",
     extractor: str = "",
     empty_reason: Optional[str] = None,
+    revision_url: Optional[str] = None,
 ) -> Snapshot:
     """Build a snapshot, computing both addresses rather than accepting them.
 
@@ -181,6 +192,7 @@ def capture(
         text_sha256=text_address(text),
         extractor=extractor,
         empty_reason=empty_reason,
+        revision_url=revision_url,
     )
 
 

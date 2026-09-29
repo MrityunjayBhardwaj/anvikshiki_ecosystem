@@ -45,6 +45,9 @@ def _show(a: Answer) -> None:
         print(f"   {name:18} {c.n:g} of {c.of} {c.population}{frac}")
     for d in a.degraded:
         print(f"   degraded: {d}")
+    for s in a.snapshots:
+        print(f"source {s['urls'][0]}\n   revision: "
+              f"{s.get('revision_url') or 'not recorded — cannot be re-checked once the page changes'}")
 
 
 def _refuse_overwrite(paths: list[Path]) -> bool:

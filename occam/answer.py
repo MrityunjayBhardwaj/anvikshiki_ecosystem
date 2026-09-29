@@ -78,13 +78,14 @@ class StoredSnapshot(BaseModel):
     text_sha256: str
     extractor: str
     empty_reason: Optional[str]
+    revision_url: Optional[str] = None      # absent in artifacts before #169
 
     @classmethod
     def of(cls, s: Snapshot) -> "StoredSnapshot":
         return cls(id=s.id, urls=s.urls, fetched_at=s.fetched_at, media_type=s.media_type,
                    body_b64=base64.b64encode(s.body).decode(), text=s.text,
                    text_sha256=s.text_sha256, extractor=s.extractor,
-                   empty_reason=s.empty_reason)
+                   empty_reason=s.empty_reason, revision_url=s.revision_url)
 
     def load(self) -> Snapshot:
         # Snapshot re-hashes body and text on construction, so a tampered
@@ -92,7 +93,8 @@ class StoredSnapshot(BaseModel):
         return Snapshot(id=self.id, urls=self.urls, fetched_at=self.fetched_at,
                         media_type=self.media_type, body=base64.b64decode(self.body_b64),
                         text=self.text, text_sha256=self.text_sha256,
-                        extractor=self.extractor, empty_reason=self.empty_reason)
+                        extractor=self.extractor, empty_reason=self.empty_reason,
+                        revision_url=self.revision_url)
 
 
 class Artifact(BaseModel):
@@ -202,7 +204,7 @@ def stored_run(answer: Answer, artifact: Artifact) -> str:
 # ── assembly ────────────────────────────────────────────────
 
 def _tree(aid: str, argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
-          urls: dict[str, str], seen: frozenset = frozenset()) -> dict[str, Any]:
+          sources: dict[str, Snapshot], seen: frozenset = frozenset()) -> dict[str, Any]:
     a = argued.by_id()[aid]
     st = derived.statuses[aid]
     defeats = set(derived.solved.defeats)
@@ -218,14 +220,28 @@ def _tree(aid: str, argued: ArgueResult, attacked: AttackResult, derived: Status
         ],
     }
     if a.span is not None:
-        node["span"] = {"snapshot_id": a.span.snapshot_id, "url": urls.get(a.span.snapshot_id, ""),
+        src = sources.get(a.span.snapshot_id)
+        node["span"] = {"snapshot_id": a.span.snapshot_id, "url": src.urls[0] if src else "",
                         "text_sha256": a.span.text_sha256, "start": a.span.start,
                         "end": a.span.end, "quote": a.span.quote, "verdict": a.span.verdict}
+        if src is not None and src.revision_url is not None:    # see _cited_snapshot
+            node["span"]["revision_url"] = src.revision_url
     node["sub_arguments"] = [
-        _tree(s, argued, attacked, derived, urls, seen | {aid})
+        _tree(s, argued, attacked, derived, sources, seen | {aid})
         for s in a.sub_arguments if s not in seen
     ]
     return node
+
+
+def _cited_snapshot(s: Snapshot) -> dict[str, Any]:
+    out = {"id": s.id, "urls": list(s.urls), "fetched_at": s.fetched_at.isoformat(),
+           "text_sha256": s.text_sha256, "extractor": s.extractor}
+    # Only when recorded: a key added unconditionally would make every
+    # artifact stored before #169 replay as DIFFERS. Its absence is shown to
+    # the reader by the CLI, not hidden.
+    if s.revision_url is not None:
+        out["revision_url"] = s.revision_url
+    return out
 
 
 def _depth(aid: str, argued: ArgueResult, seen: frozenset = frozenset()) -> int:
@@ -248,7 +264,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
              judged: Optional[SupportResult] = None) -> Answer:
     by_id = argued.by_id()
     statuses = derived.statuses
-    urls = {s.id: s.urls[0] for s in snaps}
+    sources = {s.id: s for s in snaps}
     k = argued.k
     degraded: list[str] = list(artifact.gather_notes)
     for s in snaps:
@@ -378,10 +394,8 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         status=ans_status.status if ans_status else None,
         status_bound_by=ans_status.status_bound_by if ans_status else (),
         abstained=abstained, abstain_reason=reason,
-        derivation=_tree(answer_id, argued, attacked, derived, urls) if answer_id else None,
+        derivation=_tree(answer_id, argued, attacked, derived, sources) if answer_id else None,
         positions=tuple(positions),
-        snapshots=tuple({"id": s.id, "urls": list(s.urls), "fetched_at": s.fetched_at.isoformat(),
-                         "text_sha256": s.text_sha256, "extractor": s.extractor}
-                        for s in cited),
+        snapshots=tuple(_cited_snapshot(s) for s in cited),
         counters=counters, degraded=tuple(degraded),
     )
