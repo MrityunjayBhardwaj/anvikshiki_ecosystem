@@ -364,3 +364,36 @@ def test_the_cli_says_when_a_source_cannot_be_rechecked(capsys):
     ans, _ = ask(AGREE, NO_ATTACKS, http_get=wiki_with_revisions)
     _show(ans)
     assert "revision: https://en.wikipedia.org/w/index.php?oldid=" in capsys.readouterr().out
+
+
+def test_a_revision_url_the_bytes_do_not_vouch_for_is_refused():
+    """#171: the revision is derived from the hashed body, so editing it in an
+    artifact must fail to load, as editing the body or text does."""
+    import pytest
+    from pydantic import ValidationError
+    _, art = ask(AGREE, NO_ATTACKS, http_get=wiki_with_revisions)
+    d = json.loads(art.model_dump_json())
+    d["snapshots"][0]["revision_url"] = "https://en.wikipedia.org/w/index.php?oldid=1"
+    with pytest.raises(ValidationError, match="revision_url"):
+        replay(Artifact.model_validate(d))
+    d["snapshots"][0]["revision_url"] = None                  # dropping it is tampering too
+    with pytest.raises(ValidationError, match="revision_url"):
+        replay(Artifact.model_validate(d))
+
+
+def test_a_stored_wikipedia_snapshot_still_yields_its_revision():
+    """The extractor name is persisted in every artifact, so the rule that
+    derives the revision must keep recognising the stored spelling, not just
+    whatever the constant says today."""
+    import base64
+    from occam.answer import StoredSnapshot
+    body = json.dumps({"query": {"pages": {"1": {"title": "T", "extract": "Some text.",
+                                                 "revisions": [{"revid": 42}]}}}}).encode()
+    import hashlib
+    stored = StoredSnapshot(
+        id="sha256:" + hashlib.sha256(body).hexdigest(), urls=("https://en.wikipedia.org/wiki/T",),
+        fetched_at=AS_OF, media_type="application/json", body_b64=base64.b64encode(body).decode(),
+        text="Some text.", text_sha256=hashlib.sha256(b"Some text.").hexdigest(),
+        extractor="wikipedia-extracts/1", empty_reason=None,
+        revision_url="https://en.wikipedia.org/w/index.php?oldid=42")
+    assert stored.load().revision_url == "https://en.wikipedia.org/w/index.php?oldid=42"

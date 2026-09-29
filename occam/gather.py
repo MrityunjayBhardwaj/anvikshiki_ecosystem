@@ -24,7 +24,7 @@ from datetime import datetime
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
-from .snapshot import Snapshot, capture
+from .snapshot import WIKIPEDIA_EXTRACTOR, Snapshot, capture
 
 if TYPE_CHECKING:
     from .model import Model
@@ -130,28 +130,18 @@ def _wiki_page(title: str, *, at: datetime, http_get: HttpGet) -> Snapshot:
         return _failed(page_url, f"HTTP {status}", at)
     try:
         pages = json.loads(body)["query"]["pages"]
-        page = next(iter(pages.values()))
-        text = page.get("extract", "") or ""
+        text = next(iter(pages.values())).get("extract", "") or ""
     except (ValueError, KeyError, StopIteration, AttributeError):
         return capture(url=page_url, body=body, text="", fetched_at=at,
-                       media_type="application/json", extractor="wikipedia-extracts/1",
+                       media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR,
                        empty_reason="Wikipedia response had no extract")
     if not text.strip():
         return capture(url=page_url, body=body, text="", fetched_at=at,
-                       media_type="application/json", extractor="wikipedia-extracts/1",
+                       media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR,
                        empty_reason="Wikipedia extract was empty")
     return capture(url=page_url, body=body, text=text, fetched_at=at,
-                   media_type="application/json", extractor="wikipedia-extracts/1",
-                   revision_url=_revision_url(page))
+                   media_type="application/json", extractor=WIKIPEDIA_EXTRACTOR)
 
-
-def _revision_url(page: dict) -> Optional[str]:
-    """The oldid URL of the revision this response came from (#169). It is
-    read from the same response as the extract, so the two name one version.
-    None when the API sent no revision id — recorded as absent, never guessed."""
-    revs = page.get("revisions")
-    rid = revs[0].get("revid") if isinstance(revs, list) and revs and isinstance(revs[0], dict) else None
-    return f"https://en.wikipedia.org/w/index.php?oldid={rid}" if isinstance(rid, int) else None
 
 
 def wikipedia_search(query: str, n: int, *, http_get: HttpGet = urllib_get) -> list[str]:
