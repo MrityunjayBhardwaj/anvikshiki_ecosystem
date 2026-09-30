@@ -18,11 +18,12 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .argue import ArgueResult, argue, argue_from_replies, norm_conclusion
 from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
+from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
 from .gather import HttpGet, gather, urllib_get
 from .model import Model
 from .snapshot import Snapshot, SnapshotStore, host
@@ -61,6 +62,12 @@ class Params(BaseModel):
     t_attack: float = 0.2
     k_support: int = 1
     t_support: float = 0.0
+    # The same-answer judge (#172): on by default, a setting so it can be
+    # turned off (`--no-judge-same`). An artifact made before it has no such
+    # field and is read as False — see Artifact — so it replays exactly as it
+    # did: exact-wording groups, no new fields.
+    judge_same: bool = True
+    t_same: float = 0.0
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -111,7 +118,19 @@ class Artifact(BaseModel):
     gather_replies: tuple[str, ...] = ()      # the model's search queries, for audit
     argue_replies: tuple[str, ...]
     support_replies: tuple[str, ...] = ()     # empty: support was never judged
+    same_replies: tuple[str, ...] = ()        # the same-answer judge: X/Y, then Y/X
     attack_replies: tuple[str, ...]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _predates_the_judge(cls, data: Any) -> Any:
+        # Params.judge_same defaults to True for new runs. A stored artifact
+        # without the field was made before the judge existed; reading it as
+        # True would replay it through a stage it never ran (#172).
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "judge_same" not in data["params"]:
+            data = {**data, "params": {**data["params"], "judge_same": False}}
+        return data
 
 
 class Answer(BaseModel):
@@ -148,6 +167,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     argue_replies: list[str] = []
     support_replies: list[str] = []
     attack_replies: list[str] = []
+    same_replies: list[str] = []
     if readable:
         argue_replies, argued = argue(model, question, readable, k=params.k_argue,
                                       temperature=params.t_argue, max_chars=params.max_chars)
@@ -157,12 +177,16 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
             argued, _ = apply_support(argued, judged)
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
+        if params.judge_same:
+            same_replies = judge_same(model, question, candidate_pairs(argued, question),
+                                      temperature=params.t_same)
     artifact = Artifact(question=question, as_of=as_of, params=params,
                         snapshots=tuple(StoredSnapshot.of(s) for s in snaps),
                         gather_notes=tuple(notes), gather_replies=tuple(gather_replies),
                         argue_replies=tuple(argue_replies),
                         support_replies=tuple(support_replies),
-                        attack_replies=tuple(attack_replies))
+                        attack_replies=tuple(attack_replies),
+                        same_replies=tuple(same_replies))
     return replay(artifact, calibration), artifact
 
 
@@ -183,9 +207,17 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
         argued, judged = apply_support(argued,
                                        support_from_replies(artifact.support_replies, argued))
     attacked = attack_from_replies(artifact.attack_replies, argued.arguments)
+    same: Optional[EquivResult] = None
+    claim_group = None
+    if artifact.params.judge_same:
+        same = equiv_from_replies(artifact.same_replies,
+                                  candidate_pairs(argued, artifact.question))
+        claim_group = same.groups("claim", [v.pair.a for v in same.verdicts] +
+                                  [v.pair.b for v in same.verdicts])
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
-                     max_age_days=artifact.params.max_age_days)
-    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged)
+                     max_age_days=artifact.params.max_age_days, claim_group=claim_group)
+    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
+                    same)
 
 
 def canonical(answer: Answer) -> str:
@@ -261,7 +293,8 @@ def _cited(aid: str, argued: ArgueResult, seen: frozenset = frozenset()) -> set[
 def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[Snapshot],
              argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
              calibration: Optional[Calibration] = None,
-             judged: Optional[SupportResult] = None) -> Answer:
+             judged: Optional[SupportResult] = None,
+             same: Optional[EquivResult] = None) -> Answer:
     by_id = argued.by_id()
     statuses = derived.statuses
     sources = {s.id: s for s in snaps}
@@ -279,29 +312,57 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         degraded.append(f"attack sample {sid} rejected: {why}")
     if derived.solved.preferred is None:
         degraded.append(derived.solved.preferred_note)
+    if same is not None:
+        for i, why in same.malformed:
+            degraded.append(f"same-answer judge reply {i} malformed: {why}")
+        unjudged = [v.pair.id for v in same.verdicts
+                    if not v.pair.veto and (v.forward is None or v.backward is None)]
+        if unjudged:
+            degraded.append(f"same-answer judge: {len(unjudged)} pair(s) not judged in both "
+                            f"orders, kept apart: {', '.join(unjudged)}")
 
-    # Positions: distinct answer conclusions, each with its best surviving argument.
+    # Positions: distinct answers, each with its best surviving argument. With
+    # the same-answer judge, "distinct" is under the question lens (#172);
+    # without it, exact normalised wording, as before.
+    answer_keys = [norm_conclusion(by_id[a].conclusion) for a in argued.answers if a]
+    group_of = same.groups("question", answer_keys) if same else {k: k for k in answer_keys}
     groups: dict[str, list[str]] = {}
     for aid in argued.answers:
         if aid is not None:
-            groups.setdefault(norm_conclusion(by_id[aid].conclusion), [])
-            if aid not in groups[norm_conclusion(by_id[aid].conclusion)]:
-                groups[norm_conclusion(by_id[aid].conclusion)].append(aid)
-    support = Counter(norm_conclusion(by_id[a].conclusion) for a in argued.answers if a)
+            g = groups.setdefault(group_of[norm_conclusion(by_id[aid].conclusion)], [])
+            if aid not in g:
+                g.append(aid)
+    support = Counter(group_of[k] for k in answer_keys)
 
     def best(ids: list[str]) -> tuple[Optional[str], Optional[Status]]:
         live = [i for i in ids if statuses[i].status is not None]
         if not live:
             return None, None
-        top = max(live, key=lambda i: (rank(statuses[i].status), -int(i[1:])))
+        # With the judge, a merged position shows its most detailed wording
+        # among the best-grounded: the others are consistent with it (#172).
+        top = max(live, key=lambda i: (rank(statuses[i].status),
+                                       len(by_id[i].conclusion) if same else 0, -int(i[1:])))
         return top, statuses[top].status
 
     positions = []
     for key, ids in groups.items():
         top, st = best(ids)
-        positions.append({"conclusion": by_id[ids[0]].conclusion, "argument_ids": ids,
-                          "best_argument": top, "status": st.value if st else None,
-                          "samples": support[key]})
+        shown = by_id[top].conclusion if same is not None and top else by_id[ids[0]].conclusion
+        pos: dict[str, Any] = {"conclusion": shown, "argument_ids": ids,
+                               "best_argument": top, "status": st.value if st else None,
+                               "samples": support[key]}
+        if same is not None:
+            # Only with the judge: keys added unconditionally would make every
+            # older artifact replay as DIFFERS. The CLI says when it did not run.
+            members = {k for k, g in group_of.items() if g == key}
+            pos["wordings"] = sorted({by_id[i].conclusion for i in ids})
+            pos["kept_apart"] = [
+                {"from": v.pair.text_b if v.pair.a in members else v.pair.text_a,
+                 "why": v.why_apart, "asked_by_question": v.asked_by_question}
+                for v in same.verdicts
+                if v.pair.lens == "question" and not v.same
+                and (v.pair.a in members) != (v.pair.b in members)]
+        positions.append(pos)
     positions.sort(key=lambda p: (-(rank(Status(p["status"])) if p["status"] else -1),
                                   -p["samples"], p["argument_ids"][0]))
 
@@ -337,7 +398,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
     claimed = argued.spans_claimed
     steps_claimed = sum(1 for _ in argued.dropped) + sum(1 for _ in argued.cascade) + \
         sum(len(by_id[a].sample_ids) for a in by_id)
-    agree = support[norm_conclusion(by_id[answer_id].conclusion)] if answer_id else 0
+    agree = support[group_of[norm_conclusion(by_id[answer_id].conclusion)]] if answer_id else 0
     ages = [(artifact.as_of - s.fetched_at).days for s in cited]
     counters = {
         "k": Count(n=k, of=artifact.params.k_argue, population="argue samples requested"),
@@ -379,6 +440,25 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                                  of=len(judged.verdicts) if judged else 0,
                                  population="quote arguments judged (arguments lost with them)"),
     }
+    if same is not None:
+        # Only with the judge, like the position fields (see there). Merged
+        # samples may be less precise than the answer shown, so the count says
+        # "consistent with", not "the same as".
+        counters["agree_frac"] = Count(
+            n=counters["agree_frac"].n, of=counters["agree_frac"].of,
+            population="samples whose answer is consistent with the chosen conclusion "
+                       "(same-answer judge, question lens)")
+        for lens in ("question", "claim"):
+            vs = [v for v in same.verdicts if v.pair.lens == lens]
+            judged_both = [v for v in vs if v.forward is not None and v.backward is not None]
+            counters[f"same_{lens}_vetoed"] = Count(
+                n=sum(bool(v.pair.veto) for v in vs), of=len(vs),
+                population=f"{lens}-lens pairs")
+            counters[f"same_{lens}_merged"] = Count(
+                n=sum(v.same for v in vs), of=len(vs), population=f"{lens}-lens pairs")
+            counters[f"same_{lens}_order_disagree"] = Count(
+                n=sum(v.forward != v.backward for v in judged_both), of=len(judged_both),
+                population=f"{lens}-lens pairs judged in both orders")
 
     status_set: Optional[tuple[Status, ...]] = None
     set_note = "no calibration set: the coverage guarantee is unavailable"

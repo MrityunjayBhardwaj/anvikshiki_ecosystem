@@ -1,15 +1,18 @@
 """Command line: ask a question, or replay a stored run.
 
-    python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE]
+    python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE] [--no-judge-same]
     python -m occam replay FILE [--calibration CAL]
-    python -m occam controls [--out DIR]     # the three validation controls, live
-    python -m occam measure [--out DIR]      # the pre-registered factual set, live
+    python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
+    python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
 judgment of how much the answer in FILE is worth, after reading it and its
 quotes.
+
+The same-answer judge (#172) is on by default; `--no-judge-same` turns it off,
+and the choice is recorded in the artifact's params.
 
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
@@ -37,8 +40,15 @@ def _show(a: Answer) -> None:
         if a.status_set is not None:
             print(f"   status set: {{{', '.join(s.value for s in a.status_set)}}}")
         print(f"   {a.status_set_note}")
+    if a.positions and "wordings" not in a.positions[0]:
+        print("   positions grouped by exact wording (same-answer judge not run)")
     for p in a.positions:
         print(f"   position [{p['status']}] ({p['samples']} samples): {p['conclusion']}")
+        for w in p.get("wordings", []):
+            if w != p["conclusion"]:
+                print(f"      also worded: {w}")
+        for k in p.get("kept_apart", []):
+            print(f"      kept apart from: {k['from'][:90]} — {k['why']}")
     print("counters:")
     for name, c in a.counters.items():
         frac = f" = {c.frac:.2f}" if c.frac is not None and name.endswith("frac") else ""
@@ -67,6 +77,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="occam")
     sub = ap.add_subparsers(dest="cmd", required=True)
     ask = sub.add_parser("ask")
+    ask.add_argument("--no-judge-same", action="store_true",
+                    help="turn off the same-answer judge (on by default)")
     ask.add_argument("question")
     ask.add_argument("--url", action="append")
     ask.add_argument("--k", type=int, default=3)
@@ -78,9 +90,13 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("file")
     rp.add_argument("--calibration")
     ct = sub.add_parser("controls")
+    ct.add_argument("--no-judge-same", action="store_true",
+                    help="turn off the same-answer judge (on by default)")
     ct.add_argument("--out")
     sub.add_parser("probe-judge")
     ms = sub.add_parser("measure")
+    ms.add_argument("--no-judge-same", action="store_true",
+                    help="turn off the same-answer judge (on by default)")
     ms.add_argument("--out")
     cp = sub.add_parser("calibrate")
     cp.add_argument("labels")
@@ -103,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
-            r = run_control(c, model, as_of=now)
+            r = run_control(c, model, as_of=now, params=Params(judge_same=not args.no_judge_same))
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
@@ -147,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         claimed = abstained = 0
         statuses: dict[str, int] = {}
         for i, q in enumerate(FACTUAL_QUESTIONS, 1):
-            answer, artifact = run(q, model)
+            answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same))
             (outdir / f"q{i:02d}.json").write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
@@ -191,7 +207,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         answer, artifact = run(args.question, OpenRouterModel(args.model), urls=args.url,
                                n_sources=args.sources,
-                               params=Params(k_argue=args.k, k_attack=args.k),
+                               params=Params(k_argue=args.k, k_attack=args.k,
+                                             judge_same=not args.no_judge_same),
                                calibration=cal)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))

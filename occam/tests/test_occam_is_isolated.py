@@ -140,11 +140,19 @@ def test_importing_every_occam_module_loads_no_engine_module_at_all():
     assert out == "[]", f"importing {len(mods)} occam modules loaded: {out}"
 
 
+# One exception, and why (#172): the same-answer veto reads numbers and
+# negation words out of two conclusions. It can only REFUSE a merge — its
+# worst case is the behaviour before #172, answers kept apart — so it never
+# decides that anything is so. The two laws below hold it to that.
+REGEX_ALLOWED = {"equiv.py"}
+
+
 def test_no_regular_expressions_in_the_package():
     """Occam's decisions are substring containment and graph computation. A
     regex here is the reading-by-word-matching that the package exists to
     remove, and it arrives looking helpful."""
-    users = [p.name for p in _modules() if "re" in _imported_names(p)]
+    users = [p.name for p in _modules()
+             if "re" in _imported_names(p) and p.name not in REGEX_ALLOWED]
     assert not users, (
         f"{users} import `re`. Occam decides by exact containment and by "
         f"solving a graph; pattern matching on prose is what it replaces."
@@ -162,3 +170,23 @@ def test_occam_tests_are_actually_collected():
         f"testpaths is {paths} — occam/tests is not collected, so every law "
         f"in this package is invisible to a bare `pytest` run"
     )
+
+
+def test_the_one_regex_exception_is_used_only_to_refuse():
+    """equiv.py may match words only inside `veto`, and a veto can only keep
+    a pair apart. If either stops holding, the exception is no longer the
+    one that was granted."""
+    import ast
+    src = (REPO / "occam" / "equiv.py").read_text()
+    tree = ast.parse(src)
+    readers = {"_numbers", "_negations", "_NUMBER", "_WORD"}
+    for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        used = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)} & readers
+        if used:
+            assert fn.name in {"veto", "_numbers", "_negations"}, (
+                f"{fn.name} uses {sorted(used)}: word matching outside the veto")
+
+    from occam.equiv import Pair, Verdict
+    vetoed = Pair(id="P0000", lens="claim", a="x", b="y", text_a="x", text_b="y",
+                  veto="numbers differ: 50")
+    assert not Verdict(pair=vetoed, forward="same", backward="same").same
