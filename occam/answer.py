@@ -33,8 +33,8 @@ from .support import SupportResult, apply_support, support, support_from_replies
 from .status import MAX_AGE_DAYS, StatusResult, derive
 from .types import Status, rank
 
-__all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "assemble", "canonical",
-           "stored_run"]
+__all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
+           "canonical", "stored_run"]
 
 ARTIFACT_VERSION = 1
 
@@ -196,16 +196,10 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     With a calibration, the answer also carries a conformal status set."""
     if artifact.version != ARTIFACT_VERSION:
         raise ValueError(f"artifact version {artifact.version}, expected {ARTIFACT_VERSION}")
-    snaps = [s.load() for s in artifact.snapshots]
+    snaps, readable, argued, judged = _argued(artifact)
     store = SnapshotStore()
     for s in snaps:
         store.put(s)
-    readable = [s for s in snaps if s.text.strip()]
-    argued = argue_from_replies(artifact.argue_replies, readable)
-    judged: Optional[SupportResult] = None
-    if artifact.support_replies:
-        argued, judged = apply_support(argued,
-                                       support_from_replies(artifact.support_replies, argued))
     attacked = attack_from_replies(artifact.attack_replies, argued.arguments)
     same: Optional[EquivResult] = None
     claim_group = None
@@ -218,6 +212,45 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
                      max_age_days=artifact.params.max_age_days, claim_group=claim_group)
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
                     same)
+
+
+def _argued(artifact: Artifact) -> tuple[list[Snapshot], list[Snapshot], ArgueResult,
+                                         Optional[SupportResult]]:
+    """The arguments as the rest of the pipeline sees them, from the artifact
+    alone. One function for replay and rejudge, so the pairs a re-judge asks
+    about are the pairs a replay will read its replies against."""
+    snaps = [s.load() for s in artifact.snapshots]
+    readable = [s for s in snaps if s.text.strip()]
+    argued = argue_from_replies(artifact.argue_replies, readable)
+    judged: Optional[SupportResult] = None
+    if artifact.support_replies:
+        argued, judged = apply_support(argued,
+                                       support_from_replies(artifact.support_replies, argued))
+    return snaps, readable, argued, judged
+
+
+def rejudge(artifact: Artifact, model: Model) -> tuple[Answer, Artifact]:
+    """Add the same-answer judge to a run stored without it (#172).
+
+    Every other stage is read from the artifact, not re-asked, so the only new
+    model output is the judge's. Refused when the artifact already carries a
+    judge — its replies would be replaced — and when the model is not the one
+    the run recorded, since `params.model` names who wrote every reply in it."""
+    if artifact.params.judge_same:
+        raise ValueError("this run already went through the same-answer judge")
+    if model.name != artifact.params.model:
+        raise ValueError(f"run was made by {artifact.params.model!r}; rejudging with "
+                         f"{model.name!r} would misattribute the judge's replies")
+    _, readable, argued, _ = _argued(artifact)
+    replies: list[str] = []
+    if readable:
+        replies = judge_same(model, artifact.question,
+                             candidate_pairs(argued, artifact.question),
+                             temperature=artifact.params.t_same)
+    judged = artifact.model_copy(update={
+        "params": artifact.params.model_copy(update={"judge_same": True}),
+        "same_replies": tuple(replies)})
+    return replay(judged), judged
 
 
 def canonical(answer: Answer) -> str:
