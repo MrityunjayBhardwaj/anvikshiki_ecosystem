@@ -5,6 +5,10 @@
     python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
+    python -m occam probe-same [--out FILE]  # the same-answer judge on its probe, live (#172)
+    python -m occam probe-same --fill FILE --out NEW   # re-ask only its unanswered calls, live
+    python -m occam score-same FILE          # re-score a stored probe-same run, no model
+    python -m occam rejudge DIR --out DIR    # add the same-answer judge to stored runs, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
@@ -73,6 +77,84 @@ def _refuse_overwrite(paths: list[Path]) -> bool:
     return bool(held)
 
 
+def _report_probe(probe, kill_criteria) -> int:
+    from .sameprobe import score
+    res, rows = score(probe)
+    print(f"model {probe.model}, temperature {probe.temperature}, as of {probe.as_of}; "
+          f"{len(probe.pairs)} pairs, {len(probe.replies)} calls, "
+          f"{len(probe.failures)} calls failed")
+    print(f"{'source':6} {'lens':8} {'expect':9} {'kind':26} {'pairs':>5} {'veto':>5} "
+          f"{'lost':>5} {'judged':>6} {'MERGED':>6} {'apart':>5} {'c_tell':>6} "
+          f"{'orders≠':>7} {'malf':>5}")
+    for r in rows:
+        print(f"{r['source']:6} {r['lens']:8} {r['expected']:9} {r['kind']:26} "
+              f"{r['pairs']:5} {r['vetoed']:5} {r['unanswered']:5} {r['judged']:6} "
+              f"{r['merged']:6} {r['apart']:5} {r['cannot_tell']:6} "
+              f"{r['orders_disagree']:7} {r['malformed']:5}")
+    for want, what in (("different", "WRONG MERGES (the dangerous direction)"),
+                       ("same", "missed merges")):
+        for src in ("flip", "paws"):
+            rs = [r for r in rows if r["source"] == src and r["expected"] == want]
+            if not rs:
+                continue
+            n = sum(r["pairs"] for r in rs)
+            bad = (sum(r["merged"] for r in rs) if want == "different"
+                   else sum(r["vetoed"] + r["apart"] for r in rs))
+            print(f"{what}, {src}: {bad} of {n} expected-{want} pairs "
+                  f"({sum(r['unanswered'] for r in rs)} unanswered)")
+    for r in rows:
+        if r["expected"] == "different" and r["merged_ids"]:
+            by = {pp.pair.id: pp for pp in probe.pairs}
+            for pid in r["merged_ids"]:
+                pp = by[pid]
+                print(f"  merged {pid} [{pp.origin}] {pp.pair.text_a!r}\n"
+                      f"         vs {pp.pair.text_b!r}")
+    gates = kill_criteria(rows)
+    print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
+    return 1 if gates else 0
+
+
+def _rejudge(src: Path, dst: Path) -> int:
+    """Add the same-answer judge to each stored run in `src`, write the result
+    to `dst`, and show what moved. Every other stage is read, not re-asked."""
+    from .answer import rejudge
+    from .model import OpenRouterModel
+    files = sorted(src.glob("q*.json"))
+    if _refuse_overwrite([dst / f.name for f in files]):
+        return 2
+    model = OpenRouterModel()
+    dst.mkdir(parents=True, exist_ok=True)
+    moved = rose = merged = judged = vetoed = disagree = 0
+    for f in files:
+        stored = json.loads(f.read_text())
+        before = stored["answer"]
+        answer, artifact = rejudge(Artifact.model_validate(stored["artifact"]), model)
+        (dst / f.name).write_text(stored_run(answer, artifact))
+        c = answer.counters
+        v, m, d = (c.get("same_question_vetoed"), c.get("same_question_merged"),
+                   c.get("same_question_order_disagree"))
+        vetoed += int(v.n) if v else 0
+        judged += (v.of - int(v.n)) if v else 0
+        merged += int(m.n) if m else 0
+        disagree += int(d.n) if d else 0
+        b_ag, a_ag = before["counters"]["agree_frac"], c["agree_frac"]
+        b_st = "abstained" if before["abstained"] else before["status"]
+        a_st = "abstained" if answer.abstained else answer.status.value
+        moved += b_st != a_st
+        rose += a_ag.n > b_ag["n"]
+        print(f"{f.stem}: positions {len(before['positions'])} → {len(answer.positions)}; "
+              f"agreement {b_ag['n']:g} → {a_ag.n:g} of {a_ag.of}; status {b_st} → {a_st}")
+        for p in answer.positions:
+            print(f"   [{p['samples']}] {p['conclusion']}")
+            for k in p.get("kept_apart", []):
+                print(f"       kept apart from: {k['from'][:80]} — {k['why']}")
+    print(f"\nquestion-lens pairs: {judged} judged, {vetoed} vetoed; merged {merged} of "
+          f"{judged} judged; orders disagreed on {disagree} of {judged}")
+    print(f"agreement rose in {rose} of {len(files)}; statuses moved in {moved} of {len(files)}")
+    print(f"artifacts: {dst}/")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="occam")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -94,6 +176,18 @@ def main(argv: list[str] | None = None) -> int:
                     help="turn off the same-answer judge (on by default)")
     ct.add_argument("--out")
     sub.add_parser("probe-judge")
+    ps = sub.add_parser("probe-same")
+    ps.add_argument("--out")
+    ps.add_argument("--runs", default="traces/occam/run2",
+                    help="stored runs whose answer conclusions are flipped")
+    ps.add_argument("--workers", type=int, default=8)
+    ps.add_argument("--fill", help="a stored probe-same run: re-ask only the calls that "
+                                   "never returned a reply, and write the result to --out")
+    ss = sub.add_parser("score-same")
+    ss.add_argument("file")
+    rj = sub.add_parser("rejudge")
+    rj.add_argument("dir")
+    rj.add_argument("--out", required=True)
     ms = sub.add_parser("measure")
     ms.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
@@ -148,6 +242,44 @@ def main(argv: list[str] | None = None) -> int:
               f"non-supporting pairs; false rejections {false_rej} of {len(pos)} supporting "
               f"pairs; cannot_tell {unsure} of {len(rows)}")
         return 0
+
+    if args.cmd in ("probe-same", "score-same"):
+        from .sameprobe import (ProbeRun, flip_pairs, kill_criteria, paws_pairs,
+                                run_conclusions, run_probe)
+        if args.cmd == "probe-same" and args.fill:
+            from .model import OpenRouterModel
+            from .sameprobe import fill
+            if not args.out:
+                print("--fill needs --out: a stored run is never rewritten", file=sys.stderr)
+                return 2
+            out = Path(args.out)
+            if _refuse_overwrite([out]):
+                return 2
+            before = ProbeRun.model_validate_json(Path(args.fill).read_text())
+            model = OpenRouterModel(before.model.removeprefix("openrouter/"))
+            probe = fill(model, before, at=datetime.now(timezone.utc).isoformat(),
+                         workers=min(args.workers, 2))
+            out.write_text(probe.model_dump_json(indent=1))
+            print(f"filled {len(probe.filled)} calls from {args.fill}; "
+                  f"{len(probe.failures)} still failed; artifact: {out}")
+        elif args.cmd == "probe-same":
+            now = datetime.now(timezone.utc)
+            out = Path(args.out or f"traces/occam/probe-same-{now:%Y%m%dT%H%M%SZ}.json")
+            if _refuse_overwrite([out]):
+                return 2
+            from .model import OpenRouterModel
+            pairs = flip_pairs(run_conclusions(Path(args.runs))) + paws_pairs()
+            probe = run_probe(OpenRouterModel(), pairs, as_of=now.isoformat(),
+                              workers=args.workers)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(probe.model_dump_json(indent=1))
+            print(f"artifact: {out}")
+        else:
+            probe = ProbeRun.model_validate_json(Path(args.file).read_text())
+        return _report_probe(probe, kill_criteria)
+
+    if args.cmd == "rejudge":
+        return _rejudge(Path(args.dir), Path(args.out))
 
     if args.cmd == "measure":
         from .controls import FACTUAL_QUESTIONS

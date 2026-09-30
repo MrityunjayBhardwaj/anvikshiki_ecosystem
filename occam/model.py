@@ -38,7 +38,7 @@ class OpenRouterModel:
 
     def __init__(self, model: str = "z-ai/glm-5.2", *,
                  api_key: Optional[str] = None, timeout: float = 240.0,
-                 max_tokens: int = 8000) -> None:
+                 max_tokens: int = 8000, empty_retries: int = 2) -> None:
         self.name = f"openrouter/{model}"
         self._model = model
         self._key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
@@ -50,8 +50,26 @@ class OpenRouterModel:
             )
         self._timeout = timeout
         self._max_tokens = max_tokens
+        self._empty_retries = empty_retries
 
     def complete(self, prompt: str, *, temperature: float) -> str:
+        """The model's reply, never an empty one.
+
+        An empty reply is the model saying nothing, not the model saying
+        something unreadable. Returned as "", every stage would parse it as
+        malformed and act on that — a pair kept apart, a sample dropped — so
+        "could not ask" would print as a decision (#175). It is asked again,
+        and if it stays empty the call fails, loudly, like any other failed
+        call."""
+        finish = None
+        for _ in range(1 + self._empty_retries):
+            reply, finish = self._once(prompt, temperature)
+            if reply.strip():
+                return reply
+        raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
+                           f"(finish_reason {finish!r})")
+
+    def _once(self, prompt: str, temperature: float) -> tuple[str, Any]:
         payload = json.dumps({
             "model": self._model,
             "messages": [{"role": "user", "content": prompt}],
@@ -68,7 +86,8 @@ class OpenRouterModel:
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"{self.name}: HTTP {e.code}: {e.read()[:300]!r}") from e
         try:
-            return body["choices"][0]["message"]["content"] or ""
+            choice = body["choices"][0]
+            return choice["message"]["content"] or "", choice.get("finish_reason")
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"{self.name}: unexpected response {str(body)[:300]}") from e
 
