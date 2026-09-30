@@ -48,7 +48,7 @@ from .types import Pramana
 
 __all__ = [
     "Argument", "ArgueResult", "KINDS", "PRAMANA_OF_KIND",
-    "argue", "argue_from_replies", "argue_prompt", "norm_conclusion",
+    "argue", "argue_from_replies", "argue_prompt", "norm_conclusion", "adds_question_number",
 ]
 
 Kind = Literal["quote", "inference", "analogy"]
@@ -170,6 +170,10 @@ def argue_prompt(question: str, snapshots: Sequence[Snapshot],
         "- Every inference must list the earlier steps it follows from. "
         "Use kind \"analogy\" only for a step that reasons by comparison.\n"
         "- Conclusions are one short sentence each.\n"
+        "- A quote step's conclusion says only what its quote says. Do not repeat "
+        "details from the question (a date, a place, a name) unless the quote itself "
+        "states them; if the answer needs such a detail, quote the passage that "
+        "states it as a step of its own.\n"
         "- If the sources do not answer the question, return "
         '{"answer": null, "steps": []}. Do not use outside knowledge.\n',
         f"QUESTION: {question}\n",
@@ -335,3 +339,22 @@ def argue_from_replies(replies: Sequence[str],
         answer_notes=tuple(notes), located=tuple(located),
         malformed=tuple(malformed), dropped=tuple(dropped), cascade=tuple(cascade),
     )
+
+
+_EDGE = ".,;:!?\"'()[]"
+
+
+def _digit_tokens(text: str) -> set[str]:
+    """Whole-number tokens, read by splitting on whitespace — no pattern
+    matching; "1940s" and "1,000" are not read as numbers. Used to count,
+    never to decide."""
+    return {t.strip(_EDGE) for t in text.split() if t.strip(_EDGE).isdigit()}
+
+
+def adds_question_number(question: str, a: "Argument") -> bool:
+    """A quote argument whose conclusion carries a number from the question
+    that its quote does not state (#161): the support judge cannot vouch for
+    it, and it must not — the question's premise may be false."""
+    # Argument guarantees a quote carries a span and nothing else does.
+    return a.kind == "quote" and bool(
+        (_digit_tokens(a.conclusion) & _digit_tokens(question)) - _digit_tokens(a.span.quote))

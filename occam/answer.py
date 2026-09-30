@@ -20,7 +20,7 @@ from typing import Any, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .argue import ArgueResult, argue, argue_from_replies, norm_conclusion
+from .argue import ArgueResult, adds_question_number, argue, argue_from_replies, norm_conclusion
 from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
@@ -68,6 +68,10 @@ class Params(BaseModel):
     # did: exact-wording groups, no new fields.
     judge_same: bool = True
     t_same: float = 0.0
+    # Which argue instruction wrote the replies. 2 (#161): a quote's conclusion
+    # does not repeat the question's details. An artifact without the field
+    # was argued under 1, and shows no counter that 2 introduced.
+    argue_prompt: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -130,6 +134,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "judge_same" not in data["params"]:
             data = {**data, "params": {**data["params"], "judge_same": False}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "argue_prompt" not in data["params"]:
+            data = {**data, "params": {**data["params"], "argue_prompt": 1}}
         return data
 
 
@@ -196,7 +203,7 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     With a calibration, the answer also carries a conformal status set."""
     if artifact.version != ARTIFACT_VERSION:
         raise ValueError(f"artifact version {artifact.version}, expected {ARTIFACT_VERSION}")
-    snaps, readable, argued, judged = _argued(artifact)
+    snaps, readable, raw, argued, judged = _argued(artifact)
     store = SnapshotStore()
     for s in snaps:
         store.put(s)
@@ -211,22 +218,23 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
                      max_age_days=artifact.params.max_age_days, claim_group=claim_group)
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
-                    same)
+                    same, raw)
 
 
 def _argued(artifact: Artifact) -> tuple[list[Snapshot], list[Snapshot], ArgueResult,
-                                         Optional[SupportResult]]:
+                                         ArgueResult, Optional[SupportResult]]:
     """The arguments as the rest of the pipeline sees them, from the artifact
-    alone. One function for replay and rejudge, so the pairs a re-judge asks
-    about are the pairs a replay will read its replies against."""
+    alone — and as argued, before support dropped any. One function for replay
+    and rejudge, so the pairs a re-judge asks about are the pairs a replay will
+    read its replies against."""
     snaps = [s.load() for s in artifact.snapshots]
     readable = [s for s in snaps if s.text.strip()]
-    argued = argue_from_replies(artifact.argue_replies, readable)
+    raw = argued = argue_from_replies(artifact.argue_replies, readable)
     judged: Optional[SupportResult] = None
     if artifact.support_replies:
         argued, judged = apply_support(argued,
                                        support_from_replies(artifact.support_replies, argued))
-    return snaps, readable, argued, judged
+    return snaps, readable, raw, argued, judged
 
 
 def rejudge(artifact: Artifact, model: Model) -> tuple[Answer, Artifact]:
@@ -241,7 +249,7 @@ def rejudge(artifact: Artifact, model: Model) -> tuple[Answer, Artifact]:
     if model.name != artifact.params.model:
         raise ValueError(f"run was made by {artifact.params.model!r}; rejudging with "
                          f"{model.name!r} would misattribute the judge's replies")
-    _, readable, argued, _ = _argued(artifact)
+    _, readable, _, argued, _ = _argued(artifact)
     replies: list[str] = []
     if readable:
         replies = judge_same(model, artifact.question,
@@ -327,7 +335,8 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
              argued: ArgueResult, attacked: AttackResult, derived: StatusResult,
              calibration: Optional[Calibration] = None,
              judged: Optional[SupportResult] = None,
-             same: Optional[EquivResult] = None) -> Answer:
+             same: Optional[EquivResult] = None,
+             raw: Optional[ArgueResult] = None) -> Answer:
     by_id = argued.by_id()
     statuses = derived.statuses
     sources = {s.id: s for s in snaps}
@@ -473,6 +482,14 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                                  of=len(judged.verdicts) if judged else 0,
                                  population="quote arguments judged (arguments lost with them)"),
     }
+    if artifact.params.argue_prompt >= 2 and raw is not None:
+        # Counted over the arguments as argued, before support dropped any:
+        # the dropped ones are the case this measures (#161). Shown at zero too.
+        quotes = [a for a in raw.arguments if a.kind == "quote"]
+        counters["question_number_added"] = Count(
+            n=sum(adds_question_number(artifact.question, a) for a in quotes), of=len(quotes),
+            population="quote arguments whose conclusion carries a number from the question "
+                       "that the quote does not state (before the support judge)")
     if same is not None:
         # Only with the judge, like the position fields (see there). Merged
         # samples may be less precise than the answer shown, so the count says
