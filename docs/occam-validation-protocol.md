@@ -255,3 +255,41 @@ q03 3 → 1; q01 merges (the year is the question's); agreement rises in at most
 about 5 of 10; 0 statuses move. The earlier "q10 stays ≥ 2" is superseded by the
 consistency decision on #172. The "at most 5" prior disagrees with my own labels
 (all same): it records that I expected the judge to be stricter than I am.
+
+### Results — 2026-09-30, read against the predictions above
+
+**Probe** (`traces/occam/probe-same-a3.json`, 500 calls at 8 at a time; 7 calls
+unanswered — 4 × HTTP 402, 3 empty — re-asked into
+`traces/occam/probe-same-a3-filled.json`, the other 493 replies byte-identical):
+
+| figure | result | held out? |
+|---|---|---|
+| flips merged (wrong merges) | **0 of 105** (52 vetoed; 0 of the 53 the judge saw) | no — same hand as the prompt |
+| PAWS non-paraphrases merged (wrong merges) | **1 of 100** (id 5691) — limit 5 | yes |
+| PAWS paraphrases kept apart (missed merges) | **48 of 100** (1 vetoed, 47 judged apart) | yes |
+| orders disagreed | 3 of 11 question-lens cause reversals; 11 of 99 and 2 of 98 judged PAWS pairs | — |
+| malformed | 1 PAWS reply (broken JSON) | — |
+
+**Kill criteria: none triggered.** The judge stays on by default.
+
+The 3 order disagreements on reversed cause and effect are the closest call in
+the probe: under the question lens the judge said `same` in **one** order for 3
+of 11 reversals, and only the both-orders rule kept them apart. 48 missed merges
+on PAWS paraphrases is the claim lens's strictness at work (e.g. it splits
+"novelist" from "author"), reported, not gated.
+
+**Run 2, re-judged** (`traces/occam/run2-judged/`, 54 calls; rejudged artifacts
+replay 10 of 10): 27 of 27 judged pairs merged, 0 order disagreements; missed 1
+of 28 — the known false veto on q04. Wrong merges: none possible, denominator 0.
+
+| prediction | result |
+|---|---|
+| q06 3 → 1 | ✓ |
+| q03 3 → 1 | ✓ |
+| q01 merges | ✓ |
+| agreement rises in at most about 5 of 10 | **✗ — rose in 9 of 10** (q04 held by its veto) |
+| 0 statuses move | ✓ (by construction) |
+
+The failed prior is the finding: the judge is as lenient as my own labels, not
+stricter. Taken with the 3 one-order `same` verdicts on reversed causes, the
+question lens leans toward merging, and both orders are what keep it honest.
