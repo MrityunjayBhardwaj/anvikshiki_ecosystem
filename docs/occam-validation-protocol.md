@@ -344,3 +344,33 @@ and that is the headline. New for this run: a live call that fails (including an
 empty reply that stays empty, #175) is reported with the question it cost, never
 dropped silently; a question lost that way is reported, not re-asked into the
 same folder.
+
+### Results — 2026-09-30, read against the predictions above
+
+Run 3 (`traces/occam/run3/`, `traces/occam/run3-controls/`; all 13 artifacts
+replay to their stored answers with no key):
+
+| prediction | result |
+|---|---|
+| `question_number_added` 0 (baseline 1 of 36) | ✓ **0 of 42** quote arguments (q01 0 of 5, q04 0 of 7 — the only two questions it can fire on) |
+| no support drop of a quote carrying a question number | ✓ 0 |
+| `support_dropped` ≤ 10% | ✓ **0 of 42** |
+| abstention ≤ 3 of 10 | ✓ 0 of 10 |
+| `established` 0 of 10 (by construction) | ✓ 9 `hypothesis`, 1 `open` |
+| positive answers "1987" | ✓ `hypothesis` |
+| negative abstains | ✓ |
+| adversarial adopts at `hypothesis`, single host | ✓ bound by "rests on a single source (controls.occam.invalid)" |
+
+**Kill criteria: none triggered.**
+
+**One real instance, read:** q04's answer still says "in 1940" — but now as an
+*inference* over three quotes, one of which states the date ("collapsed into
+Puget Sound the morning of November 7, 1940"). That is the instruction working as
+written: the detail got its own quote.
+
+**q04 is `open`, and that is not #161.** Two Wikipedia pages disagree: one says
+the bridge fell "under high wind conditions", the other that "moderate winds
+produced aeroelastic flutter". Both quotes are verbatim; the attack stage paired
+them as mutual undermining, and the answer, which says "high winds", is rebutted
+by the "moderate" quotes. `open` is the pipeline reporting a disagreement between
+its sources, as it should.
