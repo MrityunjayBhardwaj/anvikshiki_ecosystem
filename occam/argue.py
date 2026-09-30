@@ -37,7 +37,7 @@ a fuzzy merge here would bring back the similarity matcher Occam removes.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -49,6 +49,7 @@ from .types import Pramana
 __all__ = [
     "Argument", "ArgueResult", "KINDS", "PRAMANA_OF_KIND",
     "argue", "argue_from_replies", "argue_prompt", "norm_conclusion", "adds_question_number",
+    "unquoted_question_numbers",
 ]
 
 Kind = Literal["quote", "inference", "analogy"]
@@ -351,10 +352,32 @@ def _digit_tokens(text: str) -> set[str]:
     return {t.strip(_EDGE) for t in text.split() if t.strip(_EDGE).isdigit()}
 
 
+def unquoted_question_numbers(question: str, aid: str,
+                              by_id: Mapping[str, "Argument"]) -> set[str]:
+    """The numbers from the question that `aid`'s conclusion carries and no
+    quote it rests on states, directly or through other steps (#161, #179).
+
+    A count's predicate, never a decision. Nothing needs to cap on it: a
+    conclusion carrying a number its quote lacks is not literally in the
+    quote, and every inference is the model's step, so status.py's ceilings
+    already hold such an argument below `established` (a law checks it)."""
+    wanted = _digit_tokens(by_id[aid].conclusion) & _digit_tokens(question)
+    stated: set[str] = set()
+    todo, seen = [aid], set()
+    while wanted and todo:
+        a = by_id[todo.pop()]
+        if a.id in seen:
+            continue
+        seen.add(a.id)
+        # Argument guarantees a quote carries a span and nothing else does.
+        if a.span is not None:
+            stated |= _digit_tokens(a.span.quote)
+        todo.extend(a.sub_arguments)
+    return wanted - stated
+
+
 def adds_question_number(question: str, a: "Argument") -> bool:
     """A quote argument whose conclusion carries a number from the question
     that its quote does not state (#161): the support judge cannot vouch for
     it, and it must not — the question's premise may be false."""
-    # Argument guarantees a quote carries a span and nothing else does.
-    return a.kind == "quote" and bool(
-        (_digit_tokens(a.conclusion) & _digit_tokens(question)) - _digit_tokens(a.span.quote))
+    return a.kind == "quote" and bool(unquoted_question_numbers(question, a.id, {a.id: a}))
