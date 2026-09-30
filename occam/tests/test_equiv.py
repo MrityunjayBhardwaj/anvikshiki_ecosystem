@@ -55,24 +55,26 @@ def pair(pid="P0000", lens="question", a="a", b="b", v=""):
     return Pair(id=pid, lens=lens, a=a, b=b, text_a=a, text_b=b, veto=v)
 
 
-def reply(*items):
-    return json.dumps({"judgments": [{"id": i, "verdict": v, "differs_on": d,
-                                      "asked_by_question": True} for i, v, d in items]})
+def v(verdict, differs_on=""):
+    return json.dumps({"verdict": verdict, "differs_on": differs_on, "asked_by_question": True})
+
+
+SAME = v("same")
 
 
 def test_a_merge_needs_same_in_both_orders():
     p = pair()
-    assert equiv_from_replies([reply(("P0000", "same", "")), reply(("P0000", "same", ""))], [p]).verdicts[0].same
-    one = equiv_from_replies([reply(("P0000", "same", "")), reply(("P0000", "different", "date"))], [p])
+    assert equiv_from_replies([SAME, SAME], [p]).verdicts[0].same
+    one = equiv_from_replies([SAME, v("different", "date")], [p])
     assert not one.verdicts[0].same
     assert one.verdicts[0].why_apart == "the two orders disagreed (same / different)"
 
 
 @pytest.mark.parametrize("replies", [
-    [reply(("P0000", "cannot_tell", "")), reply(("P0000", "cannot_tell", ""))],
-    ["not json", reply(("P0000", "same", ""))],
-    [reply(("P0000", "same", ""))],                            # second order missing
-    [reply(("P9999", "same", "")), reply(("P9999", "same", ""))],  # an id it was never asked
+    [v("cannot_tell"), v("cannot_tell")],
+    ["not json", SAME],
+    [SAME],                                                    # second order missing
+    [json.dumps({"verdict": "identical"}), SAME],              # a verdict it was never offered
 ])
 def test_doubt_malformed_or_missing_never_merges(replies):
     assert not equiv_from_replies(replies, [pair()]).verdicts[0].same
@@ -134,11 +136,11 @@ def run_with(same_replies, judge_same_on=True):
 
 
 def all_same(n):
-    return reply(*[(f"P{i:04d}", "same", "") for i in range(n)])
+    return [SAME] * (2 * n)
 
 
 def test_three_wordings_judged_same_are_one_position_with_three_samples():
-    ans, model = run_with([all_same(3), all_same(3)])
+    ans, model = run_with(all_same(3))
     assert len(ans.positions) == 1 and ans.positions[0]["samples"] == 3
     assert ans.counters["agree_frac"].n == 3
     assert sorted(ans.positions[0]["wordings"]) == sorted(WORDINGS)
@@ -148,20 +150,17 @@ def test_three_wordings_judged_same_are_one_position_with_three_samples():
 def test_the_merge_replays_with_no_model():
     argue = [argue_reply([{**VIABLE, "conclusion": w}], "q1") for w in WORDINGS]
     model = ScriptedModel([QUERIES] + argue + [SUPPORT_ALL] + [attacks()] * 3
-                          + [all_same(3), all_same(3)])
+                          + all_same(3))
     ans, artifact = run("Is growth alone enough to make a business viable?", model,
                         params=Params(k_argue=3, k_attack=3, judge_same=True),
                         as_of=AS_OF, http_get=wiki)
     stored = Artifact.model_validate_json(artifact.model_dump_json())
-    assert len(stored.same_replies) == 2
+    assert len(stored.same_replies) == 6
     assert canonical(replay(stored)) == canonical(ans)
 
 
 def test_kept_apart_says_why():
-    ans, _ = run_with([reply(("P0000", "different", "adds 'only'"), ("P0001", "same", ""),
-                             ("P0002", "same", "")),
-                       reply(("P0000", "different", "adds 'only'"), ("P0001", "same", ""),
-                             ("P0002", "same", ""))])
+    ans, _ = run_with([v("different", "adds 'only'")] * 2 + [SAME] * 4)
     whys = [k["why"] for p in ans.positions for k in p["kept_apart"]]
     assert "adds 'only'" in whys
     assert ans.counters["agree_frac"].n < 3
@@ -177,10 +176,9 @@ def test_without_the_judge_nothing_new_appears():
 
 
 def test_the_judges_reply_cannot_set_a_status():
-    sneaky = json.dumps({"judgments": [{"id": f"P{i:04d}", "verdict": "same", "status": "established"}
-                                       for i in range(3)]})
-    ans, _ = run_with([sneaky, sneaky])
-    plain, _ = run_with([all_same(3), all_same(3)])
+    sneaky = json.dumps({"verdict": "same", "status": "established"})
+    ans, _ = run_with([sneaky] * 6)
+    plain, _ = run_with(all_same(3))
     assert ans.status == plain.status and canonical(ans) == canonical(plain)
 
 
@@ -210,3 +208,30 @@ def test_a_question_lens_merge_never_reaches_corroboration():
     """Replay builds claim groups from claim-lens verdicts only."""
     r = EquivResult(verdicts=(verdict("a", "b", True),), malformed=())    # question lens
     assert r.groups("claim", ["a", "b"]) == {"a": "a", "b": "b"}
+
+
+# ── each comparison fresh (#174) ─────────────────────────────
+
+def test_every_call_sees_one_pair_and_nothing_else():
+    # Statements distinctive enough that no prompt wording can contain them.
+    A, B, C, D, E, F = (f"Statement {w} zq." for w in
+                        ("alpha", "bravo", "charlie", "delta", "echo", "foxtrot"))
+    ps = [pair("P0000", a=A, b=B), pair("P0001", a=C, b=D, v="numbers differ: 5"),
+          pair("P0002", a=E, b=F)]
+    m = ScriptedModel([SAME] * 4)
+    judge_same(m, "Q?", ps)
+    assert len(m.prompts) == 4                               # 2 open pairs x 2 orders
+    for prompt in m.prompts:
+        assert prompt.count("\nX: ") == 1 and prompt.count("\nY: ") == 1
+    assert f"X: {A}" in m.prompts[0] and f"X: {B}" in m.prompts[1] and f"X: {E}" in m.prompts[2]
+    own = [{A, B}, {A, B}, {E, F}, {E, F}]
+    for prompt, mine in zip(m.prompts, own):
+        for other in {A, B, C, D, E, F} - mine:
+            assert other not in prompt, "a prompt carries another pair's statement"
+
+
+def test_one_malformed_reply_costs_only_its_own_pair():
+    ps = [pair("P0000", a="a", b="b"), pair("P0001", a="c", b="d")]
+    r = equiv_from_replies(["garbage", v("different"), SAME, SAME], ps)
+    assert not r.verdicts[0].same and r.verdicts[1].same     # P0001 still reads replies 2 and 3
+    assert r.malformed == ((0, "reply for P0000 is not a JSON object with a verdict"),)

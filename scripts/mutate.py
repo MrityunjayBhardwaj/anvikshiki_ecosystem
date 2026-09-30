@@ -5,7 +5,8 @@
 MUTATIONS.json is a list of {"name", "file", "old", "new"}. Each `old` must
 occur in `file` exactly once, or the run stops before touching anything: an
 anchor that matches nothing is a mutation that never happened, and it would
-read as "survived". Bytecode is disabled and __pycache__ removed first, because
+read as "survived". The unmutated suite must be green first, or every
+mutation would read as killed. Bytecode is disabled and __pycache__ removed first, because
 a same-size edit restored within the same second reuses the mutated .pyc.
 The file is restored byte-for-byte after each run, and a mutation that changes
 no line stops the run, so a zero-line diff cannot pass as a verdict.
@@ -20,6 +21,14 @@ for m in muts:
     if n != 1:
         sys.exit(f"{m['name']}: anchor matched {n} times in {m['file']}")
 env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+for d in Path("occam").rglob("__pycache__"):
+    shutil.rmtree(d)
+base = subprocess.run([sys.executable, "-m", "pytest", "occam", "-q", "-p", "no:cacheprovider"],
+                      capture_output=True, text=True, env=env)
+if base.returncode != 0:
+    # A red baseline kills every mutation, and every "KILLED" would be a lie.
+    sys.exit("the suite is red before any mutation, so no verdict would mean "
+             "anything; fix it first:\n" + base.stdout[-2000:])
 killed = 0
 for m in muts:
     for d in Path("occam").rglob("__pycache__"):

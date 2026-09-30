@@ -19,7 +19,8 @@ Who decides
 ───────────
 The mechanism picks the pairs, vetoes before any model sees them, groups, and
 counts. The model answers one narrow question per pair — same, different or
-cannot tell — in a fresh call, asked in both orders. It never sets a status.
+cannot tell — in a fresh call that sees that pair and nothing else (#174),
+asked in both orders. It never sets a status.
 
     veto          numbers differ, or a negation word is on one side only.
                   Under the question lens, numbers the question itself
@@ -140,35 +141,39 @@ _LENS_RULE = {
 }
 
 
-def equiv_prompt(question: str, pairs: Sequence[Pair], *, flip: bool = False) -> str:
-    parts = [
-        "For each item, compare statement X with statement Y under the LENS given.\n\n"
+def equiv_prompt(question: str, pair: Pair, *, flip: bool = False) -> str:
+    """One pair, nothing else: each comparison is made fresh (#174), so no
+    judgement is made in the light of another."""
+    x, y = (pair.text_b, pair.text_a) if flip else (pair.text_a, pair.text_b)
+    return "\n".join([
+        "Compare statement X with statement Y under the LENS given.\n\n"
         "- same: under that lens they say the same thing, only in different words.\n"
         "- different: under that lens one says something the other does not, or "
         "they conflict — including a different number, date, direction or a "
         "negation, and including one being more specific than the other.\n"
         "- cannot_tell: you cannot decide.\n\n"
         "Judge only what the statements say, not whether they are true.\n"
-        'Return JSON only: {"judgments": [{"id": "P0000", "verdict": "same", '
+        'Return JSON only: {"verdict": "same", '
         '"differs_on": "<the detail that differs, or empty>", '
-        '"asked_by_question": false}]}\n',
+        '"asked_by_question": false}\n',
         f"QUESTION: {question}\n",
-    ]
-    for p in pairs:
-        x, y = (p.text_b, p.text_a) if flip else (p.text_a, p.text_b)
-        parts.append(f"--- {p.id}\n{_LENS_RULE[p.lens]}\nX: {x}\nY: {y}\n")
-    return "\n".join(parts)
+        _LENS_RULE[pair.lens],
+        f"X: {x}",
+        f"Y: {y}\n",
+    ])
 
 
 def judge_same(model: Model, question: str, pairs: Sequence[Pair], *,
                temperature: float = 0.0) -> list[str]:
-    """Two fresh calls over the pairs no veto ruled out: X/Y, then Y/X.
-    No call at all when there is nothing to judge."""
-    open_pairs = [p for p in pairs if not p.veto]
-    if not open_pairs:
-        return []
-    return [model.complete(equiv_prompt(question, open_pairs, flip=f), temperature=temperature)
-            for f in (False, True)]
+    """Two fresh calls per pair no veto ruled out — X/Y, then Y/X — in pair
+    order. No call at all when there is nothing to judge."""
+    replies: list[str] = []
+    for p in pairs:
+        if not p.veto:
+            for flip in (False, True):
+                replies.append(model.complete(equiv_prompt(question, p, flip=flip),
+                                              temperature=temperature))
+    return replies
 
 
 class Verdict(BaseModel):
@@ -221,35 +226,30 @@ class EquivResult(BaseModel):
         return out
 
 
-def _read(reply: str, ids: set[str]) -> Optional[dict[str, dict]]:
+def _read(reply: str) -> Optional[dict]:
     obj = extract_json(reply)
-    items = obj.get("judgments") if isinstance(obj, dict) else None
-    if not isinstance(items, list):
-        return None
-    seen: dict[str, dict] = {}
-    for it in items:
-        if (isinstance(it, dict) and it.get("id") in ids
-                and it.get("verdict") in EQUIV_VERDICTS and it["id"] not in seen):
-            seen[it["id"]] = it
-    return seen
+    if isinstance(obj, dict) and obj.get("verdict") in EQUIV_VERDICTS:
+        return obj
+    return None
 
 
 def equiv_from_replies(replies: Sequence[str], pairs: Sequence[Pair]) -> EquivResult:
-    """Deterministic. replies[0] is the X/Y order, replies[1] the Y/X order."""
-    ids = {p.id for p in pairs if not p.veto}
+    """Deterministic. Replies are in pair order over the pairs no veto ruled
+    out, each pair's X/Y reply then its Y/X reply."""
     malformed: list[tuple[int, str]] = []
-    read: list[dict[str, dict]] = []
-    for i, r in enumerate(replies[:2]):
-        got = _read(r, ids)
-        if got is None:
-            malformed.append((i, "reply is not a JSON object with a judgments list"))
-            got = {}
-        read.append(got)
-    while len(read) < 2:
-        read.append({})
     verdicts = []
+    i = 0
     for p in pairs:
-        f, b = read[0].get(p.id), read[1].get(p.id)
+        f = b = None
+        if not p.veto:
+            got = []
+            for j in (i, i + 1):
+                r = _read(replies[j]) if j < len(replies) else None
+                if r is None and j < len(replies):
+                    malformed.append((j, f"reply for {p.id} is not a JSON object with a verdict"))
+                got.append(r)
+            f, b = got
+            i += 2
         asked = f.get("asked_by_question") if f else None
         verdicts.append(Verdict(
             pair=p, forward=f["verdict"] if f else None, backward=b["verdict"] if b else None,
