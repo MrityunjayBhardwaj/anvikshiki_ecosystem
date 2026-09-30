@@ -107,7 +107,10 @@ def test_every_feature_carries_its_denominator_and_population():
                 "punctuation_frac", "unresolvable_frac", "direct_drops", "cascade_drops",
                 "n_snapshots", "n_hosts", "oldest_days", "chain_depth", "pramana_floor",
                 "attack_density", "minority_attacks", "retrieval_hits",
-                "support_judged", "support_dropped", "support_cannot_tell", "support_cascade"}
+                "support_judged", "support_dropped", "support_cannot_tell", "support_cascade",
+                # the same-answer judge, on by default (#172)
+                "same_question_vetoed", "same_question_merged", "same_question_order_disagree",
+                "same_claim_vetoed", "same_claim_merged", "same_claim_order_disagree"}
     assert set(ans.counters) == expected
     for name, c in ans.counters.items():
         assert c.population, name

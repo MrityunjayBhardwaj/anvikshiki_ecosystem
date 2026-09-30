@@ -18,7 +18,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .argue import ArgueResult, argue, argue_from_replies, norm_conclusion
 from .attack import AttackResult, attack, attack_from_replies
@@ -62,10 +62,11 @@ class Params(BaseModel):
     t_attack: float = 0.2
     k_support: int = 1
     t_support: float = 0.0
-    # The same-answer judge (#172). Off unless asked for — the CLI asks — and
-    # False in every artifact made before it, so those replay exactly as they
+    # The same-answer judge (#172): on by default, a setting so it can be
+    # turned off (`--no-judge-same`). An artifact made before it has no such
+    # field and is read as False — see Artifact — so it replays exactly as it
     # did: exact-wording groups, no new fields.
-    judge_same: bool = False
+    judge_same: bool = True
     t_same: float = 0.0
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
@@ -119,6 +120,17 @@ class Artifact(BaseModel):
     support_replies: tuple[str, ...] = ()     # empty: support was never judged
     same_replies: tuple[str, ...] = ()        # the same-answer judge: X/Y, then Y/X
     attack_replies: tuple[str, ...]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _predates_the_judge(cls, data: Any) -> Any:
+        # Params.judge_same defaults to True for new runs. A stored artifact
+        # without the field was made before the judge existed; reading it as
+        # True would replay it through a stage it never ran (#172).
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "judge_same" not in data["params"]:
+            data = {**data, "params": {**data["params"], "judge_same": False}}
+        return data
 
 
 class Answer(BaseModel):

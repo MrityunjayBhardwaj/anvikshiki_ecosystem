@@ -265,3 +265,35 @@ def test_the_lens_rules_reach_the_judge():
     q_prompt, c_prompt = m.prompts[0], m.prompts[2]
     assert "less precise" in q_prompt and "more specific" not in q_prompt
     assert "more specific than the other" in c_prompt and "less precise" not in c_prompt
+
+
+# ── the setting (#172): on by default, off on request, old runs read as off ──
+
+def test_the_judge_is_on_by_default_and_recorded():
+    assert Params().judge_same is True
+
+
+def test_an_artifact_from_before_the_judge_is_read_as_judge_off():
+    _, art = run("Is growth alone enough to make a business viable?",
+                 ScriptedModel([QUERIES] + [argue_reply([VIABLE], "q1")] * 3 + [SUPPORT_ALL]
+                               + [attacks()] * 3),
+                 params=Params(k_argue=3, k_attack=3, judge_same=False), as_of=AS_OF, http_get=wiki)
+    old = json.loads(art.model_dump_json())
+    del old["params"]["judge_same"]                        # as every pre-#172 artifact is
+    assert Artifact.model_validate(old).params.judge_same is False
+
+
+def test_the_cli_switch_turns_it_off(monkeypatch, tmp_path):
+    import occam.__main__ as cli
+    seen = {}
+
+    def fake_run(question, model, **kw):
+        seen["params"] = kw["params"]
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli, "run", fake_run)
+    monkeypatch.setattr("occam.model.OpenRouterModel", lambda *a, **k: ScriptedModel([]))
+    for flag, expected in (([], True), (["--no-judge-same"], False)):
+        with pytest.raises(SystemExit):
+            cli.main(["ask", "q?", "--out", str(tmp_path / f"a{expected}.json")] + flag)
+        assert seen["params"].judge_same is expected
