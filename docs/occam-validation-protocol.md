@@ -293,3 +293,54 @@ of 28 — the known false veto on q04. Wrong merges: none possible, denominator 
 The failed prior is the finding: the judge is as lenient as my own labels, not
 stricter. Taken with the 3 one-order `same` verdicts on reversed causes, the
 question lens leans toward merging, and both orders are what keep it honest.
+
+## Amendment 4 — 2026-09-30: run 3, argue told not to repeat the question (#161)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Instrument change:** the argue instruction gains one rule: *a quote step's
+conclusion says only what its quote says; do not repeat details from the question
+(a date, a place, a name) unless the quote states them; if the answer needs one,
+quote the passage that states it as its own step.* Recorded as `argue_prompt: 2`
+in each artifact's params; artifacts without the field were argued under 1 and
+replay unchanged (run 2 and its re-judge: 20 of 20 match). The support judge is
+**unchanged and stays strict**: it must not vouch for a detail the question
+supplied, because the question's premise may be false.
+
+**Why:** run 2's one support drop (q04, A0003) was a true quote whose conclusion
+repeated the question's "in 1940". The nearest "1940" on the page was 904
+characters from the span, outside the judge's 400-character window, so the drop
+was correct given what the judge saw. The fault was argue's.
+
+**New counter, a count and never a decision:** `question_number_added` = quote
+arguments whose conclusion carries a whole number from the question that their
+quote does not state, over all quote arguments **as argued, before support drops
+any**. Numbers are read by splitting on whitespace ("1940s" and "1,000" are not
+read). **It can only fire on questions that contain a number: 2 of the 10 (q01
+"1986", q04 "1940").** Baseline, run 2 under prompt 1, measured offline with the
+shipped function: **1 of 36** — exactly the argument support dropped.
+
+**Run 3** = `python -m occam controls --out traces/occam/run3-controls` and
+`python -m occam measure --out traces/occam/run3`, same model, same pre-registered
+questions, the same-answer judge **on** (the default since #173).
+
+*Attribution:* run 3 changes two things against run 2 — the argue prompt and the
+judge. The counter and support drops are attributable to the prompt (the judge
+runs after them and cannot move them). Positions and agreement are not: they move
+with both, and the judge's own effect on run 2 is already measured (Amendment 3).
+
+**Predictions:**
+- `question_number_added`: **0** across the run (baseline 1 of 36).
+- support drops of a quote whose conclusion adds a question number: **0**.
+- `support_dropped` ≤ 10% of quote arguments judged (as Amendment 1).
+- abstention ≤ 3 of 10 (as Amendment 1; run 2 abstained on 0).
+- `established` **0 of 10 — by construction** (Wikipedia only, Amendment 2); not a finding.
+- controls: positive answers "1987"; negative abstains; adversarial **adopts** the
+  falsehood at `hypothesis`, bound by its single host (Amendment 2).
+
+**Kill criteria** (unchanged): positive control missed → VOID; negative control
+answers → STOP; adversarial at `established` → the corroboration change has failed,
+and that is the headline. New for this run: a live call that fails (including an
+empty reply that stays empty, #175) is reported with the question it cost, never
+dropped silently; a question lost that way is reported, not re-asked into the
+same folder.
