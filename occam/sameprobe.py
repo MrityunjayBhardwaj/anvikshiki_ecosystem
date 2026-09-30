@@ -51,7 +51,7 @@ from .equiv import EquivResult, Lens, Pair, equiv_from_replies, equiv_prompt, ve
 from .model import Model
 
 __all__ = ["ProbePair", "ProbeRun", "flips", "run_conclusions", "flip_pairs", "paws_pairs",
-           "run_probe", "score", "kill_criteria", "PAWS_SHA256", "PAWS_SEED", "PAWS_N"]
+           "run_probe", "fill", "score", "kill_criteria", "PAWS_SHA256", "PAWS_SEED", "PAWS_N"]
 
 Expected = Literal["same", "different"]
 
@@ -225,6 +225,8 @@ class ProbeRun(BaseModel):
     pairs: tuple[ProbePair, ...]
     replies: tuple[str, ...]
     failures: tuple[tuple[int, str], ...] = ()   # calls that never returned a reply
+    filled: tuple[int, ...] = ()                 # calls re-asked later by `fill`
+    filled_at: str = ""
 
 
 def run_probe(model: Model, pairs: Sequence[ProbePair], *, as_of: str,
@@ -232,11 +234,49 @@ def run_probe(model: Model, pairs: Sequence[ProbePair], *, as_of: str,
     """Each call fresh and independent — exactly the calls `judge_same` makes,
     X/Y then Y/X for each pair no veto ruled out — run concurrently and put
     back in order. A call that fails after retries is stored as an empty reply
-    (read as malformed, so the pair stays apart) and listed in `failures`, so
-    it is never counted as the judge keeping a pair apart."""
-    prompts = [equiv_prompt(pp.question, pp.pair, flip=flip)
-               for pp in pairs if not pp.pair.veto for flip in (False, True)]
+    and listed in `failures`; scoring reads it as unanswered, never as the
+    judge keeping a pair apart, and `fill` can ask it again."""
+    prompts = _prompts(pairs)
+    got = _ask(model, prompts, range(len(prompts)), temperature, workers, retries)
+    return ProbeRun(model=model.name, as_of=as_of, temperature=temperature,
+                    pairs=tuple(pairs), replies=tuple(got[i][0] for i in range(len(prompts))),
+                    failures=tuple((i, got[i][1]) for i in range(len(prompts)) if got[i][1]))
 
+
+def fill(model: Model, run: ProbeRun, *, at: str, workers: int = 2,
+         retries: int = 3) -> ProbeRun:
+    """Ask again only the calls that never returned a reply — failed, or
+    stored empty — with the same prompts, model and temperature. Every reply
+    that was returned is kept byte for byte, so nothing already judged can
+    change; the calls re-asked are listed in `filled`."""
+    if model.name != run.model:
+        raise ValueError(f"run was made by {run.model!r}; filling it with {model.name!r} "
+                         f"would mix two judges in one figure")
+    prompts = _prompts(run.pairs)
+    if len(prompts) != len(run.replies):
+        raise ValueError(f"{len(run.replies)} stored replies for {len(prompts)} prompts")
+    todo = sorted({i for i, _ in run.failures} |
+                  {i for i, r in enumerate(run.replies) if not r.strip()})
+    got = _ask(model, prompts, todo, run.temperature, workers, retries)
+    replies = list(run.replies)
+    for i in todo:
+        replies[i] = got[i][0]
+    return run.model_copy(update={
+        "replies": tuple(replies),
+        "failures": tuple((i, got[i][1]) for i in todo if got[i][1]),
+        "filled": tuple(sorted(set(run.filled) | set(todo))), "filled_at": at})
+
+
+def _prompts(pairs: Sequence[ProbePair]) -> list[str]:
+    """One function for a run and its fill, so a re-asked call is the call
+    that was asked."""
+    return [equiv_prompt(pp.question, pp.pair, flip=flip)
+            for pp in pairs if not pp.pair.veto for flip in (False, True)]
+
+
+def _ask(model: Model, prompts: Sequence[str], which, temperature: float, workers: int,
+         retries: int) -> dict[int, tuple[str, str]]:
+    """{call index: (reply, error)} for the calls in `which`."""
     def call(i: int) -> tuple[str, str]:
         err = ""
         for attempt in range(retries):
@@ -247,11 +287,9 @@ def run_probe(model: Model, pairs: Sequence[ProbePair], *, as_of: str,
                 time.sleep(2 ** attempt)
         return "", err
 
+    which = list(which)
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        got = list(ex.map(call, range(len(prompts))))
-    return ProbeRun(model=model.name, as_of=as_of, temperature=temperature,
-                    pairs=tuple(pairs), replies=tuple(r for r, _ in got),
-                    failures=tuple((i, e) for i, (_, e) in enumerate(got) if e))
+        return dict(zip(which, ex.map(call, which)))
 
 
 def _unanswered(run: ProbeRun) -> set[str]:

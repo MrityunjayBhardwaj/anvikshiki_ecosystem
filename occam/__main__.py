@@ -6,6 +6,7 @@
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam probe-same [--out FILE]  # the same-answer judge on its probe, live (#172)
+    python -m occam probe-same --fill FILE --out NEW   # re-ask only its unanswered calls, live
     python -m occam score-same FILE          # re-score a stored probe-same run, no model
     python -m occam rejudge DIR --out DIR    # add the same-answer judge to stored runs, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
@@ -180,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     ps.add_argument("--runs", default="traces/occam/run2",
                     help="stored runs whose answer conclusions are flipped")
     ps.add_argument("--workers", type=int, default=8)
+    ps.add_argument("--fill", help="a stored probe-same run: re-ask only the calls that "
+                                   "never returned a reply, and write the result to --out")
     ss = sub.add_parser("score-same")
     ss.add_argument("file")
     rj = sub.add_parser("rejudge")
@@ -243,7 +246,23 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd in ("probe-same", "score-same"):
         from .sameprobe import (ProbeRun, flip_pairs, kill_criteria, paws_pairs,
                                 run_conclusions, run_probe)
-        if args.cmd == "probe-same":
+        if args.cmd == "probe-same" and args.fill:
+            from .model import OpenRouterModel
+            from .sameprobe import fill
+            if not args.out:
+                print("--fill needs --out: a stored run is never rewritten", file=sys.stderr)
+                return 2
+            out = Path(args.out)
+            if _refuse_overwrite([out]):
+                return 2
+            before = ProbeRun.model_validate_json(Path(args.fill).read_text())
+            model = OpenRouterModel(before.model.removeprefix("openrouter/"))
+            probe = fill(model, before, at=datetime.now(timezone.utc).isoformat(),
+                         workers=min(args.workers, 2))
+            out.write_text(probe.model_dump_json(indent=1))
+            print(f"filled {len(probe.filled)} calls from {args.fill}; "
+                  f"{len(probe.failures)} still failed; artifact: {out}")
+        elif args.cmd == "probe-same":
             now = datetime.now(timezone.utc)
             out = Path(args.out or f"traces/occam/probe-same-{now:%Y%m%dT%H%M%SZ}.json")
             if _refuse_overwrite([out]):

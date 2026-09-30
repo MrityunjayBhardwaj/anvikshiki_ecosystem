@@ -299,3 +299,36 @@ def test_a_stored_empty_reply_scores_as_unanswered_not_kept_apart():
     flip = [r for r in rows if r["source"] == "flip"][0]   # F0 asked, F1 vetoed
     assert (flip["vetoed"], flip["unanswered"], flip["judged"], flip["apart"]) == (1, 1, 0, 0)
     assert any(g.startswith("INCOMPLETE") for g in kill_criteria(rows))
+
+
+# ── filling a run's unanswered calls ──────────────────────────
+
+def test_fill_asks_only_the_calls_that_never_returned_and_keeps_the_rest_byte_for_byte():
+    from occam.sameprobe import fill
+    first = run_probe(ByPrompt("zqgamma", fail_if="zqdelta"), probe_pairs(), as_of="t",
+                      retries=1)
+    stored = list(first.replies)
+    stored[0] = ""                                     # an empty reply, stored as such
+    first = first.model_copy(update={"replies": tuple(stored)})
+    asked = []
+
+    class Counting(ByPrompt):
+        def complete(self, prompt, *, temperature):
+            asked.append(prompt)
+            return super().complete(prompt, temperature=temperature)
+
+    filled = fill(Counting("zqgamma"), first, at="later")
+    assert filled.filled == (0, 4, 5) and len(asked) == 3 and filled.failures == ()
+    assert [r for i, r in enumerate(filled.replies) if i not in (0, 4, 5)] == \
+        [r for i, r in enumerate(first.replies) if i not in (0, 4, 5)]
+    _, rows = score(filled)
+    assert sum(r["unanswered"] for r in rows) == 0 and kill_criteria(rows) == []
+
+
+def test_fill_refuses_another_model():
+    from occam.sameprobe import fill
+    first = run_probe(ByPrompt("zqgamma"), probe_pairs(), as_of="t")
+    other = ByPrompt("zqgamma")
+    other.name = "another"
+    with pytest.raises(ValueError, match="two judges"):
+        fill(other, first, at="later")
