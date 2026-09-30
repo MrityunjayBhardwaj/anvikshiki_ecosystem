@@ -6,6 +6,7 @@ made, so the laws pin the construction, not a judgement.
 
 import hashlib
 import json
+from datetime import timedelta
 
 import pytest
 
@@ -16,6 +17,8 @@ from occam.sameprobe import (ProbePair, flip_pairs, flips, kill_criteria, paws_p
 from occam.equiv import Pair
 from occam.tests.test_answer import AS_OF, QUERIES, SUPPORT_ALL, VIABLE, attacks, argue_reply, wiki
 from occam.tests.test_equiv import SAME, WORDINGS, all_same, run_with, v
+
+LATER = AS_OF + timedelta(days=2)       # run2-judged: argued on the 28th, judged on the 30th
 
 Q01 = "Why did the Challenger space shuttle break apart in 1986?"
 Q03 = "Who proposed the theory of continental drift, and when?"
@@ -191,7 +194,7 @@ def judge_off_run():
 
 def test_rejudging_a_stored_run_gives_what_a_live_run_with_the_judge_gives():
     _, off = judge_off_run()
-    ans, judged = rejudge(off, ScriptedModel(all_same(3)))
+    ans, judged = rejudge(off, ScriptedModel(all_same(3)), at=LATER)
     live, _ = run_with(all_same(3))
     assert canonical(ans) == canonical(live)
     assert canonical(replay(Artifact.model_validate_json(judged.model_dump_json()))) \
@@ -200,20 +203,65 @@ def test_rejudging_a_stored_run_gives_what_a_live_run_with_the_judge_gives():
 
 def test_rejudging_changes_nothing_but_the_judge():
     _, off = judge_off_run()
-    _, judged = rejudge(off, ScriptedModel(all_same(3)))
+    _, judged = rejudge(off, ScriptedModel(all_same(3)), at=LATER)
     a, b = off.model_dump(), judged.model_dump()
     assert b["params"].pop("judge_same") is True and a["params"].pop("judge_same") is False
     assert b.pop("same_replies") and a.pop("same_replies") == ()
+    assert b.pop("same_judged_at") == LATER and a.pop("same_judged_at") is None
     assert a == b
+
+
+def test_a_rejudged_run_says_when_its_judge_was_asked():
+    """#177: run2-judged was argued on the 28th and judged on the 30th, and
+    read like one live run."""
+    _, off = judge_off_run()
+    ans, judged = rejudge(off, ScriptedModel(all_same(3)), at=LATER)
+    back = Artifact.model_validate_json(judged.model_dump_json())
+    assert back.same_judged_at == LATER and back.as_of == AS_OF
+    assert canonical(replay(back)) == canonical(ans)          # audit only: replay ignores it
+
+
+def judge_on_run():
+    argue = [argue_reply([{**VIABLE, "conclusion": w}], "q1") for w in WORDINGS]
+    return run("Is growth alone enough to make a business viable?",
+               ScriptedModel([QUERIES] + argue + [SUPPORT_ALL] + [attacks()] * 3 + all_same(3)),
+               params=Params(k_argue=3, k_attack=3), as_of=AS_OF, http_get=wiki)
+
+
+def test_a_live_run_with_the_judge_records_its_own_clock_and_one_without_records_none():
+    _, live = judge_on_run()
+    assert live.same_judged_at == live.as_of
+    _, off = judge_off_run()
+    assert off.same_judged_at is None
+
+
+def test_rejudging_takes_the_clock_from_its_caller():
+    _, off = judge_off_run()
+    with pytest.raises(TypeError):
+        rejudge(off, ScriptedModel(all_same(3)))
+
+
+def test_the_replay_output_says_which_it_was_every_time():
+    from occam.__main__ import _judged_when
+    _, off = judge_off_run()
+    _, live = judge_on_run()
+    _, later = rejudge(off, ScriptedModel(all_same(3)), at=LATER)
+    unrecorded = later.model_copy(update={"same_judged_at": None})   # as run2-judged
+    lines = [_judged_when(a) for a in (off, live, later, unrecorded)]
+    assert lines[0] == "same-answer judge: not run"
+    assert lines[1].startswith("same-answer judge: asked in the run")
+    assert "after the run" in lines[2] and LATER.isoformat() in lines[2]
+    assert "not recorded" in lines[3]
+    assert len(set(lines)) == 4
 
 
 def test_rejudging_refuses_a_judged_run_and_a_different_model():
     _, off = judge_off_run()
-    _, judged = rejudge(off, ScriptedModel(all_same(3)))
+    _, judged = rejudge(off, ScriptedModel(all_same(3)), at=LATER)
     with pytest.raises(ValueError, match="already"):
-        rejudge(judged, ScriptedModel([]))
+        rejudge(judged, ScriptedModel([]), at=LATER)
     with pytest.raises(ValueError, match="misattribute"):
-        rejudge(off, ScriptedModel([], name="another-model"))
+        rejudge(off, ScriptedModel([], name="another-model"), at=LATER)
 
 
 def test_same_in_one_order_only_does_not_merge_and_is_counted_as_disagreeing():
@@ -243,7 +291,7 @@ def test_rejudging_asks_at_the_temperature_the_run_recorded():
                  params=Params(k_argue=3, k_attack=3, judge_same=False, t_same=0.3),
                  as_of=AS_OF, http_get=wiki)
     m = Recording(all_same(3))
-    rejudge(off, m)
+    rejudge(off, m, at=LATER)
     assert m.temperatures == [0.3] * 6
 
 

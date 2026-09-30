@@ -124,6 +124,12 @@ class Artifact(BaseModel):
     support_replies: tuple[str, ...] = ()     # empty: support was never judged
     same_replies: tuple[str, ...] = ()        # the same-answer judge: X/Y, then Y/X
     attack_replies: tuple[str, ...]
+    # When the same-answer judge was asked (#177), for audit: `as_of` for a
+    # live run, the rejudge's own clock for one judged later. None: not
+    # recorded — the judge did not run, or the artifact predates the field
+    # (run2-judged was judged two days after it was argued, and cannot say
+    # so). Nothing is derived from it; replay ignores it.
+    same_judged_at: Optional[datetime] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -193,7 +199,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         argue_replies=tuple(argue_replies),
                         support_replies=tuple(support_replies),
                         attack_replies=tuple(attack_replies),
-                        same_replies=tuple(same_replies))
+                        same_replies=tuple(same_replies),
+                        same_judged_at=as_of if params.judge_same else None)
     return replay(artifact, calibration), artifact
 
 
@@ -237,13 +244,16 @@ def _argued(artifact: Artifact) -> tuple[list[Snapshot], list[Snapshot], ArgueRe
     return snaps, readable, raw, argued, judged
 
 
-def rejudge(artifact: Artifact, model: Model) -> tuple[Answer, Artifact]:
+def rejudge(artifact: Artifact, model: Model, *, at: datetime) -> tuple[Answer, Artifact]:
     """Add the same-answer judge to a run stored without it (#172).
 
     Every other stage is read from the artifact, not re-asked, so the only new
     model output is the judge's. Refused when the artifact already carries a
     judge — its replies would be replaced — and when the model is not the one
-    the run recorded, since `params.model` names who wrote every reply in it."""
+    the run recorded, since `params.model` names who wrote every reply in it.
+
+    `at` is when the judge is asked, recorded as `same_judged_at` (#177). It
+    is required, never read here: the caller owns the clock, as `run` does."""
     if artifact.params.judge_same:
         raise ValueError("this run already went through the same-answer judge")
     if model.name != artifact.params.model:
@@ -257,7 +267,7 @@ def rejudge(artifact: Artifact, model: Model) -> tuple[Answer, Artifact]:
                              temperature=artifact.params.t_same)
     judged = artifact.model_copy(update={
         "params": artifact.params.model_copy(update={"judge_same": True}),
-        "same_replies": tuple(replies)})
+        "same_replies": tuple(replies), "same_judged_at": at})
     return replay(judged), judged
 
 
