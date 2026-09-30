@@ -34,6 +34,18 @@ from .answer import Answer, Artifact, Params, canonical, replay, run, stored_run
 from .conformal import ABSTAINED, Calibration, Example, fit
 
 
+def _judged_when(art: Artifact) -> str:
+    """When the same-answer judge was asked, said every time (#177)."""
+    if not art.params.judge_same:
+        return "same-answer judge: not run"
+    if art.same_judged_at is None:
+        return "same-answer judge: when it was asked is not recorded (made before #177)"
+    if art.same_judged_at == art.as_of:
+        return f"same-answer judge: asked in the run ({art.as_of.isoformat()})"
+    return (f"same-answer judge: asked {art.same_judged_at.isoformat()}, after the run "
+            f"({art.as_of.isoformat()}) — its replies are from a later call than the rest")
+
+
 def _show(a: Answer) -> None:
     print(f"\nQ: {a.question}")
     if a.abstained:
@@ -128,7 +140,8 @@ def _rejudge(src: Path, dst: Path) -> int:
     for f in files:
         stored = json.loads(f.read_text())
         before = stored["answer"]
-        answer, artifact = rejudge(Artifact.model_validate(stored["artifact"]), model)
+        answer, artifact = rejudge(Artifact.model_validate(stored["artifact"]), model,
+                                   at=datetime.now(timezone.utc))
         (dst / f.name).write_text(stored_run(answer, artifact))
         c = answer.counters
         v, m, d = (c.get("same_question_vetoed"), c.get("same_question_merged"),
@@ -349,13 +362,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     stored = json.loads(Path(args.file).read_text())
-    answer = replay(Artifact.model_validate(stored["artifact"]), cal)
+    artifact = Artifact.model_validate(stored["artifact"])
+    answer = replay(artifact, cal)
     if cal is not None:
         _show(answer)
+        print(_judged_when(artifact))
         print("\n(calibrated replay: not compared with the stored answer)")
         return 0
     same = canonical(answer) == json.dumps(stored["answer"], sort_keys=True, ensure_ascii=False)
     _show(answer)
+    print(_judged_when(artifact))
     print(f"\nreplay {'MATCHES' if same else 'DIFFERS FROM'} the stored answer")
     return 0 if same else 1
 
