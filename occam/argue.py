@@ -49,7 +49,7 @@ from .types import Pramana
 __all__ = [
     "Argument", "ArgueResult", "KINDS", "PRAMANA_OF_KIND",
     "argue", "argue_from_replies", "argue_prompt", "norm_conclusion", "adds_question_number",
-    "unquoted_question_numbers",
+    "unquoted_question_numbers", "question_numbers",
 ]
 
 Kind = Literal["quote", "inference", "analogy"]
@@ -350,6 +350,13 @@ def _digit_tokens(text: str) -> set[str]:
     matching; "1940s" and "1,000" are not read as numbers. Used to count,
     never to decide."""
     return {t.strip(_EDGE) for t in text.split() if t.strip(_EDGE).isdigit()}
+
+
+def question_numbers(question: str) -> tuple[str, ...]:
+    """The whole numbers the premise counters can read in a question, in
+    order: the only details they can see (#181). None means a zero from
+    them is "could not look", not "did not happen"."""
+    return tuple(sorted(_digit_tokens(question)))
 
 
 def unquoted_question_numbers(question: str, aid: str,

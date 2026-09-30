@@ -21,7 +21,7 @@ from typing import Any, Optional, Sequence
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from .argue import (ArgueResult, adds_question_number, argue, argue_from_replies, norm_conclusion,
-                    unquoted_question_numbers)
+                    question_numbers, unquoted_question_numbers)
 from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
@@ -74,9 +74,10 @@ class Params(BaseModel):
     # was argued under 1, and shows no counter that 2 introduced.
     argue_prompt: int = 2
     # Which counters the answer shows, so adding one does not change what an
-    # older artifact replays to. 2 (#179): `question_number_unquoted`. An
-    # artifact without the field shows the counters it was made with.
-    counter_set: int = 2
+    # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
+    # (#181): both premise counters say what they could read in the question.
+    # An artifact without the field shows the counters it was made with.
+    counter_set: int = 3
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -500,6 +501,13 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                                  of=len(judged.verdicts) if judged else 0,
                                  population="quote arguments judged (arguments lost with them)"),
     }
+    # What the premise counters can see (#181): only whole numbers, so on a
+    # question without one their zero is "could not look". Said every time,
+    # zero included.
+    nums = question_numbers(artifact.question)
+    reach = "" if artifact.params.counter_set < 3 else (
+        f"; the question has {len(nums)} whole number(s) to check ({', '.join(nums)})" if nums
+        else "; the question has no whole number, so this cannot fire")
     if artifact.params.argue_prompt >= 2 and raw is not None:
         # Counted over the arguments as argued, before support dropped any:
         # the dropped ones are the case this measures (#161). Shown at zero too.
@@ -507,7 +515,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         counters["question_number_added"] = Count(
             n=sum(adds_question_number(artifact.question, a) for a in quotes), of=len(quotes),
             population="quote arguments whose conclusion carries a number from the question "
-                       "that the quote does not state (before the support judge)")
+                       "that the quote does not state (before the support judge)" + reach)
     if artifact.params.counter_set >= 2 and raw is not None:
         # The same question for the model's own steps (#179), which the
         # support judge never sees: a number the question supplied, carried
@@ -519,7 +527,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                   for a in steps), of=len(steps),
             population="inference and analogy steps whose conclusion carries a number from "
                        "the question that no quote beneath them states, directly or through "
-                       "other steps (before the support judge)")
+                       "other steps (before the support judge)" + reach)
     if same is not None:
         # Only with the judge, like the position fields (see there). Merged
         # samples may be less precise than the answer shown, so the count says
