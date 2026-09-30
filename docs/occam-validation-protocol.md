@@ -216,6 +216,15 @@ as the judge keeping a pair apart.
 - any expected-`different` pair unanswered → **INCOMPLETE**: the limits cannot
   clear until it is answered.
 
+*Added after the first probe run and before its unanswered calls were re-asked
+(#175):* an empty reply counts as unanswered, like a failed call, read from the
+stored bytes. The first run left 6 expected-`different` pairs unanswered (4 ×
+HTTP 402 "in-flight budget", 2 empty replies) and 1 paraphrase. They are re-asked
+with `python -m occam probe-same --fill <run> --out <new>`: the same prompts, model
+and temperature, 2 calls at a time; every reply already returned is kept byte for
+byte, and the re-asked calls are listed in the new file's `filled`. The limits
+are read on the filled file.
+
 STOP means the judge merges answers that say different things: the default is
 turned back off in a follow-up, and run 2's re-judged figures below are reported
 but not claimed as merges of rewordings. Missed merges on PAWS paraphrases are
