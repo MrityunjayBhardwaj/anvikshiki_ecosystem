@@ -326,13 +326,17 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
         live = [i for i in ids if statuses[i].status is not None]
         if not live:
             return None, None
-        top = max(live, key=lambda i: (rank(statuses[i].status), -int(i[1:])))
+        # With the judge, a merged position shows its most detailed wording
+        # among the best-grounded: the others are consistent with it (#172).
+        top = max(live, key=lambda i: (rank(statuses[i].status),
+                                       len(by_id[i].conclusion) if same else 0, -int(i[1:])))
         return top, statuses[top].status
 
     positions = []
     for key, ids in groups.items():
         top, st = best(ids)
-        pos: dict[str, Any] = {"conclusion": by_id[ids[0]].conclusion, "argument_ids": ids,
+        shown = by_id[top].conclusion if same is not None and top else by_id[ids[0]].conclusion
+        pos: dict[str, Any] = {"conclusion": shown, "argument_ids": ids,
                                "best_argument": top, "status": st.value if st else None,
                                "samples": support[key]}
         if same is not None:
@@ -425,7 +429,13 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
                                  population="quote arguments judged (arguments lost with them)"),
     }
     if same is not None:
-        # Only with the judge, like the position fields (see there).
+        # Only with the judge, like the position fields (see there). Merged
+        # samples may be less precise than the answer shown, so the count says
+        # "consistent with", not "the same as".
+        counters["agree_frac"] = Count(
+            n=counters["agree_frac"].n, of=counters["agree_frac"].of,
+            population="samples whose answer is consistent with the chosen conclusion "
+                       "(same-answer judge, question lens)")
         for lens in ("question", "claim"):
             vs = [v for v in same.verdicts if v.pair.lens == lens]
             judged_both = [v for v in vs if v.forward is not None and v.backward is not None]

@@ -29,10 +29,22 @@ def test_a_number_the_question_asked_about_is_context_under_the_question_lens():
     assert veto(a, b, "claim", Q01) == "numbers differ: 1986"
 
 
-def test_a_number_the_question_did_not_supply_still_vetoes():
+def test_a_less_precise_answer_passes_the_question_lens_but_not_the_claim_lens():
+    """Decided on #172: "1912" agrees with "6 January 1912" as an answer —
+    whoever needs the day can ask — but a page saying "1912" does not
+    corroborate a claim about 6 January."""
     a = "Alfred Wegener proposed the theory of continental drift on 6 January 1912."
     b = "Alfred Wegener proposed the theory of continental drift in 1912."
-    assert veto(a, b, "question", Q03) == "numbers differ: 6"
+    assert veto(a, b, "question", Q03) == ""
+    assert veto(a, b, "claim", Q03) == "numbers differ: 6"
+
+
+@pytest.mark.parametrize("a,b", [
+    ("Wegener proposed it in 1912.", "Wegener proposed it in 1913."),
+    ("The flight was on December 17, 1903.", "The flight was on December 7, 1903."),
+])
+def test_conflicting_numbers_are_vetoed_even_under_the_question_lens(a, b):
+    assert veto(a, b, "question", Q03).startswith("numbers conflict")
 
 
 @pytest.mark.parametrize("a,b", [
@@ -235,3 +247,21 @@ def test_one_malformed_reply_costs_only_its_own_pair():
     r = equiv_from_replies(["garbage", v("different"), SAME, SAME], ps)
     assert not r.verdicts[0].same and r.verdicts[1].same     # P0001 still reads replies 2 and 3
     assert r.malformed == ((0, "reply for P0000 is not a JSON object with a verdict"),)
+
+
+# ── what a merged position shows (#172 decision) ────────────
+
+def test_a_merged_position_shows_its_most_detailed_wording_and_says_consistent():
+    ans, _ = run_with(all_same(3))
+    longest = max(WORDINGS, key=len)
+    assert ans.positions[0]["conclusion"] == longest and ans.conclusion == longest
+    assert "consistent with" in ans.counters["agree_frac"].population
+
+
+def test_the_lens_rules_reach_the_judge():
+    m = ScriptedModel(["{}", "{}", "{}", "{}"])
+    judge_same(m, Q03, [pair("P0000", lens="question", a="x1 zq", b="y1 zq"),
+                        pair("P0001", lens="claim", a="x2 zq", b="y2 zq")])
+    q_prompt, c_prompt = m.prompts[0], m.prompts[2]
+    assert "less precise" in q_prompt and "more specific" not in q_prompt
+    assert "more specific than the other" in c_prompt and "less precise" not in c_prompt

@@ -6,11 +6,14 @@ positions (run 2: agreement 1 of 3 in 10 of 10 questions). Merging them needs
 a notion of "the same", and sameness is never absolute: it is sameness *for a
 purpose*. So every pair is judged under a lens.
 
-    question   the two give the same answer to THIS question. Details the
-               question does not ask about do not count. Run 2's q01 asks
-               "Why did Challenger break apart in 1986?" — an answer that
-               repeats "in 1986" and one that does not agree. q03 asks
-               "…and when?" — there the date is the answer.
+    question   the two give consistent answers to THIS question. Details the
+               question does not ask about do not count: run 2's q01 asks
+               "Why did Challenger break apart in 1986?", so an answer that
+               repeats "in 1986" agrees with one that does not. One answer
+               may also be less precise or less complete than the other —
+               "1912" agrees with "6 January 1912" for q03's "…and when?" —
+               as long as nothing conflicts; someone who needs the exact date
+               can ask for it (decided on #172). "1912" vs "1913" conflicts.
     claim      the two state the entire sentence. Used for corroboration,
                because `established` vouches for every word shown, and a lie
                can hide in a detail a question-lens judge would wave through.
@@ -22,9 +25,10 @@ counts. The model answers one narrow question per pair — same, different or
 cannot tell — in a fresh call that sees that pair and nothing else (#174),
 asked in both orders. It never sets a status.
 
-    veto          numbers differ, or a negation word is on one side only.
-                  Under the question lens, numbers the question itself
-                  contains are context, not answer. Opposites without a
+    veto          a negation word on one side only; or numbers that differ
+                  (claim lens) or conflict — neither side's numbers contained
+                  in the other's (question lens, where numbers the question
+                  itself contains are context, not answer). Opposites without a
                   number or a "not" ("rose"/"fell") get past the veto; the
                   judge must catch those, and the probe must contain them.
     both orders   a pair merges only if the judge says `same` with the
@@ -88,7 +92,9 @@ def veto(a: str, b: str, lens: Lens, question: str) -> str:
     if lens == "question":
         asked = _numbers(question)
         na, nb = na - asked, nb - asked
-    if na != nb:
+        if not (na <= nb or nb <= na):         # less precise is fine; conflicting is not
+            return f"numbers conflict: {', '.join(sorted(na ^ nb))}"
+    elif na != nb:
         return f"numbers differ: {', '.join(sorted(na ^ nb))}"
     ga, gb = _negations(a), _negations(b)
     if ga != gb:
@@ -133,11 +139,22 @@ def candidate_pairs(argued: ArgueResult, question: str) -> tuple[Pair, ...]:
 
 
 _LENS_RULE = {
-    "question": ("LENS question: do the two give the same answer to the QUESTION? "
-                 "Ignore details the question does not ask about. A detail the "
-                 "question asks about must match, including how precise it is."),
-    "claim": ("LENS claim: does each statement say everything the other says — "
-              "no more, no less? Every detail counts."),
+    "question": (
+        "LENS question — do the two give consistent answers to the QUESTION?\n"
+        "- same: they answer the question the same way. One may be less precise or "
+        "leave part of the answer out, as long as nothing in either contradicts the "
+        "other. Details the question does not ask about do not matter.\n"
+        "- different: they conflict on something the question asks about — a "
+        "different number, date, name, cause, direction, or a negation.\n"
+        "- cannot_tell: you cannot decide."),
+    "claim": (
+        "LENS claim — does each statement say everything the other says?\n"
+        "- same: each says everything the other says, no more and no less, only in "
+        "different words.\n"
+        "- different: one says something the other does not, or they conflict — "
+        "including a different number, date, direction or a negation, and including "
+        "one being more specific than the other.\n"
+        "- cannot_tell: you cannot decide."),
 }
 
 
@@ -146,12 +163,7 @@ def equiv_prompt(question: str, pair: Pair, *, flip: bool = False) -> str:
     judgement is made in the light of another."""
     x, y = (pair.text_b, pair.text_a) if flip else (pair.text_a, pair.text_b)
     return "\n".join([
-        "Compare statement X with statement Y under the LENS given.\n\n"
-        "- same: under that lens they say the same thing, only in different words.\n"
-        "- different: under that lens one says something the other does not, or "
-        "they conflict — including a different number, date, direction or a "
-        "negation, and including one being more specific than the other.\n"
-        "- cannot_tell: you cannot decide.\n\n"
+        "Compare statement X with statement Y under the LENS given below.\n"
         "Judge only what the statements say, not whether they are true.\n"
         'Return JSON only: {"verdict": "same", '
         '"differs_on": "<the detail that differs, or empty>", '
