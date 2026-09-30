@@ -245,3 +245,57 @@ def test_rejudging_asks_at_the_temperature_the_run_recorded():
     m = Recording(all_same(3))
     rejudge(off, m)
     assert m.temperatures == [0.3] * 6
+
+
+# ── an empty reply is a call that returned nothing, not a verdict (#175) ──
+
+class FakeHTTP:
+    """Serves OpenRouter response bodies in order and counts the calls."""
+
+    def __init__(self, contents, finish="stop"):
+        self.contents, self.finish, self.calls = list(contents), finish, 0
+
+    def __call__(self, req, timeout):
+        import io
+        self.calls += 1
+        body = {"choices": [{"message": {"content": self.contents.pop(0)},
+                             "finish_reason": self.finish}]}
+
+        class R(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+        return R(json.dumps(body).encode())
+
+
+def test_an_empty_reply_is_asked_again_and_a_real_one_is_returned(monkeypatch):
+    from occam.model import OpenRouterModel
+    http = FakeHTTP(["", "  \n", SAME])
+    monkeypatch.setattr("occam.model.urllib.request.urlopen", http)
+    assert OpenRouterModel(api_key="k").complete("p", temperature=0) == SAME
+    assert http.calls == 3
+
+
+def test_a_reply_that_stays_empty_fails_the_call_and_says_why(monkeypatch):
+    from occam.model import OpenRouterModel
+    http = FakeHTTP([None, "", ""], finish="length")
+    monkeypatch.setattr("occam.model.urllib.request.urlopen", http)
+    with pytest.raises(RuntimeError, match="empty reply 3 times.*'length'"):
+        OpenRouterModel(api_key="k").complete("p", temperature=0)
+    assert http.calls == 3
+
+
+def test_a_stored_empty_reply_scores_as_unanswered_not_kept_apart():
+    """How amendment 3's first run stored its three empty replies: as "" with
+    no failure recorded. Scoring reads the bytes, so it is unanswered."""
+    run_ = run_probe(ByPrompt("zqnever"), probe_pairs(), as_of="t")
+    replies = list(run_.replies)
+    replies[0] = ""                                       # F0, X/Y
+    old = run_.model_copy(update={"replies": tuple(replies)})
+    assert old.failures == ()
+    _, rows = score(old)
+    flip = [r for r in rows if r["source"] == "flip"][0]   # F0 asked, F1 vetoed
+    assert (flip["vetoed"], flip["unanswered"], flip["judged"], flip["apart"]) == (1, 1, 0, 0)
+    assert any(g.startswith("INCOMPLETE") for g in kill_criteria(rows))

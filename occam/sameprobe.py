@@ -255,8 +255,12 @@ def run_probe(model: Model, pairs: Sequence[ProbePair], *, as_of: str,
 
 
 def _unanswered(run: ProbeRun) -> set[str]:
-    """Pair ids with at least one call that never returned."""
-    failed = {i for i, _ in run.failures}
+    """Pair ids with at least one call that never returned a reply: one that
+    failed, or one whose stored reply is empty. The second is read from the
+    stored bytes, not from `failures`, so a run made before empty replies
+    were refused (#175) is scored the same way as one made after."""
+    failed = {i for i, _ in run.failures} | {i for i, r in enumerate(run.replies)
+                                             if not r.strip()}
     out, k = set(), 0
     for pp in run.pairs:
         if not pp.pair.veto:
