@@ -164,7 +164,7 @@ def run_conclusions(folder: Path) -> list[tuple[str, str, str]]:
     out = []
     for f in sorted(folder.glob("q*.json")):
         art = Artifact.model_validate(json.loads(f.read_text())["artifact"])
-        _, _, argued, _ = _argued(art)
+        _, _, _, argued, _ = _argued(art)
         by = argued.by_id()
         for c in sorted({by[a].conclusion for a in argued.answers if a}):
             out.append((f.stem, art.question, c))
