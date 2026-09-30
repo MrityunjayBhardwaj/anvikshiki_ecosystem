@@ -361,3 +361,49 @@ def test_the_same_text_in_different_bytes_on_another_host_does_not_corroborate()
     r = derive([q("Q", s, LONG1), q("R", second(store, text=TEXT), LONG1)], [], store,
                as_of=NOW)
     assert r.statuses["Q"].status == Status.HYPOTHESIS
+
+
+# ── the question's premise (#179) ──────────────────────────
+
+def test_a_conclusion_carrying_an_unquoted_question_number_is_never_established():
+    """Why #179 counts and does not cap. A number from the question that no
+    quote beneath a conclusion states is the model's addition, and the
+    ceilings already hold it below `established`: a quote's conclusion that
+    adds it is not literally in the quote, and every inference is the model's
+    step. Over random trees, on two hosts so corroboration cannot be what
+    holds it down — and `established` must occur, or the law saw nothing."""
+    import random
+    from occam.argue import unquoted_question_numbers
+    question = "Why did the seals fail in 1986?"
+    dated = "The seals failed in the cold of January 1986 at launch."
+    plain = "Cold had stiffened the rubber seals before the launch."
+    text = f"{dated} {plain}"
+    store = SnapshotStore()
+    snaps = [store.put(capture(url="https://e.com/a", body=b"a", text=text, fetched_at=NOW)),
+             store.put(capture(url="https://f.org/b", body=b"b", text=text + " Again.",
+                               fetched_at=NOW))]
+    rng = random.Random(179)
+    flagged = established = 0
+    for _ in range(300):
+        args: list[Argument] = []
+        for i in range(rng.randint(3, 8)):
+            aid = f"A{i}"
+            if not args or rng.random() < 0.4:
+                words = rng.choice([dated, plain])
+                concl = rng.choice([words, words.rstrip(".") + " in 1986."])
+                args.append(q(aid, rng.choice(snaps), words).model_copy(
+                    update={"id": aid, "conclusion": concl}))
+            else:
+                subs = tuple(a.id for a in rng.sample(args, rng.randint(1, min(2, len(args)))))
+                s = step(aid, *subs, kind=rng.choice(["inference", "inference", "analogy"]))
+                args.append(s.model_copy(update={"conclusion": rng.choice(
+                    ["The seals failed.", "The seals failed in 1986."])}))
+        r = derive(args, [], store, as_of=NOW)
+        by = {a.id: a for a in args}
+        for a in args:
+            st = r.statuses[a.id].status
+            established += st == Status.ESTABLISHED
+            if unquoted_question_numbers(question, a.id, by):
+                flagged += 1
+                assert st != Status.ESTABLISHED, (a, r.statuses[a.id])
+    assert flagged > 200 and established > 50, (flagged, established)

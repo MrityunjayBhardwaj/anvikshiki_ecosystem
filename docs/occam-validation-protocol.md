@@ -374,3 +374,32 @@ produced aeroelastic flutter". Both quotes are verbatim; the attack stage paired
 them as mutual undermining, and the answer, which says "high winds", is rebutted
 by the "moderate" quotes. `open` is the pipeline reporting a disagreement between
 its sources, as it should.
+
+## Note — 2026-09-30: the question's premise in the model's own steps (#179)
+
+Not an amendment: argue, support and status are unchanged, and every stored run
+replays to the answer it stored (run 2, its re-judge and run 3: 33 of 33).
+
+Amendment 4's counter reads quote steps only. An *inference* can carry the
+question's premise too, and no judge reads inference steps. A new counter,
+again a count and never a decision: `question_number_unquoted` = inference and
+analogy steps whose conclusion carries a whole number from the question that
+**no quote beneath them states, directly or through other steps**, over those
+steps as argued, before support drops any. It is shown only on artifacts made
+from now on (`counter_set: 2`), so that older ones still replay. Baselines,
+measured offline with the shipped function by forcing it on:
+
+| run | argue prompt | `question_number_unquoted` |
+|---|---|---|
+| run 2 | 1 | **4 of 14** (q01 ×2 "1986", q04 ×2 "1940") |
+| run 3 | 2 | **1 of 21** (q01 "1986") |
+
+**Why not a cap on status:** there is nothing for a cap to catch. A quote
+step's conclusion carrying a number its quote lacks is not literally in the
+quote, so it is capped as a restatement. Every inference is capped as the
+model's step. Neither can be `established`, whatever the sources. A law over
+random trees on two hosts checks it: `established` occurs, and no flagged
+argument reaches it. Raising the inference, analogy or restatement ceiling
+fails that law. Run 3's flagged step (q01 A0001) is not even the answer
+shown. If a later change ever lifts an inference above `hypothesis`, that law
+is what has to be answered.

@@ -112,7 +112,9 @@ def test_every_feature_carries_its_denominator_and_population():
                 "same_question_vetoed", "same_question_merged", "same_question_order_disagree",
                 "same_claim_vetoed", "same_claim_merged", "same_claim_order_disagree",
                 # argue prompt 2 (#161)
-                "question_number_added"}
+                "question_number_added",
+                # counter set 2 (#179)
+                "question_number_unquoted"}
     assert set(ans.counters) == expected
     for name, c in ans.counters.items():
         assert c.population, name

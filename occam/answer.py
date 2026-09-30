@@ -20,7 +20,8 @@ from typing import Any, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .argue import ArgueResult, adds_question_number, argue, argue_from_replies, norm_conclusion
+from .argue import (ArgueResult, adds_question_number, argue, argue_from_replies, norm_conclusion,
+                    unquoted_question_numbers)
 from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
@@ -72,6 +73,10 @@ class Params(BaseModel):
     # does not repeat the question's details. An artifact without the field
     # was argued under 1, and shows no counter that 2 introduced.
     argue_prompt: int = 2
+    # Which counters the answer shows, so adding one does not change what an
+    # older artifact replays to. 2 (#179): `question_number_unquoted`. An
+    # artifact without the field shows the counters it was made with.
+    counter_set: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -137,6 +142,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "argue_prompt" not in data["params"]:
             data = {**data, "params": {**data["params"], "argue_prompt": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "counter_set" not in data["params"]:
+            data = {**data, "params": {**data["params"], "counter_set": 1}}
         return data
 
 
@@ -490,6 +498,18 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
             n=sum(adds_question_number(artifact.question, a) for a in quotes), of=len(quotes),
             population="quote arguments whose conclusion carries a number from the question "
                        "that the quote does not state (before the support judge)")
+    if artifact.params.counter_set >= 2 and raw is not None:
+        # The same question for the model's own steps (#179), which the
+        # support judge never sees: a number the question supplied, carried
+        # with no quote beneath it. Before support, as above.
+        raw_by = raw.by_id()
+        steps = [a for a in raw.arguments if a.kind != "quote"]
+        counters["question_number_unquoted"] = Count(
+            n=sum(bool(unquoted_question_numbers(artifact.question, a.id, raw_by))
+                  for a in steps), of=len(steps),
+            population="inference and analogy steps whose conclusion carries a number from "
+                       "the question that no quote beneath them states, directly or through "
+                       "other steps (before the support judge)")
     if same is not None:
         # Only with the judge, like the position fields (see there). Merged
         # samples may be less precise than the answer shown, so the count says
