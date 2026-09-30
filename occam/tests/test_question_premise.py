@@ -204,3 +204,35 @@ def test_an_artifact_made_before_the_step_counter_does_not_show_it():
     assert "question_number_unquoted" not in got.counters
     assert "question_number_added" in got.counters          # prompt 2's counter kept
     assert canonical(replay(art)) == canonical(ans)
+
+
+# ── what the counters can see (#181) ──────────────────────
+
+def test_on_a_question_without_a_number_both_counters_say_they_cannot_fire():
+    """8 of run 3's 10 questions: a zero there is "could not look"."""
+    ans, _ = _run_infer(INFER["conclusion"], "Is growth alone enough to make a business viable?")
+    for name in ("question_number_added", "question_number_unquoted"):
+        c = ans.counters[name]
+        assert c.population.endswith("; the question has no whole number, so this cannot fire"), name
+
+
+def test_on_a_question_with_a_number_both_counters_name_what_they_check():
+    ans, _ = _run_infer(INFER["conclusion"],
+                        "Is growth alone enough to make a business viable in 2024?")
+    for name in ("question_number_added", "question_number_unquoted"):
+        assert ans.counters[name].population.endswith(
+            "; the question has 1 whole number(s) to check (2024)"), name
+
+
+def test_an_artifact_made_under_counter_set_2_replays_as_it_was_made():
+    """#180's artifacts: the counter, without the clause added after them."""
+    from occam.answer import canonical, replay
+    _, art = _run_infer(INFER["conclusion"], "Is growth alone enough to make a business viable?")
+    assert art.params.counter_set == 3
+    two = Artifact.model_validate({**json.loads(art.model_dump_json()),
+                                   "params": {**json.loads(art.params.model_dump_json()),
+                                              "counter_set": 2}})
+    got = replay(two).counters
+    assert "question_number_unquoted" in got
+    assert all("the question has" not in got[n].population
+               for n in ("question_number_added", "question_number_unquoted"))

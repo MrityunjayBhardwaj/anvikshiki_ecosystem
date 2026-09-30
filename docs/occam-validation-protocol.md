@@ -403,3 +403,10 @@ argument reaches it. Raising the inference, analogy or restatement ceiling
 fails that law. Run 3's flagged step (q01 A0001) is not even the answer
 shown. If a later change ever lifts an inference above `hypothesis`, that law
 is what has to be answered.
+
+*Added later (#181):* both premise counters read only whole numbers. From
+`counter_set: 3` on, each counter says what it could read, every time: "the
+question has 1 whole number(s) to check (1986)", or "the question has no whole
+number, so this cannot fire". Eight of the ten questions have none, so on
+those a zero means "could not look", not "did not happen". A false premise
+that isn't a number is untested; that control is #183.
