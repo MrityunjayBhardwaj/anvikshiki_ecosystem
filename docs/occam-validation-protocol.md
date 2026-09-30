@@ -148,3 +148,101 @@ and under the change it is `hypothesis`, bound by
 falsehood, since corroboration cannot change what is concluded, only how
 strongly. It is expected at `hypothesis`, bound by its single host. If it is
 `established`, the change has failed and that is the headline.
+
+## Amendment 3 — 2026-09-30: the same-answer judge, probed and applied to run 2 (#172)
+
+Added after the judge was merged (#173, 21eff61) and **before** any live call of
+it. Nothing above is changed.
+
+**Instrument under test:** the same-answer judge as merged — a mechanical veto
+(numbers, negation), then one fresh call per pair in each order, temperature 0,
+the run's own model (`z-ai/glm-5.2` via OpenRouter); a pair merges only if both
+orders say `same`. Question lens = consistent answers to this question; claim
+lens = each statement says everything the other says.
+
+### The probe — `python -m occam probe-same`
+
+Pairs whose right answer is fixed before any model sees them
+(`occam/sameprobe.py`). Composition measured offline at registration:
+
+**Flips** — run 2's 29 distinct answer conclusions (10 questions), each changed
+by code in one way; every flip is `different` by construction.
+
+| kind | lens | pairs | vetoed | reach the judge |
+|---|---|---|---|---|
+| number swapped (+1) | claim | 15 | 15 | 0 |
+| number swapped | question — only on "when" questions | 11 | 11 | 0 |
+| "not" inserted, main clause only | claim / question | 13 / 13 | 13 / 13 | 0 |
+| cause and effect reversed | claim / question — only on why/cause questions | 11 / 11 | 0 | 22 |
+| antonym swapped (fixed list) | claim only | 31 | 0 | 31 |
+| **total** | | **105** | **52** | **53** (106 calls) |
+
+A flip is labelled under the question lens only when it changes what the
+question asks (a date on a "when" question, the cause on a "why" question, the
+main assertion when negated). Antonyms can land on a detail the question does not
+ask ("high-latitude aurora"), so they are claim-lens only. **Consequence: under
+the question lens, only the 11 cause/effect reversals test the judge itself;**
+every other question-lens flip is decided by the veto.
+
+**PAWS-Wiki** — human-labelled paraphrase pairs built from word swaps (Zhang,
+Baldridge & He, NAACL 2019). Licence: *"may be freely used for any purpose,
+although acknowledgement of Google LLC ("Google") as the data source would be
+appreciated"* — data © Google LLC. Google's own bucket returned 403 on
+2026-09-30, so the copy is the authors' Hugging Face release,
+`google-research-datasets/paws` @ `161ece9501cf0a11f3e48bd356eaa82de46d6a09`,
+`labeled_final/test-00000-of-00001.parquet` (sha256
+`ae342ff12bb84b84b95f468abf5db6cb7c7bd578271299fe9c99be75b8132f4d`, 8000 rows:
+3536 paraphrase, 4464 not), converted once to JSONL with keys sorted (sha256
+`0e2e68dc4a3e1a6120969c1c042636934cae24549ca5e388bed4df7fcc08405e`; the loader
+refuses other bytes). Draw: `random.Random(172)`, 100 paraphrases then 100
+non-paraphrases, each pool sorted by id. Claim lens only (PAWS has no
+questions); the question shown is empty. Vetoed by numbers: 1 paraphrase, 2
+non-paraphrases; 197 pairs reach the judge (394 calls).
+
+**Held out?** PAWS: yes — labels are human and not ours. Flips: their labels are
+fixed by construction, but the generator was written by the same hand as the
+judge's prompt, so they are **not held out**; say so beside the figure.
+
+**Figures, each with its denominator:** wrong merges on flips (of 105; of the 53
+the judge saw); wrong merges on PAWS non-paraphrases (of 100); missed merges on
+PAWS paraphrases (of 100); `cannot_tell`, order disagreements, malformed and
+unanswered pairs, each over the pairs they could occur in. A call that fails
+after retries is stored as an empty reply and counted as **unanswered**, never
+as the judge keeping a pair apart.
+
+**Kill criteria** (the limits the user set on 2026-09-30):
+- **any** flip merged → **STOP**.
+- more than **5 of 100** PAWS non-paraphrases merged → **STOP**.
+- any expected-`different` pair unanswered → **INCOMPLETE**: the limits cannot
+  clear until it is answered.
+
+STOP means the judge merges answers that say different things: the default is
+turned back off in a follow-up, and run 2's re-judged figures below are reported
+but not claimed as merges of rewordings. Missed merges on PAWS paraphrases are
+reported, not gated: PAWS "paraphrase" is a looser human judgement than the
+claim lens's "each says everything the other says", so some misses are that
+strictness working as designed.
+
+### Run 2, re-judged — `python -m occam rejudge traces/occam/run2 --out traces/occam/run2-judged`
+
+Only the judge is new: every other stage is read from the stored artifact, not
+re-asked, and the rejudge refuses a model other than the one the run recorded.
+The rejudged artifacts must replay to their own stored answers.
+
+Measured offline with `candidate_pairs` over the ten run 2 artifacts: 28
+question-lens pairs; 1 vetoed (q04, "without" on one side only — a **known false
+veto**); 27 judged = **54 calls**. **0 claim-lens pairs**: no run 2 quote states its
+conclusion word for word, so corroboration has nothing to act on and **0 statuses
+can move — by construction, not a finding.**
+
+**My labels, not held out:** all 28 pairs `same` under the question lens — each
+question's answers are consistent (q03's "1912" is less precise than "6 January
+1912", and q10's third answer omits "regulate cellular metabolism", both allowed
+by the question lens). So run 2 **cannot show a wrong merge** (denominator 0);
+it measures missed merges only, of 28, the veto included.
+
+**Predictions** (carried from #172, registered before any call): q06 3 → 1;
+q03 3 → 1; q01 merges (the year is the question's); agreement rises in at most
+about 5 of 10; 0 statuses move. The earlier "q10 stays ≥ 2" is superseded by the
+consistency decision on #172. The "at most 5" prior disagrees with my own labels
+(all same): it records that I expected the judge to be stricter than I am.
