@@ -72,7 +72,7 @@ never by an empty tuple, which would read as "nothing constrains this".
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Sequence
+from typing import Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
 
@@ -182,7 +182,8 @@ def ceilings(arguments: Sequence[Argument], store: SnapshotStore, as_of: datetim
 
 def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
            store: SnapshotStore, *, as_of: datetime,
-           max_age_days: int = MAX_AGE_DAYS) -> StatusResult:
+           max_age_days: int = MAX_AGE_DAYS,
+           claim_group: Optional[Mapping[str, str]] = None) -> StatusResult:
     """Solve, then read every argument's status off the two extensions.
 
     `as_of` is required and never defaulted to now: freshness must come out
@@ -207,20 +208,26 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
         else:
             by_label[aid] = (Status.OPEN, (f"{aid} undecided and defended in no preferred extension",))
 
-    # Corroboration (#162): see the module docstring.
+    # Corroboration (#162): see the module docstring. Conclusions the
+    # same-answer judge found identical under the claim lens (#172) are one
+    # conclusion here; without it, exact normalised wording.
+    def group(conclusion: str) -> str:
+        k = norm_conclusion(conclusion)
+        return (claim_group or {}).get(k, k)
+
     hosts_of: dict[str, set[str]] = {}
     texts_of: dict[str, set[str]] = {}
     for a in arguments:
         if (a.kind == "quote" and solved.grounded[a.id] == Label.IN
                 and ceil[a.id][0] == Status.ESTABLISHED):
             snap = _snapshot(a, store)
-            key = norm_conclusion(a.conclusion)
+            key = group(a.conclusion)
             hosts_of.setdefault(key, set()).update(host(u) for u in snap.urls)
             texts_of.setdefault(key, set()).add(snap.text_sha256)
     for a in arguments:
         st, _ = by_label[a.id]
         if st == Status.ESTABLISHED:
-            key = norm_conclusion(a.conclusion)
+            key = group(a.conclusion)
             hosts = hosts_of[key]
             if len(hosts) < MIN_HOSTS or len(texts_of[key]) < MIN_HOSTS:
                 by_label[a.id] = (Status.HYPOTHESIS,

@@ -37,8 +37,15 @@ def _show(a: Answer) -> None:
         if a.status_set is not None:
             print(f"   status set: {{{', '.join(s.value for s in a.status_set)}}}")
         print(f"   {a.status_set_note}")
+    if a.positions and "wordings" not in a.positions[0]:
+        print("   positions grouped by exact wording (same-answer judge not run)")
     for p in a.positions:
         print(f"   position [{p['status']}] ({p['samples']} samples): {p['conclusion']}")
+        for w in p.get("wordings", []):
+            if w != p["conclusion"]:
+                print(f"      also worded: {w}")
+        for k in p.get("kept_apart", []):
+            print(f"      kept apart from: {k['from'][:90]} — {k['why']}")
     print("counters:")
     for name, c in a.counters.items():
         frac = f" = {c.frac:.2f}" if c.frac is not None and name.endswith("frac") else ""
@@ -103,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
-            r = run_control(c, model, as_of=now)
+            r = run_control(c, model, as_of=now, params=Params(judge_same=True))
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
@@ -147,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
         claimed = abstained = 0
         statuses: dict[str, int] = {}
         for i, q in enumerate(FACTUAL_QUESTIONS, 1):
-            answer, artifact = run(q, model)
+            answer, artifact = run(q, model, params=Params(judge_same=True))
             (outdir / f"q{i:02d}.json").write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
@@ -191,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         answer, artifact = run(args.question, OpenRouterModel(args.model), urls=args.url,
                                n_sources=args.sources,
-                               params=Params(k_argue=args.k, k_attack=args.k),
+                               params=Params(k_argue=args.k, k_attack=args.k, judge_same=True),
                                calibration=cal)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))
