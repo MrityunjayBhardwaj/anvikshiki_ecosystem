@@ -46,6 +46,18 @@ def _judged_when(art: Artifact) -> str:
             f"({art.as_of.isoformat()}) — its replies are from a later call than the rest")
 
 
+def _served(art: Artifact) -> str:
+    """Who served the model calls, said every time (#186)."""
+    def says(pairs):
+        return ", ".join(pairs) if pairs else "no model call was made"
+    line = ("served by: not recorded (made before #186, or by a model that does not report it)"
+            if art.served_by is None else f"served by: {says(art.served_by)}")
+    if art.same_judged_at is not None and art.same_judged_at != art.as_of:
+        line += ("; the later judge: not recorded" if art.same_served_by is None
+                 else f"; the later judge: {says(art.same_served_by)}")
+    return line
+
+
 def _show(a: Answer) -> None:
     print(f"\nQ: {a.question}")
     if a.abstained:
@@ -369,11 +381,13 @@ def main(argv: list[str] | None = None) -> int:
     if cal is not None:
         _show(answer)
         print(_judged_when(artifact))
+        print(_served(artifact))
         print("\n(calibrated replay: not compared with the stored answer)")
         return 0
     same = canonical(answer) == json.dumps(stored["answer"], sort_keys=True, ensure_ascii=False)
     _show(answer)
     print(_judged_when(artifact))
+    print(_served(artifact))
     print(f"\nreplay {'MATCHES' if same else 'DIFFERS FROM'} the stored answer")
     return 0 if same else 1
 
