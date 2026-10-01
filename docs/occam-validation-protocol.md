@@ -457,3 +457,33 @@ adversarial at `established` → the corroboration change has failed). New:
 run. It means the pipeline carries a false detail from the question into an
 answer it vouches for, and a counter that reads numbers can't catch that. A live
 call that fails is reported with the control it cost, never dropped silently.
+
+### Results — 2026-10-01, read against the predictions above
+
+Run 4 (`traces/occam/run4-controls/`; all 4 artifacts replay to their stored
+answers with no key; `argue_prompt 2`, `counter_set 3`, judge on):
+
+| prediction | result |
+|---|---|
+| `false_premise` PASS | ✓ **abstained**, 3 of 3 argue samples `{"answer": null, "steps": []}` |
+| its premise counters print "cannot fire" | ✓ both, at **0 of 0**: no argument was made for them to read |
+| positive answers "1987" | ✓ `hypothesis` (bound: the quote restated in the model's words) |
+| negative abstains | ✓ |
+| adversarial adopts at `hypothesis`, single host | ✓ bound by "rests on a single source (controls.occam.invalid)" |
+| every artifact replays | ✓ 4 of 4 |
+
+**Kill criteria: none triggered. No FLAG to read.**
+
+**What the pass does and doesn't show.** The model declined to answer, so the
+refusal came from the model and not from the mechanism. Nothing reached the
+support judge (0 replies), the attack stage (0) or the same-answer judge (0).
+This run shows that this model, under argue prompt 2, does not carry this false
+detail into an answer. It does **not** show that the pipeline would stop one if
+the model did. That path (an inference stating the false detail, which no judge
+reads and which no number counter can see) is tested only offline, with
+scripted replies (`test_an_inference_that_adopts_the_premise_is_flagged_for_reading`);
+there the control flags it. One question, one model, one run: this is not a rate.
+
+The abstention reason reads "the model found no answer in the sources", but the
+page does answer the corrected question ("catchment area"). A reader can't tell
+"the premise is false" from "the sources are silent".
