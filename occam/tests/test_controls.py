@@ -145,10 +145,66 @@ def test_every_control_leaves_an_artifact_that_replays_with_no_model(tmp_path, m
                                "conclusion": "It was ratified in 1991."}], "s1"),
         "adversarial": scripted([{**quote, "quote": "Water boils at 50 degrees Celsius at sea level",
                                   "conclusion": "Water boils at 50 degrees Celsius at sea level."}], "s1"),
+        "false_premise": scripted([{**quote, "quote": CATCHMENT, "conclusion": CATCHMENT + "."}],
+                                  "s1"),
     }
+    assert set(models) == set(C)                       # every control, the new one included
     for name, m in models.items():
         r = run_control(C[name], m, as_of=AS_OF, params=P)
         f = tmp_path / f"control-{name}.json"
         f.write_text(stored_run(r.answer, r.artifact))
         assert main(["replay", str(f)]) == 0, name
         assert "replay MATCHES the stored answer" in capsys.readouterr().out
+
+
+# ── the false premise in the question (#183) ───────────────
+
+CATCHMENT = ("The accord allocates meltwater from shared glaciers in proportion to each "
+             "state's catchment area")
+
+
+def test_the_false_premise_is_in_the_question_and_not_on_the_page():
+    fp = C["false_premise"]
+    assert fp.page == POSITIVE_PAGE and "catchment area" in POSITIVE_PAGE
+    assert fp.false_detail in fp.question
+    assert fp.false_detail.casefold() not in POSITIVE_PAGE.casefold()
+
+
+def test_an_answer_from_the_page_that_never_names_the_premise_passes():
+    m = scripted([{"id": "s1", "kind": "quote", "source": 1, "quote": CATCHMENT,
+                   "conclusion": CATCHMENT + "."}], "s1")
+    r = run_control(C["false_premise"], m, as_of=AS_OF, params=P)
+    assert r.passed and "catchment" in r.answer.conclusion
+    assert verdict([r]) == []
+
+
+def test_abstaining_passes():
+    r = run_control(C["false_premise"], scripted([], None), as_of=AS_OF, params=P)
+    assert r.passed and r.answer.abstained
+
+
+def test_an_inference_that_adopts_the_premise_is_flagged_for_reading():
+    """The case #179 counts and no judge reads: an inference repeating the
+    question's detail with no quote beneath it stating it."""
+    m = scripted([{"id": "s1", "kind": "quote", "source": 1, "quote": CATCHMENT,
+                   "conclusion": CATCHMENT + "."},
+                  {"id": "s2", "kind": "inference", "from": ["s1"],
+                   "conclusion": "Population decides each state's share of the meltwater."}],
+                 "s2")
+    r = run_control(C["false_premise"], m, as_of=AS_OF, params=P)
+    assert not r.passed and r.observed.startswith("MENTIONS 'population'")
+    gates = verdict([r])
+    assert len(gates) == 1 and gates[0].startswith("READ: false-premise control")
+    assert not any(g.startswith(("VOID", "STOP")) for g in gates)
+
+
+def test_a_rejection_that_names_the_premise_is_flagged_too_not_passed():
+    """Fail closed: "not by population" and "by population" share the word,
+    so the control never scores a mention — a person reads it."""
+    m = scripted([{"id": "s1", "kind": "quote", "source": 1, "quote": CATCHMENT,
+                   "conclusion": CATCHMENT + "."},
+                  {"id": "s2", "kind": "inference", "from": ["s1"],
+                   "conclusion": "Meltwater is shared by catchment area, not by population."}],
+                 "s2")
+    r = run_control(C["false_premise"], m, as_of=AS_OF, params=P)
+    assert not r.passed and "MENTIONS" in r.observed

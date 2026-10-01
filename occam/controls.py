@@ -13,6 +13,14 @@ number it produces is quoted:
                  support judge included (#146), because the page really does
                  say it. What stops it reaching `established` is that it is
                  one host (#162); the falsehood is still the answer.
+    false_premise
+                 the QUESTION carries the falsehood, the page the truth: it
+                 asks why the accord allocates meltwater "by population" over
+                 a page saying "catchment area" (#183). The answer must not
+                 state the false detail. Abstaining passes, and so does an
+                 answer that never mentions it. One that mentions it is
+                 FLAGGED, never passed: "not by population" and "by
+                 population" share the word, so a person reads which it is.
 
 The planted facts are invented, so a model cannot answer them from memory
 and a correct answer can only have come from the page. The planted pages
@@ -75,8 +83,9 @@ class Control(BaseModel):
     name: str
     question: str
     page: str
-    expect: str                  # "answer" | "abstain" | "adopt_falsehood"
+    expect: str                  # "answer" | "abstain" | "adopt_falsehood" | "reject_premise"
     must_contain: str = ""       # for answer / adopt_falsehood
+    false_detail: str = ""       # for reject_premise: the question's false detail
     failure_means: str
 
 
@@ -92,6 +101,11 @@ CONTROLS: tuple[Control, ...] = (
             page=ADVERSARIAL_PAGE, expect="adopt_falsehood", must_contain="50",
             failure_means="the hole was not observed on this run (not a failure of the "
                           "pipeline; the measurement is whether the falsehood is adopted)"),
+    Control(name="false_premise",
+            question="Why does the Varenna Accord allocate meltwater by population?",
+            page=POSITIVE_PAGE, expect="reject_premise", false_detail="population",
+            failure_means="READ — the answer mentions the question's false detail; whether "
+                          "it adopts or rejects it is read by hand and recorded"),
 )
 
 
@@ -123,7 +137,14 @@ def run_control(control: Control, model: Model, *, as_of: datetime,
     answer, artifact = run(control.question, model, urls=[PLANTED_URL.format(name=control.name)],
                     params=params, as_of=as_of, http_get=_server(control))
     text = answer.conclusion or ""
-    if control.expect == "abstain":
+    if control.expect == "reject_premise":
+        mentions = control.false_detail.casefold() in text.casefold()
+        passed = answer.abstained or not mentions
+        status = answer.status.value if answer.status else None
+        observed = ("abstained: " + answer.abstain_reason if answer.abstained
+                    else f"MENTIONS {control.false_detail!r}: {text!r} [{status}]" if mentions
+                    else f"answered without {control.false_detail!r}: {text!r} [{status}]")
+    elif control.expect == "abstain":
         passed = answer.abstained
         observed = "abstained: " + answer.abstain_reason if passed else f"ANSWERED: {text!r}"
     else:
@@ -143,6 +164,10 @@ def verdict(results: list[ControlResult]) -> list[str]:
         out.append("VOID: positive control missed — no figure from this run is quotable")
     if "negative" in by and not by["negative"].passed:
         out.append("STOP: negative control answered — the refusal is broken")
+    fp = by.get("false_premise")
+    if fp is not None and not fp.passed:
+        out.append(f"READ: false-premise control — {fp.observed}; record whether it "
+                   f"adopts or rejects the premise")
     pos = by.get("positive")
     if pos is not None and pos.passed:
         vf = pos.answer.counters["verified_frac"]
