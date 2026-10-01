@@ -218,8 +218,24 @@ def test_every_span_dropped_abstains_naming_the_check_stage():
 
 
 def test_a_model_that_finds_nothing_abstains_as_such():
+    """It says what was observed, and no more (#188): run 4's false-premise
+    control got no answer from a page that answers the corrected question."""
     ans, _ = ask([argue_reply([], None)] * 3, [])
-    assert ans.abstained and "found no answer" in ans.abstain_reason
+    assert ans.abstained and ans.abstain_reason == (
+        "argue: the model returned no answer from the sources — this does not say "
+        "whether they are silent or the question's premise is false")
+
+
+def test_an_artifact_made_before_the_new_wording_keeps_the_old_one():
+    import json
+    from occam.answer import Artifact, canonical, replay
+    ans, art = ask([argue_reply([], None)] * 3, [])
+    old = json.loads(art.model_dump_json())
+    del old["params"]["reason_wording"]                  # as every artifact before #188
+    a = Artifact.model_validate(old)
+    assert a.params.reason_wording == 1
+    assert replay(a).abstain_reason == "argue: the model found no answer in the sources"
+    assert canonical(replay(art)) == canonical(ans)
 
 
 def test_no_readable_source_abstains_at_gather_and_calls_no_model():

@@ -78,6 +78,10 @@ class Params(BaseModel):
     # (#181): both premise counters say what they could read in the question.
     # An artifact without the field shows the counters it was made with.
     counter_set: int = 3
+    # Which wording the abstain reasons use, for the same reason. 2 (#188):
+    # when the model returns no answer, say only that — not that the sources
+    # have none. An artifact without the field keeps the wording it was made with.
+    reason_wording: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -152,6 +156,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "counter_set" not in data["params"]:
             data = {**data, "params": {**data["params"], "counter_set": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "reason_wording" not in data["params"]:
+            data = {**data, "params": {**data["params"], "reason_wording": 1}}
         return data
 
 
@@ -443,7 +450,13 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
             reason = ("check: every proposed answer was dropped — its quote or a premise "
                       "failed span verification")
         elif all(n == "model abstained" for n in argued.answer_notes if n):
-            reason = "argue: the model found no answer in the sources"
+            # The model returning nothing is all that was observed: the sources
+            # may be silent, or the question's premise false (run 4's
+            # false-premise control, #188). Nothing here tells which.
+            reason = ("argue: the model found no answer in the sources"
+                      if artifact.params.reason_wording < 2 else
+                      "argue: the model returned no answer from the sources — this does "
+                      "not say whether they are silent or the question's premise is false")
         else:
             reason = "argue: no sample produced an answer"
     else:
