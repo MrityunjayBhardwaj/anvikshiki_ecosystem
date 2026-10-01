@@ -230,10 +230,12 @@ def main(argv: list[str] | None = None) -> int:
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
-            print(f"{c.name:12} {'PASS' if r.passed else 'FAIL'}  {r.observed}  "
+            # A false-premise answer that mentions the detail is read, not scored (#183).
+            label = "PASS" if r.passed else "FLAG" if c.expect == "reject_premise" else "FAIL"
+            print(f"{c.name:13} {label}  {r.observed}  "
                   f"(verified {vf.n:g} of {vf.of} quotes)")
             if not r.passed:
-                print(f"{'':12} → {c.failure_means}")
+                print(f"{'':13} → {c.failure_means}")
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
         print(f"artifacts: {outdir}/")

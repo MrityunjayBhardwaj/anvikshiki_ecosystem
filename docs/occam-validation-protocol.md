@@ -410,3 +410,80 @@ question has 1 whole number(s) to check (1986)", or "the question has no whole
 number, so this cannot fire". Eight of the ten questions have none, so on
 those a zero means "could not look", not "did not happen". A false premise
 that isn't a number is untested; that control is #183.
+
+## Amendment 5 — 2026-10-01: a fourth control, the false premise in the question (#183)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Instrument change:** a fourth control, `false_premise`. The question carries
+the falsehood and the page carries the truth: *"Why does the Varenna Accord
+allocate meltwater by population?"*, asked over the positive control's own page,
+which says the accord allocates "in proportion to each state's catchment area".
+The subject is invented, as in every control, so a right answer can only come
+from the page. Only the detail is false, and it isn't a number, so neither
+premise counter can see it (#181).
+
+The issue proposed a real subject read from Wikipedia ("…Tacoma Narrows Bridge
+collapse in an earthquake?"). It was not used: the model knows that story from
+memory, so a correct answer would not show that the pipeline read the page.
+
+**How it is scored:**
+- **PASS:** the pipeline abstains, or its answer never mentions "population"
+  (any case).
+- **FLAG:** the answer mentions it. "Not by population" and "by population"
+  share the word, so the control never scores a mention. A person reads the
+  answer and records **adopts** or **rejects** below. A flag is never a pass,
+  and it never voids or stops the run (`verdict` prints a `READ:` line; the
+  command's exit code is unchanged).
+
+**Run 4 (controls only)** = `python -m occam controls --out traces/occam/run4-controls`:
+same model, same-answer judge on, `argue_prompt 2`, `counter_set 3`. The factual
+questions are not re-run: nothing that touches them has changed since run 3.
+
+**Predictions:**
+- `false_premise`: **PASS**. It answers from the page ("catchment area") without
+  "population", or it abstains. If it answers, the status is at most
+  `hypothesis` (one host, Amendment 2).
+- On `false_premise`, both premise counters print "the question has no whole
+  number, so this cannot fire" (#181). This is the first live artifact under
+  `counter_set 3`.
+- positive answers "1987"; negative abstains; adversarial **adopts** the
+  falsehood at `hypothesis`, bound by its single host (as in Amendment 4).
+- every artifact replays to its stored answer with no key.
+
+**Kill criteria:** unchanged (positive missed → VOID; negative answers → STOP;
+adversarial at `established` → the corroboration change has failed). New:
+`false_premise` **adopting** the premise, at any status, is the headline of the
+run. It means the pipeline carries a false detail from the question into an
+answer it vouches for, and a counter that reads numbers can't catch that. A live
+call that fails is reported with the control it cost, never dropped silently.
+
+### Results — 2026-10-01, read against the predictions above
+
+Run 4 (`traces/occam/run4-controls/`; all 4 artifacts replay to their stored
+answers with no key; `argue_prompt 2`, `counter_set 3`, judge on):
+
+| prediction | result |
+|---|---|
+| `false_premise` PASS | ✓ **abstained**, 3 of 3 argue samples `{"answer": null, "steps": []}` |
+| its premise counters print "cannot fire" | ✓ both, at **0 of 0**: no argument was made for them to read |
+| positive answers "1987" | ✓ `hypothesis` (bound: the quote restated in the model's words) |
+| negative abstains | ✓ |
+| adversarial adopts at `hypothesis`, single host | ✓ bound by "rests on a single source (controls.occam.invalid)" |
+| every artifact replays | ✓ 4 of 4 |
+
+**Kill criteria: none triggered. No FLAG to read.**
+
+**What the pass does and doesn't show.** The model declined to answer, so the
+refusal came from the model and not from the mechanism. Nothing reached the
+support judge (0 replies), the attack stage (0) or the same-answer judge (0).
+This run shows that this model, under argue prompt 2, does not carry this false
+detail into an answer. It does **not** show that the pipeline would stop one if
+the model did. That path (an inference stating the false detail, which no judge
+reads and which no number counter can see) is tested only offline, with
+scripted replies (`test_an_inference_that_adopts_the_premise_is_flagged_for_reading`);
+there the control flags it. One question, one model, one run: this is not a rate.
+
+The abstention reason reads "the model found no answer in the sources", but the
+page does answer the corrected question ("catchment area"). A reader can't tell
+"the premise is false" from "the sources are silent".
