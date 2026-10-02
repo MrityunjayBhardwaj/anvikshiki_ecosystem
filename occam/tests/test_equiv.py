@@ -9,7 +9,8 @@ import json
 import pytest
 
 from occam.answer import Artifact, Params, canonical, replay, run
-from occam.equiv import EquivResult, Pair, Verdict, equiv_from_replies, judge_same, veto
+from occam.equiv import (NEGATIONS_BY_SET, EquivResult, Pair, Verdict, equiv_from_replies,
+                         judge_same, veto)
 from occam.model import ScriptedModel
 from occam.status import derive
 from occam.tests.test_answer import AS_OF, QUERIES, SUPPORT_ALL, VIABLE, attacks, argue_reply, wiki
@@ -55,6 +56,27 @@ def test_conflicting_numbers_are_vetoed_even_under_the_question_lens(a, b):
 ])
 def test_number_and_negation_swaps_are_refused_under_both_lenses(a, b):
     assert veto(a, b, "question", "What happened?") and veto(a, b, "claim", "What happened?")
+
+
+GREW = "The population grew exponentially."
+
+
+def test_without_negates_a_phrase_not_the_statement():
+    """#192: run 2's q04 answer "…without bound" was vetoed as if it said the
+    opposite. It still reaches the judge, which decides; the veto only refuses."""
+    a = "The population grew without bound."
+    assert veto(a, GREW, "question", "Why did the population grow?") == ""
+    assert veto(a, GREW, "claim", "") == ""
+
+
+def test_a_real_negation_is_still_refused():
+    a = "The population did not grow."
+    assert veto(a, GREW, "question", "Why did the population grow?") == "negation differs: not"
+
+
+def test_set_1_still_reads_without_as_a_negation_so_old_runs_replay():
+    a = "The population grew without bound."
+    assert veto(a, GREW, "claim", "", NEGATIONS_BY_SET[1]) == "negation differs: without"
 
 
 def test_nothing_vetoed_means_nothing_decided():
@@ -176,6 +198,42 @@ def test_kept_apart_says_why():
     whys = [k["why"] for p in ans.positions for k in p["kept_apart"]]
     assert "adds 'only'" in whys
     assert ans.counters["agree_frac"].n < 3
+
+
+# ── #192: which negation words a run used is part of the run ─
+
+WITHOUT = [WORDINGS[0], "A business is viable without growth only when LTV exceeds CAC.",
+           WORDINGS[2]]
+
+
+def run_words(veto_words, same_replies):
+    argue = [argue_reply([{**VIABLE, "conclusion": w}], "q1") for w in WITHOUT]
+    model = ScriptedModel([QUERIES] + argue + [SUPPORT_ALL] + [attacks()] * 3 + same_replies)
+    ans, art = run("Is growth alone enough to make a business viable?", model,
+                   params=Params(k_argue=3, k_attack=3, veto_words=veto_words),
+                   as_of=AS_OF, http_get=wiki)
+    return ans, art, model
+
+
+def test_a_without_on_one_side_reaches_the_judge_under_set_2():
+    ans, _, model = run_words(2, all_same(3))
+    assert model._replies == [] and ans.counters["same_question_vetoed"].n == 0
+    assert len(ans.positions) == 1 and ans.positions[0]["samples"] == 3
+
+
+def test_set_1_vetoes_it_and_an_artifact_without_the_field_replays_under_set_1():
+    """Every judged artifact before #192 (run2-judged and run3 q04 among them)
+    stored replies for set 1's pairs only; read as set 2 they would land on the
+    wrong pairs."""
+    ans, art, model = run_words(1, all_same(1))
+    assert model._replies == [] and ans.counters["same_question_vetoed"].n == 2
+    old = json.loads(art.model_dump_json())
+    del old["params"]["veto_words"]
+    stored = Artifact.model_validate(old)
+    assert stored.params.veto_words == 1
+    assert canonical(replay(stored)) == canonical(ans)
+    as_2 = Artifact.model_validate({**old, "params": {**old["params"], "veto_words": 2}})
+    assert canonical(replay(as_2)) != canonical(ans)
 
 
 def test_without_the_judge_nothing_new_appears():
