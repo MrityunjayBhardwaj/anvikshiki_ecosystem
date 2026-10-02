@@ -35,7 +35,7 @@ from .status import MAX_AGE_DAYS, StatusResult, derive
 from .types import Status, rank
 
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
-           "canonical", "stored_run"]
+           "canonical", "stored_run", "contradicted_quotes"]
 
 ARTIFACT_VERSION = 1
 
@@ -325,6 +325,36 @@ def stored_run(answer: Answer, artifact: Artifact) -> str:
     produced, so a replay has something to match against."""
     return json.dumps({"artifact": artifact.model_dump(mode="json"),
                        "answer": json.loads(canonical(answer))}, indent=1)
+
+
+def contradicted_quotes(answer: Answer) -> tuple[list[dict[str, Any]], int]:
+    """The quotes beneath the shown answer that an attack defeated, and how
+    many quotes lie beneath it at all (#193). A status can be honest while
+    the answer's own sources disagree with each other — run 3's q04 rests on
+    "under high wind conditions", which three "moderate winds" arguments
+    defeat — and the reader should not have to open the tree to learn it.
+
+    Read from the stored derivation, so every answer already has it and
+    replay is unchanged. An abstained answer has no quotes beneath it."""
+    hit: dict[str, dict[str, Any]] = {}
+    quotes: set[str] = set()
+
+    def walk(node: dict[str, Any]) -> None:
+        if node["kind"] == "quote" and node["id"] not in quotes:
+            quotes.add(node["id"])
+            won = [x for x in node["attacks_received"] if x["succeeded"]]
+            if won:
+                span = node.get("span") or {}
+                hit[node["id"]] = {"id": node["id"], "quote": span.get("quote", ""),
+                                   "url": span.get("url", ""),
+                                   "by": [{"attacker": x["attacker"], "why": x["rationale"]}
+                                          for x in won]}
+        for sub in node["sub_arguments"]:      # a tree: _tree cuts cycles when built
+            walk(sub)
+
+    if answer.derivation is not None:
+        walk(answer.derivation)
+    return [hit[k] for k in sorted(hit)], len(quotes)
 
 
 # ── assembly ────────────────────────────────────────────────
