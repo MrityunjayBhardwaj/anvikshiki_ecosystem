@@ -32,7 +32,15 @@ from .solve import chain_pramana
 from .spans import ADMITTED
 from .support import SupportResult, apply_support, support, support_from_replies
 from .status import MAX_AGE_DAYS, StatusResult, derive
-from .types import Status, rank
+from .types import STATUS_ORDER, Status
+
+# Weakest first, as types.STATUS_ORDER, but for choosing what to show (see
+# Params.shown_order). Never for ceilings or attack strength.
+SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
+    1: STATUS_ORDER,
+    2: (Status.OPEN, Status.CONTESTED, Status.PROVISIONAL, Status.HYPOTHESIS,
+        Status.ESTABLISHED),
+}
 
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
            "canonical", "stored_run"]
@@ -87,6 +95,12 @@ class Params(BaseModel):
     # without the field was judged under 1, and its stored replies line up
     # with set 1's pairs only.
     veto_words: int = 2
+    # Which order picks the answer shown and orders the positions. 2 (#191):
+    # contested above open — a contested answer has a coherent case for it,
+    # an open one has none. Only the choice of what to show: the status
+    # lattice (types.STATUS_ORDER), which sets ceilings and attack strength,
+    # is untouched. An artifact without the field shows what it showed.
+    shown_order: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -174,6 +188,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "veto_words" not in data["params"]:
             data = {**data, "params": {**data["params"], "veto_words": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "shown_order" not in data["params"]:
+            data = {**data, "params": {**data["params"], "shown_order": 1}}
         return data
 
 
@@ -393,6 +410,7 @@ def assemble(artifact: Artifact, snaps: Sequence[Snapshot], readable: Sequence[S
     by_id = argued.by_id()
     statuses = derived.statuses
     sources = {s.id: s for s in snaps}
+    rank = SHOWN_ORDER[artifact.params.shown_order].index
     k = argued.k
     degraded: list[str] = list(artifact.gather_notes)
     for s in snaps:
