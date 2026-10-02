@@ -66,7 +66,16 @@ __all__ = ["Lens", "EQUIV_VERDICTS", "Pair", "Verdict", "EquivResult", "veto",
 Lens = Literal["question", "claim"]
 EQUIV_VERDICTS = ("same", "different", "cannot_tell")
 
-NEGATIONS = frozenset({"not", "no", "never", "none", "neither", "nor", "without", "cannot"})
+# Words that negate the whole statement. Set 1 also held "without", which
+# negates a noun phrase, not the statement: "grew without bound" says it grew,
+# and set 1 vetoed it exactly as it vetoed "did not grow" (#192). Which set a
+# run used is `Params.veto_words`: the stored judge replies are read in order
+# over the pairs no veto ruled out, so a run must replay under its own set.
+NEGATIONS_BY_SET = {
+    1: frozenset({"not", "no", "never", "none", "neither", "nor", "without", "cannot"}),
+    2: frozenset({"not", "no", "never", "none", "neither", "nor", "cannot"}),
+}
+NEGATIONS = NEGATIONS_BY_SET[2]
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _WORD = re.compile(r"[a-z]+(?:['’][a-z]+)?")
 
@@ -75,17 +84,18 @@ def _numbers(s: str) -> set[str]:
     return {n.replace(",", "") for n in _NUMBER.findall(s)}
 
 
-def _negations(s: str) -> set[str]:
+def _negations(s: str, words: frozenset[str]) -> set[str]:
     out = set()
     for w in _WORD.findall(s.casefold()):
-        if w in NEGATIONS:
+        if w in words:
             out.add(w)
         elif w.endswith(("n't", "n’t")):
             out.add("n't")
     return out
 
 
-def veto(a: str, b: str, lens: Lens, question: str) -> str:
+def veto(a: str, b: str, lens: Lens, question: str,
+         negations: frozenset[str] = NEGATIONS) -> str:
     """Why the pair cannot be the same, decided without a model; "" if nothing
     rules it out."""
     na, nb = _numbers(a), _numbers(b)
@@ -96,7 +106,7 @@ def veto(a: str, b: str, lens: Lens, question: str) -> str:
             return f"numbers conflict: {', '.join(sorted(na ^ nb))}"
     elif na != nb:
         return f"numbers differ: {', '.join(sorted(na ^ nb))}"
-    ga, gb = _negations(a), _negations(b)
+    ga, gb = _negations(a, negations), _negations(b, negations)
     if ga != gb:
         return f"negation differs: {', '.join(sorted(ga ^ gb))}"
     return ""
@@ -114,14 +124,15 @@ class Pair(BaseModel):
     veto: str = ""
 
 
-def candidate_pairs(argued: ArgueResult, question: str) -> tuple[Pair, ...]:
+def candidate_pairs(argued: ArgueResult, question: str, *,
+                    veto_words: int = 2) -> tuple[Pair, ...]:
     """Every pair that could merge, in a fixed order. Deterministic: live and
     replay compute the same tuple from the same arguments.
 
     Question lens: distinct surviving answer conclusions. Claim lens: distinct
     conclusions of quotes that state them word for word — the only arguments
     that can reach an established ceiling, and so the only ones corroboration
-    reads."""
+    reads. `veto_words` names the negation set (see NEGATIONS_BY_SET)."""
     by = argued.by_id()
     wording: dict[str, str] = {}
     for a in sorted(argued.arguments, key=lambda x: x.id):
@@ -134,7 +145,8 @@ def candidate_pairs(argued: ArgueResult, question: str) -> tuple[Pair, ...]:
         for x, y in itertools.combinations(keys, 2):
             pairs.append(Pair(id=f"P{len(pairs):04d}", lens=lens, a=x, b=y,
                               text_a=wording[x], text_b=wording[y],
-                              veto=veto(wording[x], wording[y], lens, question)))
+                              veto=veto(wording[x], wording[y], lens, question,
+                                        NEGATIONS_BY_SET[veto_words])))
     return tuple(pairs)
 
 

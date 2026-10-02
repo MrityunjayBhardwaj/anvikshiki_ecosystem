@@ -82,6 +82,11 @@ class Params(BaseModel):
     # when the model returns no answer, say only that — not that the sources
     # have none. An artifact without the field keeps the wording it was made with.
     reason_wording: int = 2
+    # Which negation words the same-answer veto reads (occam.equiv
+    # NEGATIONS_BY_SET). 2 (#192): "without" is not a negation. An artifact
+    # without the field was judged under 1, and its stored replies line up
+    # with set 1's pairs only.
+    veto_words: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -166,6 +171,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "reason_wording" not in data["params"]:
             data = {**data, "params": {**data["params"], "reason_wording": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "veto_words" not in data["params"]:
+            data = {**data, "params": {**data["params"], "veto_words": 1}}
         return data
 
 
@@ -220,7 +228,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
         if params.judge_same:
-            same_replies = judge_same(model, question, candidate_pairs(argued, question),
+            pairs = candidate_pairs(argued, question, veto_words=params.veto_words)
+            same_replies = judge_same(model, question, pairs,
                                       temperature=params.t_same)
     artifact = Artifact(question=question, as_of=as_of, params=params,
                         snapshots=tuple(StoredSnapshot.of(s) for s in snaps),
@@ -249,7 +258,8 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     claim_group = None
     if artifact.params.judge_same:
         same = equiv_from_replies(artifact.same_replies,
-                                  candidate_pairs(argued, artifact.question))
+                                  candidate_pairs(argued, artifact.question,
+                                                  veto_words=artifact.params.veto_words))
         claim_group = same.groups("claim", [v.pair.a for v in same.verdicts] +
                                   [v.pair.b for v in same.verdicts])
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
@@ -294,7 +304,8 @@ def rejudge(artifact: Artifact, model: Model, *, at: datetime) -> tuple[Answer, 
     replies: list[str] = []
     if readable:
         replies = judge_same(model, artifact.question,
-                             candidate_pairs(argued, artifact.question),
+                             candidate_pairs(argued, artifact.question,
+                                             veto_words=artifact.params.veto_words),
                              temperature=artifact.params.t_same)
     judged = artifact.model_copy(update={
         "params": artifact.params.model_copy(update={"judge_same": True}),
