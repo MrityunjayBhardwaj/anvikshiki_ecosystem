@@ -30,7 +30,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .answer import Answer, Artifact, Params, canonical, replay, run, stored_run
+from .answer import (Answer, Artifact, Params, canonical, contradicted_quotes, replay, run,
+                     stored_run)
 from .conformal import ABSTAINED, Calibration, Example, fit
 
 
@@ -68,6 +69,15 @@ def _show(a: Answer) -> None:
         if a.status_set is not None:
             print(f"   status set: {{{', '.join(s.value for s in a.status_set)}}}")
         print(f"   {a.status_set_note}")
+        # Said every time, zero included, so silence cannot read as "not
+        # checked" (#193).
+        hit, n_quotes = contradicted_quotes(a)
+        print(f"   quotes beneath this answer that another argument defeated: "
+              f"{len(hit)} of {n_quotes}")
+        for q in hit:
+            print(f"      {q['id']} \"{q['quote']}\"")
+            for x in q["by"]:
+                print(f"         defeated by {x['attacker']}: {x['why']}")
     if a.positions and "wordings" not in a.positions[0]:
         print("   positions grouped by exact wording (same-answer judge not run)")
     for p in a.positions:

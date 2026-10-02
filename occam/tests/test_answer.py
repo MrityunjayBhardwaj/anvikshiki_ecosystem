@@ -420,3 +420,50 @@ def test_a_stored_wikipedia_snapshot_still_yields_its_revision():
         extractor="wikipedia-extracts/1", empty_reason=None,
         revision_url="https://en.wikipedia.org/w/index.php?oldid=42")
     assert stored.load().revision_url == "https://en.wikipedia.org/w/index.php?oldid=42"
+
+
+# ── #193: an answer says when the quotes beneath it were defeated ─
+
+def _two_sides():
+    return [argue_reply([VIABLE, INFER], "i1")] * 2 + [argue_reply([GROWTH, GROW_INFER], "i2")]
+
+
+def test_an_answer_names_a_quote_beneath_it_that_another_quote_defeated(capsys):
+    """Run 3's q04 shape: two quotes contradict each other, each defeats the
+    other, and the shown answer rests on one of them. Its status is honest
+    (contested); what the reader could not see is why."""
+    from occam.__main__ import _show
+    from occam.answer import contradicted_quotes
+    ans, _ = ask(_two_sides(), [attacks(("A0002", "A0000", "undermining"),
+                                        ("A0000", "A0002", "undermining"))] * 3)
+    assert ans.answer_id == "A0001"                          # i1, resting on quote A0000
+    hit, n = contradicted_quotes(ans)
+    assert n == 1 and [h["id"] for h in hit] == ["A0000"]
+    assert hit[0]["quote"] == VIABLE["quote"] and [x["attacker"] for x in hit[0]["by"]] == ["A0002"]
+    _show(ans)
+    out = capsys.readouterr().out
+    assert "quotes beneath this answer that another argument defeated: 1 of 1" in out
+    assert f'A0000 "{VIABLE["quote"]}"' in out and "defeated by A0002: r" in out
+
+
+def test_nothing_defeated_is_said_as_zero_not_left_unsaid(capsys):
+    from occam.__main__ import _show
+    from occam.answer import contradicted_quotes
+    ans, _ = ask(_two_sides(), [attacks()] * 3)
+    assert contradicted_quotes(ans) == ([], 1)
+    _show(ans)
+    assert "quotes beneath this answer that another argument defeated: 0 of 1" in \
+        capsys.readouterr().out
+
+
+def test_an_attack_that_failed_is_not_a_defeat():
+    """A verbatim quote has the highest ceiling, so an inference attacking it
+    fails. It was disputed, not defeated, and is not named."""
+    from occam.answer import contradicted_quotes
+    verbatim = {**VIABLE, "conclusion": VIABLE["quote"]}
+    replies = [argue_reply([verbatim, INFER], "i1")] * 2 + \
+        [argue_reply([GROWTH, GROW_INFER], "i2")]
+    ans, _ = ask(replies, [attacks(("A0003", "A0000", "undermining"))] * 3)
+    q = ans.derivation["sub_arguments"][0]
+    assert q["id"] == "A0000" and [x["succeeded"] for x in q["attacks_received"]] == [False]
+    assert contradicted_quotes(ans) == ([], 1)
