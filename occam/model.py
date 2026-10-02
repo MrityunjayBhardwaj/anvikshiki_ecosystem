@@ -51,6 +51,10 @@ class OpenRouterModel:
         self._timeout = timeout
         self._max_tokens = max_tokens
         self._empty_retries = empty_retries
+        # Who served each call, as OpenRouter reports it (#186): the model
+        # slug and the provider that ran it. OpenRouter gives no version, so
+        # the provider is the part that can vary under one model name.
+        self.served: list[str] = []
 
     def complete(self, prompt: str, *, temperature: float) -> str:
         """The model's reply, never an empty one.
@@ -85,6 +89,8 @@ class OpenRouterModel:
                 body = json.loads(r.read())
         except urllib.error.HTTPError as e:
             raise RuntimeError(f"{self.name}: HTTP {e.code}: {e.read()[:300]!r}") from e
+        self.served.append(f"{body.get('model') or self._model} via "
+                           f"{body.get('provider') or 'an unreported provider'}")
         try:
             choice = body["choices"][0]
             return choice["message"]["content"] or "", choice.get("finish_reason")

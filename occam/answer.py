@@ -136,6 +136,13 @@ class Artifact(BaseModel):
     # (run2-judged was judged two days after it was argued, and cannot say
     # so). Nothing is derived from it; replay ignores it.
     same_judged_at: Optional[datetime] = None
+    # Who served the model calls (#186): the distinct "model via provider"
+    # pairs, as the provider reported them. `served_by` covers the run;
+    # `same_served_by` a judge added later by rejudge. None: not recorded (made
+    # before the field, or by a model that does not report it); () would mean
+    # no call was made. Audit only, like same_judged_at.
+    served_by: Optional[tuple[str, ...]] = None
+    same_served_by: Optional[tuple[str, ...]] = None
 
     @model_validator(mode="before")
     @classmethod
@@ -176,6 +183,11 @@ class Answer(BaseModel):
 
 # ── running and replaying ───────────────────────────────────
 
+def _served_since(model: Model, start: int) -> Optional[tuple[str, ...]]:
+    served = getattr(model, "served", None)
+    return None if served is None else tuple(sorted(set(served[start:])))
+
+
 def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         n_sources: int = 3, params: Optional[Params] = None,
         as_of: Optional[datetime] = None, http_get: HttpGet = urllib_get,
@@ -183,6 +195,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     """The whole pipeline. The clock is read once, here, and persisted."""
     params = (params or Params()).model_copy(update={"model": model.name})
     as_of = as_of or datetime.now(timezone.utc)
+    start = len(getattr(model, "served", ()))
     snaps, notes, gather_replies = gather(question, at=as_of, urls=urls, n=n_sources,
                                           http_get=http_get, model=model)
     readable = [s for s in snaps if s.text.strip()]
@@ -209,7 +222,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         support_replies=tuple(support_replies),
                         attack_replies=tuple(attack_replies),
                         same_replies=tuple(same_replies),
-                        same_judged_at=as_of if params.judge_same else None)
+                        same_judged_at=as_of if params.judge_same else None,
+                        served_by=_served_since(model, start))
     return replay(artifact, calibration), artifact
 
 
@@ -269,6 +283,7 @@ def rejudge(artifact: Artifact, model: Model, *, at: datetime) -> tuple[Answer, 
         raise ValueError(f"run was made by {artifact.params.model!r}; rejudging with "
                          f"{model.name!r} would misattribute the judge's replies")
     _, readable, _, argued, _ = _argued(artifact)
+    start = len(getattr(model, "served", ()))
     replies: list[str] = []
     if readable:
         replies = judge_same(model, artifact.question,
@@ -276,7 +291,8 @@ def rejudge(artifact: Artifact, model: Model, *, at: datetime) -> tuple[Answer, 
                              temperature=artifact.params.t_same)
     judged = artifact.model_copy(update={
         "params": artifact.params.model_copy(update={"judge_same": True}),
-        "same_replies": tuple(replies), "same_judged_at": at})
+        "same_replies": tuple(replies), "same_judged_at": at,
+        "same_served_by": _served_since(model, start)})
     return replay(judged), judged
 
 
