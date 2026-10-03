@@ -2,6 +2,7 @@
 
     python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE] [--no-judge-same]
     python -m occam replay FILE [--calibration CAL] [--blind]
+    python -m occam replay FILE --drop-attack A:T ... --reject-quote ID ...   # what if
     python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
@@ -24,6 +25,10 @@ recomputes the answer with no model and says whether it matches the stored one.
 answer and its chain down to the quoted bytes, with nothing the pipeline
 decided about it — no status, bounds, attack outcomes, judge verdicts or
 counters — so a label cannot echo the status it is meant to check.
+With `--drop-attack ATTACKER:TARGET` or `--reject-quote ID` (each repeatable)
+it edits those stored replies first and prints the answer before and after:
+what would change it, computed by replay. Nothing is written, and an edit the
+stored replies cannot answer for is refused rather than guessed (#206).
 """
 
 from __future__ import annotations
@@ -35,9 +40,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .answer import (Answer, Artifact, Params, canonical, contradicted_quotes,
+from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
                      derivation_nodes, question_details, replay, run, stored_run,
-                     support_verdicts)
+                     support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
 from .types import Status
 
@@ -183,6 +188,41 @@ def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> Non
               f"{s.get('revision_url') or 'not recorded — cannot be re-checked once the page changes'}")
 
 
+def _what_if(artifact: Artifact, answer: Answer, drops: list[str], rejects: list[str],
+             cal) -> int:
+    edges = []
+    for d in drops:
+        attacker, sep, target = d.partition(":")
+        if not sep or not attacker or not target:
+            print(f"--drop-attack takes ATTACKER:TARGET, got {d!r}", file=sys.stderr)
+            return 2
+        edges.append((attacker, target))
+    try:
+        edited = what_if(artifact, drop_attacks=edges, reject_quotes=rejects)
+    except WhatIfRefused as e:
+        print(f"refused: {e}", file=sys.stderr)
+        return 2
+    after = replay(edited, cal)
+    change = "; ".join([f"no attack {a} → {t}" for a, t in edges] +
+                       [f"support judge rejects {q}" for q in rejects])
+    print(f"what if: {change}  (computed by replay; nothing written)")
+    print(f"same-answer judge pairs this edit removed, whose stored replies are not read: "
+          f"{unread_judge_pairs(artifact, edited)}")
+    for name, a in (("as run", answer), ("what if", after)):
+        print(f"\n{name}:")
+        if a.abstained:
+            print(f"   ABSTAINED — {a.abstain_reason}")
+        else:
+            print(f"   A: {a.conclusion}")
+            print(f"   status: {a.status.value}   bound by: {'; '.join(a.status_bound_by)}")
+    print("\n" + ("the answer changes" if (answer.conclusion, answer.status) !=
+                   (after.conclusion, after.status) else
+                   "the answer and its status are the same; what binds it changes"
+                   if answer.status_bound_by != after.status_bound_by else
+                   "the answer, its status and what binds it are the same"))
+    return 0
+
+
 def _refuse_overwrite(paths: list[Path]) -> bool:
     """True (and says so) if any artifact would be written over. Checked before
     a model is built: a registered run's artifacts are gitignored, so one
@@ -293,6 +333,10 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("--calibration")
     rp.add_argument("--blind", action="store_true",
                     help="show it as a labeller reads it: no status or anything decided")
+    rp.add_argument("--drop-attack", action="append", default=[], metavar="ATTACKER:TARGET",
+                    help="what if this attack had not been proposed (repeatable)")
+    rp.add_argument("--reject-quote", action="append", default=[], metavar="ID",
+                    help="what if the support judge had rejected this quote (repeatable)")
     ct = sub.add_parser("controls")
     ct.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
@@ -478,6 +522,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.blind:
         _show(answer, artifact, blind=True)
         return 0
+    if args.drop_attack or args.reject_quote:
+        return _what_if(artifact, answer, args.drop_attack, args.reject_quote, cal)
     if cal is not None:
         _show(answer, artifact)
         print(_judged_when(artifact))
