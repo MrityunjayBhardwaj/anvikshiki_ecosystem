@@ -132,7 +132,9 @@ def _what_if(artifact: Artifact, answer: Answer, drops: list[str], rejects: list
             print(f"   status: {a.status.value}   bound by: {'; '.join(a.status_bound_by)}")
     print("\n" + ("the answer changes" if (answer.conclusion, answer.status) !=
                    (after.conclusion, after.status) else
-                   "the answer and its status are the same"))
+                   "the answer and its status are the same; what binds it changes"
+                   if answer.status_bound_by != after.status_bound_by else
+                   "the answer, its status and what binds it are the same"))
     return 0
 
 

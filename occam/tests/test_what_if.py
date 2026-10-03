@@ -9,8 +9,9 @@ from occam.__main__ import main
 from occam.answer import (Params, WhatIfRefused, canonical, replay, run, stored_run,
                           unread_judge_pairs, what_if)
 from occam.model import ScriptedModel
-from occam.tests.test_answer import (AGREE, AS_OF, NO_ATTACKS, QUERIES, SUPPORT_ALL, VIABLE,
-                                     _two_sides, argue_reply, ask, attacks, wiki)
+from occam.tests.test_answer import (AGREE, AS_OF, GROW_INFER, GROWTH, INFER, NO_ATTACKS,
+                                     QUERIES, SUPPORT_ALL, VIABLE, _two_sides, argue_reply, ask,
+                                     attacks, wiki)
 from occam.tests.test_equiv import WORDINGS, all_same
 from occam.types import Status
 
@@ -87,3 +88,18 @@ def test_the_command_refuses_with_exit_2_and_says_why(tmp_path, capsys):
     assert "refused: this edit changes the pairs" in capsys.readouterr().err
     assert main(["replay", str(f), "--drop-attack", "A0001"]) == 2
     assert "takes ATTACKER:TARGET" in capsys.readouterr().err
+
+
+def test_a_what_if_that_moves_nothing_says_so_in_full(tmp_path, capsys):
+    """An inference attacking a verbatim quote fails (#193's fixture), so
+    dropping that attack changes nothing: said as the answer, its status and
+    what binds it all the same."""
+    verbatim = {**VIABLE, "conclusion": VIABLE["quote"]}
+    ans, art = ask([argue_reply([verbatim, INFER], "i1")] * 2 +
+                   [argue_reply([GROWTH, GROW_INFER], "i2")],
+                   [attacks(("A0003", "A0000", "undermining"))] * 3)
+    f = tmp_path / "run.json"
+    f.write_text(stored_run(ans, art))
+    assert main(["replay", str(f), "--drop-attack", "A0003:A0000"]) == 0
+    out = capsys.readouterr().out
+    assert out.rstrip().endswith("the answer, its status and what binds it are the same")
