@@ -73,6 +73,50 @@ class OpenRouterModel:
         raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
                            f"(finish_reason {finish!r})")
 
+    # Wikipedia is gathered on its own, and its mirrors would count as a second
+    # host while repeating the first (#209). Asked of the search engine; gather
+    # also drops any Wikipedia URL that comes back, so this list is a saving,
+    # not the guarantee.
+    WEB_EXCLUDED = ("wikipedia.org", "wikiwand.com", "wikizero.com", "dbpedia.org")
+
+    def web_search(self, question: str, n: int) -> tuple[list[str], str]:
+        """URLs a web search cited for the question, and the raw response for audit.
+
+        Discovery only (#209): the model's reply text is never used — the URLs
+        are fetched and quoted like any other page, and every check applies to
+        what they say, not to what the model said about them."""
+        payload = json.dumps({
+            "model": self._model,
+            "messages": [{"role": "user", "content":
+                          f"Find web pages that answer this question.\n\nQUESTION: {question}"}],
+            "temperature": 0.0,
+            "max_tokens": 300,
+            "plugins": [{"id": "web", "max_results": n,
+                         "exclude_domains": list(self.WEB_EXCLUDED)}],
+        }).encode()
+        req = urllib.request.Request(self.URL, data=payload, headers={
+            "Authorization": f"Bearer {self._key}",
+            "Content-Type": "application/json",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as r:
+                raw = r.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"{self.name}: web search HTTP {e.code}: {e.read()[:300]!r}") from e
+        body = json.loads(raw)
+        self.served.append(f"{body.get('model') or self._model} via "
+                           f"{body.get('provider') or 'an unreported provider'}")
+        urls: list[str] = []
+        try:
+            notes = body["choices"][0]["message"].get("annotations") or []
+        except (KeyError, IndexError, TypeError) as e:
+            raise RuntimeError(f"{self.name}: unexpected web search response {raw[:300]}") from e
+        for a in notes:
+            url = (a.get("url_citation") or {}).get("url") if isinstance(a, dict) else None
+            if isinstance(url, str) and url not in urls:
+                urls.append(url)
+        return urls, raw
+
     def _once(self, prompt: str, temperature: float) -> tuple[str, Any]:
         payload = json.dumps({
             "model": self._model,

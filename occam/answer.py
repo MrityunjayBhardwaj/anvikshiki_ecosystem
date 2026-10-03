@@ -25,7 +25,7 @@ from .argue import (ArgueResult, adds_question_number, argue, argue_from_replies
 from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
-from .gather import HttpGet, gather, urllib_get
+from .gather import HttpGet, WebSearch, gather, urllib_get
 from .model import Model, extract_json
 from .snapshot import Snapshot, SnapshotStore, host
 from .solve import chain_pramana
@@ -109,6 +109,12 @@ class Params(BaseModel):
     # alone would not raise it. Statuses are unchanged. An artifact without
     # the field names what it named.
     bound_ties: int = 2
+    # How many web pages were asked for beside Wikipedia's (#209): found by a
+    # web search, then fetched and quoted like any page. 0 — as in every
+    # artifact made before it — means Wikipedia only. Set by `run` from what it
+    # was given, so it records what happened, not what was hoped for. Replay
+    # reads the stored snapshots and never searches.
+    web_sources: int = 0
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -234,13 +240,20 @@ def _served_since(model: Model, start: int) -> Optional[tuple[str, ...]]:
 def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         n_sources: int = 3, params: Optional[Params] = None,
         as_of: Optional[datetime] = None, http_get: HttpGet = urllib_get,
-        calibration: Optional[Calibration] = None) -> tuple[Answer, Artifact]:
-    """The whole pipeline. The clock is read once, here, and persisted."""
+        calibration: Optional[Calibration] = None,
+        web_search: Optional[WebSearch] = None) -> tuple[Answer, Artifact]:
+    """The whole pipeline. The clock is read once, here, and persisted.
+
+    With `web_search`, `params.web_sources` web pages are gathered beside
+    Wikipedia's (#209); without it, none are, and the params say 0."""
     params = (params or Params()).model_copy(update={"model": model.name})
+    if web_search is None or urls:
+        params = params.model_copy(update={"web_sources": 0})
     as_of = as_of or datetime.now(timezone.utc)
     start = len(getattr(model, "served", ()))
     snaps, notes, gather_replies = gather(question, at=as_of, urls=urls, n=n_sources,
-                                          http_get=http_get, model=model)
+                                          http_get=http_get, model=model,
+                                          web_search=web_search, n_web=params.web_sources)
     readable = [s for s in snaps if s.text.strip()]
     argue_replies: list[str] = []
     support_replies: list[str] = []

@@ -24,16 +24,18 @@ from datetime import datetime
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Callable, Optional, Sequence
 
-from .snapshot import WIKIPEDIA_EXTRACTOR, Snapshot, capture
+from .snapshot import WIKIPEDIA_EXTRACTOR, Snapshot, capture, host
 
 if TYPE_CHECKING:
     from .model import Model
 
-__all__ = ["HttpGet", "gather", "fetch", "wikipedia_search", "search_queries",
+__all__ = ["HttpGet", "WebSearch", "gather", "fetch", "wikipedia_search", "search_queries",
            "html_to_text", "urllib_get"]
 
 # (url) -> (status, content_type, body). Raises on network failure.
 HttpGet = Callable[[str], tuple[int, str, bytes]]
+# (question, n) -> (urls found, raw reply kept for audit). OpenRouterModel.web_search.
+WebSearch = Callable[[str, int], tuple[list[str], str]]
 
 USER_AGENT = "occam-anvikshiki/0.1 (research prototype; https://github.com/MrityunjayBhardwaj/anvikshiki_ecosystem)"
 WIKI_API = "https://en.wikipedia.org/w/api.php"
@@ -181,16 +183,41 @@ def search_queries(model: "Model", question: str) -> tuple[list[str], str]:
     return qs, reply
 
 
+def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
+               http_get: HttpGet, notes: list[str], raw: list[str]) -> list[Snapshot]:
+    """Up to n pages a web search found, fetched and snapshotted by us (#209).
+
+    The search only discovers: what is kept is the URLs, and each page is
+    read through `fetch` exactly as a URL given by hand would be. A Wikipedia
+    URL is skipped — Wikipedia is gathered above, and a second copy of it
+    would count as a second host repeating the first."""
+    try:
+        found, reply = web_search(question, n)
+    except Exception as e:  # noqa: BLE001 — could not look is a note, never silence
+        notes.append(f"web search failed: {type(e).__name__}: {e}")
+        return []
+    raw.append(reply)
+    kept = [u for u in found if not host(u).endswith("wikipedia.org")]
+    if len(kept) < len(found):
+        notes.append(f"web search: skipped {len(found) - len(kept)} Wikipedia page(s)")
+    if not kept:
+        notes.append(f"web search returned no pages beyond Wikipedia for {question!r}")
+    return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]
+
+
 def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
            n: int = 3, http_get: HttpGet = urllib_get, model: Optional["Model"] = None,
+           web_search: Optional[WebSearch] = None, n_web: int = 0,
            ) -> tuple[list[Snapshot], list[str], list[str]]:
     """Snapshots for a question, notes on anything that degraded, and the
-    model's raw query reply (empty when no model was asked).
+    model's raw replies — its search queries, then the web search — for audit.
 
-    With `urls`, those are fetched. Otherwise the model, if given, proposes
-    search queries and each query's top pages are taken, deduplicated by
-    title, up to `n`; without a model the question itself is the query. A
-    search that returns nothing is a note, not silence.
+    With `urls`, those are fetched and nothing is searched. Otherwise the
+    model, if given, proposes search queries and each query's top pages are
+    taken, deduplicated by title, up to `n`; without a model the question
+    itself is the query. Then, with `web_search` and `n_web`, up to `n_web`
+    web pages follow Wikipedia's. A search that returns nothing is a note,
+    not silence.
     """
     notes: list[str] = []
     if urls:
@@ -218,4 +245,8 @@ def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
         for found in ranked:
             if depth < len(found) and found[depth] not in titles and len(titles) < n:
                 titles.append(found[depth])
-    return [_wiki_page(t, at=at, http_get=http_get) for t in titles], notes, raw
+    snaps = [_wiki_page(t, at=at, http_get=http_get) for t in titles]
+    if web_search is not None and n_web > 0:
+        snaps += _web_pages(question, n_web, web_search, at=at, http_get=http_get,
+                            notes=notes, raw=raw)
+    return snaps, notes, raw

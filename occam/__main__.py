@@ -325,6 +325,8 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--url", action="append")
     ask.add_argument("--k", type=int, default=3)
     ask.add_argument("--sources", type=int, default=3)
+    ask.add_argument("--web", type=int, default=3,
+                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     ask.add_argument("--model", default="z-ai/glm-5.2")
     ask.add_argument("--out")
     ask.add_argument("--calibration")
@@ -358,6 +360,8 @@ def main(argv: list[str] | None = None) -> int:
     ms.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ms.add_argument("--out")
+    ms.add_argument("--web", type=int, default=3,
+                    help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     cp = sub.add_parser("calibrate")
     cp.add_argument("labels")
     cp.add_argument("--population", required=True)
@@ -463,7 +467,9 @@ def main(argv: list[str] | None = None) -> int:
         claimed = abstained = 0
         statuses: dict[str, int] = {}
         for i, q in enumerate(FACTUAL_QUESTIONS, 1):
-            answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same))
+            answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same,
+                                                           web_sources=args.web),
+                                   web_search=getattr(model, "web_search", None) if args.web else None)
             (outdir / f"q{i:02d}.json").write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
@@ -505,11 +511,14 @@ def main(argv: list[str] | None = None) -> int:
         out = Path(args.out or f"traces/occam/{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json")
         if _refuse_overwrite([out]):
             return 2
-        answer, artifact = run(args.question, OpenRouterModel(args.model), urls=args.url,
+        model = OpenRouterModel(args.model)
+        answer, artifact = run(args.question, model, urls=args.url,
                                n_sources=args.sources,
                                params=Params(k_argue=args.k, k_attack=args.k,
-                                             judge_same=not args.no_judge_same),
-                               calibration=cal)
+                                             judge_same=not args.no_judge_same,
+                                             web_sources=args.web),
+                               calibration=cal,
+                               web_search=getattr(model, "web_search", None) if args.web else None)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))
         _show(answer, artifact)
