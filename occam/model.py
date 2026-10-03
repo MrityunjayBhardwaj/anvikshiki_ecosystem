@@ -169,6 +169,11 @@ class KieModel:
     that does not exist fails at the fetch and is recorded as such (#209)."""
 
     BASE = "https://api.kie.ai"
+    # kie.ai answers a prompt over its limit for some models (gpt-5-2: about
+    # 23k tokens, measured 2026-10-04) with this as an ordinary reply. Read as
+    # a reply it would be a malformed sample, and "could not ask" would print
+    # as the model's answer; it is an error instead, and not asked again.
+    TOO_LONG = "The message you submitted was too long"
 
     def __init__(self, model: str = "gpt-5-2", *, api_key: Optional[str] = None,
                  timeout: float = 300.0, empty_retries: int = 2,
@@ -234,6 +239,9 @@ class KieModel:
             choice = out["choices"][0]
             reply, finish = (choice.get("message") or {}).get("content") or "", \
                 choice.get("finish_reason")
+            if reply.strip().startswith(self.TOO_LONG):
+                raise RuntimeError(f"{self.name}: the prompt is over this model's input "
+                                   f"limit ({len(prompt)} characters); kie.ai said: {reply[:120]!r}")
             if reply.strip():
                 return reply
         raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
@@ -249,7 +257,10 @@ class KieModel:
                           f"below. Do not use {', '.join(EXCLUDED_HOSTS)}. List each page's "
                           f"full URL on its own line.\n\nQUESTION: {question}"}],
             "temperature": 0.0,
-            "tools": [{"type": "function", "function": {"name": "web_search"}}],
+            # Each family names its search tool differently; the wrong name is
+            # ignored silently and returns no URLs (observed on gemini-3.1-pro).
+            "tools": [{"type": "function", "function": {
+                "name": "googleSearch" if self._model.startswith("gemini") else "web_search"}}],
         })
         content = (out["choices"][0].get("message") or {}).get("content") or ""
         return urls_in(content), json.dumps(out)

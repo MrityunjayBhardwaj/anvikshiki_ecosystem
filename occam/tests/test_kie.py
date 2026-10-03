@@ -96,6 +96,21 @@ def test_web_search_asks_with_the_tool_and_keeps_only_the_urls(monkeypatch):
     assert json.loads(raw)["credits_consumed"] == 0.5          # the whole response, for audit
 
 
+def test_kies_too_long_reply_is_an_error_not_a_sample(monkeypatch):
+    sent = stub(monkeypatch, reply("The message you submitted was too long, please edit it "
+                                   "and resubmit."))
+    with pytest.raises(RuntimeError, match="over this model's input limit"):
+        KieModel(api_key="x", sleep=lambda s: None).complete("p" * 10, temperature=0.0)
+    assert len(sent) == 1
+
+
+def test_each_model_family_gets_its_own_search_tool(monkeypatch):
+    sent = stub(monkeypatch, reply("https://x.test/a"), reply("https://x.test/a"))
+    KieModel("gemini-3.1-pro", api_key="x").web_search("Why?", 3)
+    KieModel("gpt-5-2", api_key="x").web_search("Why?", 3)
+    assert [b["tools"][0]["function"]["name"] for _, b in sent] == ["googleSearch", "web_search"]
+
+
 def test_a_model_spec_picks_its_provider(monkeypatch):
     monkeypatch.setenv("KIE_API_KEY", "x")
     monkeypatch.setenv("OPENROUTER_API_KEY", "x")
