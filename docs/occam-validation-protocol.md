@@ -591,3 +591,24 @@ above is changed.
 
 Command: `python -m occam measure --model kie/gpt-5-2 --out traces/occam/run5`
 and `python -m occam controls --model kie/gpt-5-2 --out traces/occam/run5-controls`.
+
+### Note — 2026-10-04 (later): run 5 moves to `kie/gemini-3.1-pro`
+
+Written before the run that is reported. Two attempts on `kie/gpt-5-2` ended
+early and are **not** run 5:
+- **Attempt 1** stopped at q01's first argue call: kie.ai returned `{"code": 500,
+  "msg": "Server exception…"}`, with nothing written. Since then, a 5xx or 429
+  is asked again 3 times with pauses.
+- **Attempt 2** answered q01 and q02 (kept in `traces/occam/run5-attempt2/`,
+  never reported as run 5), then hit 500 on every try at q03. Measured
+  directly, gpt-5-2 on kie.ai accepts about **22k input tokens** (80k characters
+  worked; at 90k it returned an ordinary reply, "The message you submitted was
+  too long…"; at 170k and above it returned 500). A six-source argue prompt
+  runs to about 240k characters. That reply is now an error, never a sample.
+
+**Model for run 5:** `kie/gemini-3.1-pro`. It took a 240k-character prompt
+(68k tokens, 6.83 credits), and its search tool (`googleSearch`) returns URLs
+when asked to list them. Everything else is as in Amendment 6 and the note
+above. Run 5 against run 3 still can't separate the model from the other
+changes. The four controls above ran on `kie/gpt-5-2`, so they are re-run on
+this model too, into `traces/occam/run5-controls-gemini/`.
