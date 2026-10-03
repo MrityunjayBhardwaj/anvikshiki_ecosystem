@@ -563,3 +563,31 @@ spend is read from OpenRouter's usage counter before and after and reported.
 **Status spread.** The calibration gate asks for at least 3 statuses at 10% or
 more. Ten questions cannot show that reliably; run 5 reports the counts with
 their denominator and says whether the gate *would* be met, nothing more.
+
+### Note — 2026-10-04: the model changes before run 5
+
+Written before run 5, after one live `ask` on the new instrument. Nothing
+above is changed.
+
+- **Model:** `kie/gpt-5-2` (GPT-5.2 through kie.ai), not `openrouter/z-ai/glm-5.2`,
+  whose account ran out of credit. Every model stage changes model at once.
+  **So run 5 against run 3 can't separate the model from the prompt or the
+  source.** The baselines above stay as they are, and run 5 reports this beside
+  each comparison.
+- **Web search:** kie.ai returns no structured citations. The URLs are read out
+  of the model's reply, and may come from its search or its memory. The pages
+  are fetched and checked either way. Prediction 1 counts pages fetched with
+  text, so a URL that doesn't exist counts against it.
+- **The reason check:** "since" now counts as a causal link unless a number
+  follows it. The one live reply used "Since blue light wavelengths scatter
+  more, the diffuse sky … is blue", a true reason the earlier word list
+  rejected.
+- **Spend:** read from kie.ai's credit balance before and after each command,
+  and from the credits each call reports. The one live `ask`: **6.66 credits**.
+- **Read in run 5:** the live `ask` kept two answers apart for "negation
+  differs: not" over "The sky looks blue, *not violet*". That `not` negates a
+  noun phrase, not the statement, like "without" in #192. Every negation veto in
+  run 5 is listed and read by hand.
+
+Command: `python -m occam measure --model kie/gpt-5-2 --out traces/occam/run5`
+and `python -m occam controls --model kie/gpt-5-2 --out traces/occam/run5-controls`.
