@@ -29,13 +29,23 @@ from .snapshot import WIKIPEDIA_EXTRACTOR, Snapshot, capture, host
 if TYPE_CHECKING:
     from .model import Model
 
-__all__ = ["HttpGet", "WebSearch", "gather", "fetch", "wikipedia_search", "search_queries",
+__all__ = ["HttpGet", "WebSearch", "EXCLUDED_HOSTS", "gather", "fetch", "wikipedia_search", "search_queries",
            "html_to_text", "urllib_get"]
 
 # (url) -> (status, content_type, body). Raises on network failure.
 HttpGet = Callable[[str], tuple[int, str, bytes]]
 # (question, n) -> (urls found, raw reply kept for audit). OpenRouterModel.web_search.
 WebSearch = Callable[[str, int], tuple[list[str], str]]
+# Wikipedia is gathered on its own, and a mirror of it would count as a second
+# host while repeating the first (#209). The search is asked to leave these
+# out, and gather drops any that come back anyway: the request is a saving,
+# this filter is the guarantee.
+EXCLUDED_HOSTS = ("wikipedia.org", "wikiwand.com", "wikizero.com", "dbpedia.org")
+
+
+def _excluded(url: str) -> bool:
+    h = host(url)
+    return any(h == d or h.endswith("." + d) for d in EXCLUDED_HOSTS)
 
 USER_AGENT = "occam-anvikshiki/0.1 (research prototype; https://github.com/MrityunjayBhardwaj/anvikshiki_ecosystem)"
 WIKI_API = "https://en.wikipedia.org/w/api.php"
@@ -189,17 +199,16 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
 
     The search only discovers: what is kept is the URLs, and each page is
     read through `fetch` exactly as a URL given by hand would be. A Wikipedia
-    URL is skipped — Wikipedia is gathered above, and a second copy of it
-    would count as a second host repeating the first."""
+    or mirror URL is skipped (EXCLUDED_HOSTS)."""
     try:
         found, reply = web_search(question, n)
     except Exception as e:  # noqa: BLE001 — could not look is a note, never silence
         notes.append(f"web search failed: {type(e).__name__}: {e}")
         return []
     raw.append(reply)
-    kept = [u for u in found if not host(u).endswith("wikipedia.org")]
+    kept = [u for u in found if not _excluded(u)]
     if len(kept) < len(found):
-        notes.append(f"web search: skipped {len(found) - len(kept)} Wikipedia page(s)")
+        notes.append(f"web search: skipped {len(found) - len(kept)} Wikipedia or mirror page(s)")
     if not kept:
         notes.append(f"web search returned no pages beyond Wikipedia for {question!r}")
     return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]

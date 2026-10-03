@@ -57,12 +57,14 @@ def test_no_more_than_n_web_pages_are_fetched():
     assert [s.urls[0] for s in snaps[2:]] == [WEB_URL]
 
 
-def test_a_wikipedia_page_from_the_web_search_is_skipped_and_said():
-    found = ["https://de.wikipedia.org/wiki/St%C3%BCckkosten", WEB_URL]
+def test_a_wikipedia_or_mirror_page_from_the_web_search_is_skipped_and_said():
+    found = ["https://de.wikipedia.org/wiki/St%C3%BCckkosten", "https://www.wikiwand.com/en/x",
+             "https://notwikiwand.com/a", WEB_URL]
     snaps, notes, _ = gather("q", at=AS_OF, n=2, http_get=web_and_wiki,
-                             web_search=search(found), n_web=2)
-    assert [s.urls[0] for s in snaps[2:]] == [WEB_URL]
-    assert "web search: skipped 1 Wikipedia page(s)" in notes
+                             web_search=search(found), n_web=4)
+    # a host that merely ends in a mirror's name is not that mirror
+    assert [s.urls[0] for s in snaps[2:]] == ["https://notwikiwand.com/a", WEB_URL]
+    assert "web search: skipped 2 Wikipedia or mirror page(s)" in notes
 
 
 def test_a_search_that_finds_nothing_or_fails_is_a_note_never_silence():

@@ -73,18 +73,13 @@ class OpenRouterModel:
         raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
                            f"(finish_reason {finish!r})")
 
-    # Wikipedia is gathered on its own, and its mirrors would count as a second
-    # host while repeating the first (#209). Asked of the search engine; gather
-    # also drops any Wikipedia URL that comes back, so this list is a saving,
-    # not the guarantee.
-    WEB_EXCLUDED = ("wikipedia.org", "wikiwand.com", "wikizero.com", "dbpedia.org")
-
     def web_search(self, question: str, n: int) -> tuple[list[str], str]:
         """URLs a web search cited for the question, and the raw response for audit.
 
         Discovery only (#209): the model's reply text is never used — the URLs
         are fetched and quoted like any other page, and every check applies to
         what they say, not to what the model said about them."""
+        from .gather import EXCLUDED_HOSTS
         payload = json.dumps({
             "model": self._model,
             "messages": [{"role": "user", "content":
@@ -92,7 +87,7 @@ class OpenRouterModel:
             "temperature": 0.0,
             "max_tokens": 300,
             "plugins": [{"id": "web", "max_results": n,
-                         "exclude_domains": list(self.WEB_EXCLUDED)}],
+                         "exclude_domains": list(EXCLUDED_HOSTS)}],
         }).encode()
         req = urllib.request.Request(self.URL, data=payload, headers={
             "Authorization": f"Bearer {self._key}",
