@@ -612,3 +612,12 @@ when asked to list them. Everything else is as in Amendment 6 and the note
 above. Run 5 against run 3 still can't separate the model from the other
 changes. The four controls above ran on `kie/gpt-5-2`, so they are re-run on
 this model too, into `traces/occam/run5-controls-gemini/`.
+
+### Note — 2026-10-04 (later still): run 5 resumed after a timeout
+
+The run on `kie/gemini-3.1-pro` wrote q01 and q02, then a read at q03 timed out
+after 300 seconds and stopped it. It is **resumed**, not restarted: `measure
+--resume` keeps q01 and q02 as written, and runs q03–q10 on the same model, now
+retrying a timed-out read and waiting up to 600 seconds. Each artifact
+records its own `as_of`. The four controls on this model finished in the
+first pass (`traces/occam/run5-controls-gemini/`, all PASS).
