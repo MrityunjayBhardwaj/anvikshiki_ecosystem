@@ -26,7 +26,7 @@ from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
 from .gather import HttpGet, gather, urllib_get
-from .model import Model
+from .model import Model, extract_json
 from .snapshot import Snapshot, SnapshotStore, host
 from .solve import chain_pramana
 from .spans import ADMITTED
@@ -43,7 +43,8 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
 }
 
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
-           "canonical", "stored_run", "contradicted_quotes"]
+           "canonical", "stored_run", "contradicted_quotes", "what_if", "WhatIfRefused",
+           "unread_judge_pairs"]
 
 ARTIFACT_VERSION = 1
 
@@ -372,6 +373,91 @@ def contradicted_quotes(answer: Answer) -> tuple[list[dict[str, Any]], int]:
     if answer.derivation is not None:
         walk(answer.derivation)
     return [hit[k] for k in sorted(hit)], len(quotes)
+
+
+class WhatIfRefused(ValueError):
+    """An edit `what_if` will not make, and why: replaying it would read a
+    stored reply against something it was not about, or edit nothing."""
+
+
+def _judged_pairs(artifact: Artifact) -> list[tuple[str, str, str]]:
+    """The pairs the same-answer judge's stored replies are read against,
+    in order: those no veto ruled out (equiv.equiv_from_replies)."""
+    if not artifact.params.judge_same:
+        return []
+    pairs = candidate_pairs(_argued(artifact)[3], artifact.question,
+                            veto_words=artifact.params.veto_words)
+    return [(p.lens, p.text_a, p.text_b) for p in pairs if not p.veto]
+
+
+def what_if(artifact: Artifact, *, drop_attacks: Sequence[tuple[str, str]] = (),
+            reject_quotes: Sequence[str] = ()) -> Artifact:
+    """The stored run with replies edited, to replay: "dispute one edge and
+    recompute from that point" (#143, #206). Nothing is written.
+
+    `drop_attacks` removes each (attacker, target) edge from every attack
+    reply. `reject_quotes` has the support judge say does_not_support for
+    each quote id. Refused (WhatIfRefused) when an edge or id is not in the
+    stored run, when there is no support reply to edit, and when the edit
+    changes the pairs the same-answer judge's replies are read against:
+    those replies are read by position, so a replay would read them against
+    pairs they were not about and say nothing (#201)."""
+    update: dict[str, Any] = {}
+    if drop_attacks:
+        found: set[tuple[str, str]] = set()
+        replies = []
+        for reply in artifact.attack_replies:
+            obj = extract_json(reply)
+            if isinstance(obj, dict) and isinstance(obj.get("attacks"), list):
+                kept = []
+                for x in obj["attacks"]:
+                    edge = (x.get("attacker"), x.get("target")) if isinstance(x, dict) else None
+                    if edge in drop_attacks:
+                        found.add(edge)
+                    else:
+                        kept.append(x)
+                reply = json.dumps({**obj, "attacks": kept})
+            replies.append(reply)
+        missing = [f"{a}:{t}" for a, t in drop_attacks if (a, t) not in found]
+        if missing:
+            raise WhatIfRefused(f"no stored attack reply proposes {', '.join(missing)}")
+        update["attack_replies"] = tuple(replies)
+    if reject_quotes:
+        if not artifact.support_replies:
+            raise WhatIfRefused("the support judge was never asked in this run, so there "
+                                "is no verdict to reject")
+        quotes = {a.id for a in _argued(artifact)[2].arguments if a.kind == "quote"}
+        missing = [q for q in reject_quotes if q not in quotes]
+        if missing:
+            raise WhatIfRefused(f"no quote argument {', '.join(missing)} in this run")
+        replies = []
+        for reply in artifact.support_replies:
+            obj = extract_json(reply)
+            items = obj.get("judgments") if isinstance(obj, dict) else None
+            if isinstance(items, list):
+                items = [x for x in items if not (isinstance(x, dict) and x.get("id") in reject_quotes)]
+                items += [{"id": q, "verdict": "does_not_support"} for q in reject_quotes]
+                reply = json.dumps({**obj, "judgments": items})
+            replies.append(reply)
+        update["support_replies"] = tuple(replies)
+    edited = artifact.model_copy(update=update)
+    before, after = _judged_pairs(artifact), _judged_pairs(edited)
+    # Replies are read in order, so they still line up when the pairs left are
+    # the first ones: each is read against the pair it was about, and the rest
+    # were about pairs the edit removed. Anything else would misread them.
+    if after != before[:len(after)]:
+        raise WhatIfRefused(
+            f"this edit changes the pairs the same-answer judge's stored replies are read "
+            f"against ({len(before)} judged pairs before, {len(after)} after, not the "
+            f"first {len(after)} of them); a replay would read them against pairs they "
+            f"were not about. Re-judge to compute it.")
+    return edited
+
+
+def unread_judge_pairs(artifact: Artifact, edited: Artifact) -> int:
+    """How many judged pairs an edit removed: their stored replies are not
+    read in its replay. Said beside every what-if, zero included."""
+    return len(_judged_pairs(artifact)) - len(_judged_pairs(edited))
 
 
 # ── assembly ────────────────────────────────────────────────
