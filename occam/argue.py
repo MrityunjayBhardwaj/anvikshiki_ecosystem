@@ -161,7 +161,7 @@ def argue_prompt(question: str, snapshots: Sequence[Snapshot],
         ' "steps": [\n'
         '  {"id": "s1", "kind": "quote", "source": 1, '
         '"quote": "<words copied exactly from source 1>", '
-        '"conclusion": "<what that passage establishes>"},\n'
+        '"conclusion": "<the words in that quote that make the point, copied exactly>"},\n'
         '  {"id": "s2", "kind": "inference", "from": ["s1"], '
         '"conclusion": "<what follows from the listed steps>"}\n'
         " ]}\n\n"
@@ -171,10 +171,16 @@ def argue_prompt(question: str, snapshots: Sequence[Snapshot],
         "- Every inference must list the earlier steps it follows from. "
         "Use kind \"analogy\" only for a step that reasons by comparison.\n"
         "- Conclusions are one short sentence each.\n"
-        "- A quote step's conclusion says only what its quote says. Do not repeat "
-        "details from the question (a date, a place, a name) unless the quote itself "
-        "states them; if the answer needs such a detail, quote the passage that "
-        "states it as a step of its own.\n"
+        "- A quote step's conclusion is copied word for word from its own quote: the "
+        "part of the quote that makes the point, with nothing added and nothing "
+        "reworded. Do not repeat details from the question (a date, a place, a name) "
+        "unless the quote itself states them; if the answer needs such a detail, quote "
+        "the passage that states it as a step of its own.\n"
+        "- If one passage states the answer, including the reason when the question "
+        "asks why, the answer is that quote step itself. Use an inference only when "
+        "the answer has to be put together from several steps.\n"
+        "- When more than one source states the same point, quote each of them as a "
+        "step of its own.\n"
         "- If the sources do not answer the question, return "
         '{"answer": null, "steps": []}. Do not use outside knowledge.\n',
         f"QUESTION: {question}\n",

@@ -80,9 +80,11 @@ class Params(BaseModel):
     judge_same: bool = True
     t_same: float = 0.0
     # Which argue instruction wrote the replies. 2 (#161): a quote's conclusion
-    # does not repeat the question's details. An artifact without the field
-    # was argued under 1, and shows no counter that 2 introduced.
-    argue_prompt: int = 2
+    # does not repeat the question's details. 3 (#210): a quote's conclusion is
+    # its own words, a passage that states the answer is the answer, and a
+    # point two sources state is quoted from each. An artifact without the
+    # field was argued under 1, and shows no counter that 2 introduced.
+    argue_prompt: int = 3
     # Which counters the answer shows, so adding one does not change what an
     # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
     # (#181): both premise counters say what they could read in the question.
