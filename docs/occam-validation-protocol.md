@@ -487,3 +487,79 @@ there the control flags it. One question, one model, one run: this is not a rate
 The abstention reason reads "the model found no answer in the sources", but the
 page does answer the corrected question ("catchment area"). A reader can't tell
 "the premise is false" from "the sources are silent".
+
+## Amendment 6 — 2026-10-04: run 5, a second source, prompt 3 and the reason check (#208)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In runs 2–4 every answer rests on one host (Wikipedia), so
+`established` was unreachable by construction (Amendment 2), and 33 of 34
+replayable answers are `hypothesis`. Calibration needs a spread of statuses.
+Three changes go in together, because measured offline none moves a status
+alone: lifting the "restated in the model's words" limit changed 0 of 31
+statuses (#201), since the single-source limit ties with it.
+
+**Instrument changes** (the commit carrying this amendment):
+- **Web pages as a second source (#209).** OpenRouter's web-search plugin,
+  run on the same model with Wikipedia and its mirrors excluded, discovers up
+  to 3 URLs per question (`web_sources 3`). Only the URLs are kept. Each page
+  is fetched by Occam, snapshotted and quoted like any other, and every check
+  applies to it. The plugin's own text is stored for audit and never read.
+- **Argue prompt 3 (#210).** A quote's conclusion is copied from its quote. A
+  passage stating the answer, reason included, is the answer. A point two
+  sources state is quoted from each.
+- **The reason check (#194, `why_check 2`).** On a question asking for a
+  cause, a quote answer stays at `hypothesis` unless its words carry a causal
+  link *and* a fresh judge call says it gives the reason asked for.
+- Everything else as in Amendment 4: `openrouter/z-ai/glm-5.2`, k = 3,
+  temperatures 0.7 / 0.2, same-answer judge on, `veto_words 2`, 3 Wikipedia
+  pages per question.
+
+**Run 5** = `python -m occam measure --out traces/occam/run5` (the ten
+questions, `--web 3` by default) and `python -m occam controls --out
+traces/occam/run5-controls`. The controls take their pages by hand, so no web
+search runs for them: they test that nothing else moved.
+
+**Baselines** (run 3, measured 2026-10-04 by replay): quote arguments whose
+conclusion is not their quote's own words, **42 of 42**; answers that are
+quotes, **3 of 10** (7 inferences); hosts per question, **1** in 10 of 10;
+statuses, 9 `hypothesis`, 1 `open`. Across runs 2–4, quote answers to the 18
+answered cause questions: 7, all stating a link, **0 of 7** in the source's
+own words.
+
+**Predictions:**
+1. Sources: at least 2 readable web pages in **at least 8 of 10** questions
+   (one probe on 2026-10-03: 4 of 5 fetched; Britannica returned 403). Hosts
+   per question rise from 1 to at least 2 in those questions.
+2. Restated quote arguments fall from 42 of 42 to **at most half** of the quote
+   arguments made.
+3. Quote answers rise from 3 of 10 to **at least 5 of 10**.
+4. `established`: **1 to 4 of 10.** It needs two verbatim quotes on two hosts
+   that the claim-lens judge calls the same, which the strict lens rarely
+   does (1 claim pair in 37 runs before prompt 3). Most answers stay
+   `hypothesis`.
+5. The reason check: on the 6 cause questions, every quote answer is listed
+   with its link and the judge's verdict. No cause question reaches
+   `established` with a quote answer whose link check failed (this holds by
+   construction; listing it checks the wiring live).
+6. Controls as in Amendment 5: positive answers "1987"; negative abstains;
+   adversarial adopts at `hypothesis`, bound by its single host;
+   `false_premise` PASS.
+7. Every artifact replays to its stored answer with no key.
+
+**Read by hand, reported with every `established` answer:** the hosts and
+quotes that corroborate it, and whether the two are independent. Copies (two
+agencies publishing one text, as NASA's and NOAA's pages on the sky do) and
+Wikipedia mirrors are counted apart. They are a known weakness of counting
+hosts (`status.py`), measured here, not assumed away.
+
+**Kill criteria:** unchanged (positive missed → VOID; negative answers → STOP;
+adversarial at `established` → STOP: corroboration has failed). New: if the web
+search fails or finds nothing beyond Wikipedia on **5 or more of 10**
+questions, predictions 1–4 are **NOT MEASURED** and are reported as such, not
+as a negative. A failed live call is reported with the question it cost. The
+spend is read from OpenRouter's usage counter before and after and reported.
+
+**Status spread.** The calibration gate asks for at least 3 statuses at 10% or
+more. Ten questions cannot show that reliably; run 5 reports the counts with
+their denominator and says whether the gate *would* be met, nothing more.
