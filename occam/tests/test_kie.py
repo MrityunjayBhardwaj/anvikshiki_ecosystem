@@ -58,6 +58,29 @@ def test_kies_own_error_code_on_http_200_is_an_error_not_an_empty_answer(monkeyp
         KieModel("nope", api_key="x").complete("p", temperature=0.0)
 
 
+def test_a_busy_server_is_asked_again_and_only_the_answer_is_kept(monkeypatch):
+    busy = {"code": 500, "msg": "Server exception, please try again later", "data": None}
+    sent = stub(monkeypatch, busy, busy, reply("ok", 1.0))
+    pauses = []
+    k = KieModel(api_key="x", sleep=pauses.append)
+    assert k.complete("p", temperature=0.0) == "ok"
+    assert len(sent) == 3 and pauses == [10.0, 20.0] and k.credits == 1.0
+
+
+def test_a_busy_server_that_stays_busy_fails_loudly(monkeypatch):
+    busy = {"code": 500, "msg": "Server exception, please try again later", "data": None}
+    stub(monkeypatch, busy, busy, busy, busy)
+    with pytest.raises(RuntimeError, match="Server exception"):
+        KieModel(api_key="x", sleep=lambda s: None).complete("p", temperature=0.0)
+
+
+def test_a_client_error_is_not_asked_again(monkeypatch):
+    sent = stub(monkeypatch, {"code": 422, "msg": "The model is not supported", "data": None})
+    with pytest.raises(RuntimeError):
+        KieModel(api_key="x", sleep=lambda s: None).complete("p", temperature=0.0)
+    assert len(sent) == 1
+
+
 def test_an_empty_reply_is_asked_again_then_fails_loudly(monkeypatch):
     stub(monkeypatch, reply(""), reply("  "), reply(""))
     with pytest.raises(RuntimeError, match="empty reply 3 times"):

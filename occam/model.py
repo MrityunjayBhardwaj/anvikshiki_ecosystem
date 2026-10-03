@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 __all__ = ["Model", "OpenRouterModel", "ScriptedModel", "extract_json"]
 
@@ -170,7 +171,8 @@ class KieModel:
     BASE = "https://api.kie.ai"
 
     def __init__(self, model: str = "gpt-5-2", *, api_key: Optional[str] = None,
-                 timeout: float = 300.0, empty_retries: int = 2) -> None:
+                 timeout: float = 300.0, empty_retries: int = 2,
+                 busy_retries: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
         self.name = f"kie/{model}"
         self._model = model
         self._key = api_key or os.environ.get("KIE_API_KEY", "")
@@ -182,12 +184,28 @@ class KieModel:
             )
         self._timeout = timeout
         self._empty_retries = empty_retries
+        self._busy_retries = busy_retries
+        self._sleep = sleep
         self.served: list[str] = []
         # kie.ai bills each call in credits and says how many; summed here so a
         # run can report what it spent from the provider's own count.
         self.credits = 0.0
 
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
+        """One call. A server-side failure (5xx or 429, as HTTP or as kie's own
+        code) is asked again after a pause, up to `busy_retries` times: one
+        "please try again later" must not end a ten-question run. Nothing from
+        a failed call is recorded, and after the last try it raises."""
+        for attempt in range(self._busy_retries + 1):
+            out, code, why = self._post_once(body)
+            if out is not None:
+                return out
+            if not (code == 429 or 500 <= code < 600) or attempt == self._busy_retries:
+                raise RuntimeError(f"{self.name}: {why}")
+            self._sleep(10.0 * (attempt + 1))
+        raise AssertionError("unreachable")
+
+    def _post_once(self, body: dict[str, Any]) -> tuple[Optional[dict[str, Any]], int, str]:
         req = urllib.request.Request(
             f"{self.BASE}/{self._model}/v1/chat/completions",
             data=json.dumps({**body, "stream": False}).encode(),
@@ -197,13 +215,15 @@ class KieModel:
             with urllib.request.urlopen(req, timeout=self._timeout) as r:
                 out = json.loads(r.read())
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"{self.name}: HTTP {e.code}: {e.read()[:300]!r}") from e
+            return None, e.code, f"HTTP {e.code}: {e.read()[:300]!r}"
         if not isinstance(out, dict) or "choices" not in out:
             # kie.ai reports some failures as HTTP 200 with its own code.
-            raise RuntimeError(f"{self.name}: unexpected response {str(out)[:300]}")
+            code = out.get("code") if isinstance(out, dict) else None
+            return None, code if isinstance(code, int) else 0, \
+                f"unexpected response {str(out)[:300]}"
         self.served.append(f"{out.get('model') or self._model} via kie.ai")
         self.credits += float(out.get("credits_consumed") or 0)
-        return out
+        return out, 200, ""
 
     def complete(self, prompt: str, *, temperature: float) -> str:
         """The model's reply, never an empty one (see OpenRouterModel.complete)."""
