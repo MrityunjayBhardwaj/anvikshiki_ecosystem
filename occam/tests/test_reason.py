@@ -74,6 +74,11 @@ def test_a_link_is_matched_on_whole_words():
     assert states_a_link("Seasons result from the tilt; the tilt is responsible for them.")
     assert not states_a_link(UNLINKED)                       # side by side, no link
     assert not states_a_link("The causeway has stood since 1940.")   # not a word, not a cause
+    # The live reply that showed "since" was needed, and its neighbours:
+    assert states_a_link("Since blue light wavelengths scatter more, the diffuse sky seen "
+                         "in daytime is blue.")
+    assert not states_a_link("It has been studied since 1871.")
+    assert not states_a_link("Sincerely, the sky.")
 
 
 # ── end to end ─────────────────────────────────────────────

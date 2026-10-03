@@ -45,9 +45,11 @@ __all__ = ["REASON_VERDICTS", "CAUSAL_LINKS", "asks_for_a_cause", "states_a_link
 
 REASON_VERDICTS = ("gives_reason", "does_not", "cannot_tell")
 
-# Word sequences that link a cause to an effect. "since" and "so" are left out:
-# both are as often about time or degree as about cause, and a link word that
-# fires on "since 1940" would let a date pass for a reason.
+# Word sequences that link a cause to an effect. "so" is left out: it is as
+# often about degree as about cause. "since" is about time as often as cause,
+# so it counts only when no number follows it: "Since blue light scatters
+# more, the sky is blue" (the live reply that showed it was needed) passes,
+# "since 1940" does not. What passes is still judged before it can lift.
 CAUSAL_LINKS: tuple[tuple[str, ...], ...] = tuple(tuple(p.split()) for p in (
     "because", "due to", "owing to", "caused by", "cause", "causes", "caused", "causing",
     "result of", "results from", "resulted from", "resulting from", "as a result",
@@ -81,7 +83,17 @@ def asks_for_a_cause(question: str) -> bool:
 def states_a_link(text: str) -> bool:
     """Whether the text carries a causal link, matched on whole words."""
     ws = _words(text)
-    return any(tuple(ws[i:i + len(p)]) == p for p in CAUSAL_LINKS for i in range(len(ws)))
+    if any(tuple(ws[i:i + len(p)]) == p for p in CAUSAL_LINKS for i in range(len(ws))):
+        return True
+    # "since" before a word, never before a number. _words drops digits, so
+    # read the raw text after each "since".
+    low = text.casefold()
+    i = low.find("since")
+    while i >= 0:
+        if low[i + 5:i + 6] in (" ", ",") and low[i + 5:].lstrip(" ,")[:1].isalpha():
+            return True
+        i = low.find("since", i + 5)
+    return False
 
 
 def reason_candidates(argued: ArgueResult, question: str) -> list[Argument]:

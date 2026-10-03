@@ -327,7 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--sources", type=int, default=3)
     ask.add_argument("--web", type=int, default=3,
                      help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
-    ask.add_argument("--model", default="z-ai/glm-5.2")
+    ask.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     ask.add_argument("--out")
     ask.add_argument("--calibration")
     rp = sub.add_parser("replay")
@@ -343,6 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     ct.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ct.add_argument("--out")
+    ct.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     sub.add_parser("probe-judge")
     ps = sub.add_parser("probe-same")
     ps.add_argument("--out")
@@ -360,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     ms.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ms.add_argument("--out")
+    ms.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     ms.add_argument("--web", type=int, default=3,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     cp = sub.add_parser("calibrate")
@@ -374,12 +376,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "controls":
         from .controls import CONTROLS, run_control, verdict
-        from .model import OpenRouterModel
+        from .model import make_model
         now = datetime.now(timezone.utc)
         outdir = Path(args.out or f"traces/occam/controls-{now:%Y%m%dT%H%M%SZ}")
         if _refuse_overwrite([outdir / f"control-{c.name}.json" for c in CONTROLS]):
             return 2
-        model = OpenRouterModel()
+        model = make_model(args.model)
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
@@ -455,13 +457,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "measure":
         from .controls import FACTUAL_QUESTIONS
-        from .model import OpenRouterModel
+        from .model import make_model
         outdir = Path(args.out or
                       f"traces/occam/measure-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}")
         if _refuse_overwrite([outdir / f"q{i:02d}.json"
                               for i in range(1, len(FACTUAL_QUESTIONS) + 1)]):
             return 2
-        model = OpenRouterModel()
+        model = make_model(args.model)
         outdir.mkdir(parents=True, exist_ok=True)
         pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
         claimed = abstained = 0
@@ -485,6 +487,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
               f"{pooled['unresolvable']}")
         print(f"abstained {abstained} of {len(FACTUAL_QUESTIONS)}; statuses {statuses}")
+        if hasattr(model, "credits"):
+            print(f"spent: {model.credits:g} kie.ai credits, as the provider counted them")
         print(f"artifacts: {outdir}/")
         return 0
 
@@ -507,11 +511,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "ask":
-        from .model import OpenRouterModel
+        from .model import make_model
         out = Path(args.out or f"traces/occam/{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json")
         if _refuse_overwrite([out]):
             return 2
-        model = OpenRouterModel(args.model)
+        model = make_model(args.model)
         answer, artifact = run(args.question, model, urls=args.url,
                                n_sources=args.sources,
                                params=Params(k_argue=args.k, k_attack=args.k,
