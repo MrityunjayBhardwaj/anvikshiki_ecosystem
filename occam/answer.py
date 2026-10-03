@@ -101,6 +101,12 @@ class Params(BaseModel):
     # lattice (types.STATUS_ORDER), which sets ceilings and attack strength,
     # is untouched. An artifact without the field shows what it showed.
     shown_order: int = 2
+    # Whether a tied "rests on a single source" is named (occam.status). 2
+    # (#202): a quote capped at hypothesis by its ceiling also names the
+    # single-source bound when it holds, since lifting the ceiling's limit
+    # alone would not raise it. Statuses are unchanged. An artifact without
+    # the field names what it named.
+    bound_ties: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -191,6 +197,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "shown_order" not in data["params"]:
             data = {**data, "params": {**data["params"], "shown_order": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "bound_ties" not in data["params"]:
+            data = {**data, "params": {**data["params"], "bound_ties": 1}}
         return data
 
 
@@ -280,7 +289,8 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
         claim_group = same.groups("claim", [v.pair.a for v in same.verdicts] +
                                   [v.pair.b for v in same.verdicts])
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
-                     max_age_days=artifact.params.max_age_days, claim_group=claim_group)
+                     max_age_days=artifact.params.max_age_days, claim_group=claim_group,
+                     bound_ties=artifact.params.bound_ties)
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
                     same, raw)
 

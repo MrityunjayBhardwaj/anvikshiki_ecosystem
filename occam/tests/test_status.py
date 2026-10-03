@@ -240,7 +240,9 @@ def test_a_quote_whose_conclusion_restates_it_caps_at_hypothesis():
                     span=loc.span, pramana=Pramana.SABDA, sample_ids=(0,), support="supports")
     r = derive([para], [], store, as_of=NOW)
     assert r.statuses["P"].status == Status.HYPOTHESIS
-    assert r.statuses["P"].status_bound_by == ("quote P restated in the model's words",)
+    # One host ties with the restatement, so both are named (#202).
+    assert r.statuses["P"].status_bound_by == ("quote P restated in the model's words",
+                                               "rests on a single source (e.com)")
 
 
 def test_a_conclusion_inside_the_quote_is_established_full_stop_and_emphasis_aside():
@@ -259,7 +261,8 @@ def test_a_quote_never_judged_for_support_cannot_be_established():
     a = q("Q", s, LONG1).model_copy(update={"support": None})
     r = derive([a], [], store, as_of=NOW)
     assert r.statuses["Q"].status == Status.HYPOTHESIS
-    assert r.statuses["Q"].status_bound_by == ("quote Q: support not judged",)
+    assert r.statuses["Q"].status_bound_by == ("quote Q: support not judged",
+                                               "rests on a single source (e.com)")
 
 
 def test_a_quote_whose_support_could_not_be_told_caps_at_provisional():
@@ -407,3 +410,69 @@ def test_a_conclusion_carrying_an_unquoted_question_number_is_never_established(
                 flagged += 1
                 assert st != Status.ESTABLISHED, (a, r.statuses[a.id])
     assert flagged > 200 and established > 50, (flagged, established)
+
+
+# ── a single source tied with a ceiling (#202) ─────────────
+
+def restated(aid, snap, words=LONG1, conclusion="Viability needs LTV above CAC."):
+    loc = locate(snap, words)
+    return Argument(id=aid, conclusion=conclusion, kind="quote", span=loc.span,
+                    pramana=Pramana.SABDA, sample_ids=(0,), support="supports")
+
+
+def test_a_restated_quote_on_one_host_names_the_single_source_too():
+    """Lifting the restatement alone would leave it at hypothesis, so the
+    bound list must say so. Under bound_ties 1 it names what it always did."""
+    store, s = world()
+    new = derive([restated("P", s)], [], store, as_of=NOW).statuses["P"]
+    old = derive([restated("P", s)], [], store, as_of=NOW, bound_ties=1).statuses["P"]
+    assert new.status == old.status == Status.HYPOTHESIS
+    assert new.status_bound_by == ("quote P restated in the model's words",
+                                   "rests on a single source (e.com)")
+    assert old.status_bound_by == ("quote P restated in the model's words",)
+
+
+def test_a_restated_quote_backed_by_a_second_host_names_only_the_restatement():
+    """Another host whose quote states the same conclusion verbatim is
+    corroboration, so the only tie is the restatement."""
+    store, s = world()
+    s2 = second(store)
+    conclusion = "Viability needs LTV above CAC."
+    backer = Argument(id="B", conclusion=conclusion, kind="quote",
+                      span=locate(s2, LONG1).span, pramana=Pramana.SABDA,
+                      sample_ids=(0,), support="supports")
+    # B verifies but restates too, so nothing corroborates: the control case.
+    r = derive([restated("P", s), backer], [], store, as_of=NOW)
+    assert "rests on a single source" in " ".join(r.statuses["P"].status_bound_by)
+    # Now B's conclusion is its own quote, so its ceiling is established and
+    # it counts for P's group once P's conclusion is the same words.
+    b2 = q("B", s2, LONG1)
+    p2 = restated("P", s, conclusion=LONG1).model_copy(
+        update={"span": locate(s, LONG1).span})
+    r2 = derive([p2.model_copy(update={"support": None}), b2], [], store, as_of=NOW)
+    assert r2.statuses["P"].status_bound_by == ("quote P: support not judged",)
+
+
+def test_only_a_quote_at_hypothesis_gains_the_bound():
+    """An inference is capped by its own step and can never be established,
+    and a provisional quote is below the single-source cap: for neither is it
+    a tie."""
+    store, s = world()
+    p = restated("P", s)
+    inf = Argument(id="I", conclusion="So the business is viable.", kind="inference",
+                   sub_arguments=("P",), pramana=Pramana.ANUMANA, sample_ids=(0,))
+    prov = q("V", s, LONG1).model_copy(update={"support": "cannot_tell"})
+    r = derive([p, inf, prov], [], store, as_of=NOW)
+    assert not any("single source" in b for b in r.statuses["I"].status_bound_by)
+    assert r.statuses["V"].status == Status.PROVISIONAL
+    assert not any("single source" in b for b in r.statuses["V"].status_bound_by)
+
+
+def test_a_quote_whose_snapshot_is_not_held_is_not_called_single_source():
+    """No snapshot, no hosts to count: its ceiling already says freshness is
+    unknown, and "single source" would be a guess."""
+    store, s = world()
+    p = restated("P", s)
+    r = derive([p], [], SnapshotStore(), as_of=NOW)
+    assert r.statuses["P"].status == Status.HYPOTHESIS
+    assert not any("single source" in b for b in r.statuses["P"].status_bound_by)
