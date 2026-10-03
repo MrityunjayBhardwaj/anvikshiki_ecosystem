@@ -1,7 +1,7 @@
 """Command line: ask a question, or replay a stored run.
 
     python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE] [--no-judge-same]
-    python -m occam replay FILE [--calibration CAL]
+    python -m occam replay FILE [--calibration CAL] [--blind]
     python -m occam replay FILE --drop-attack A:T ... --reject-quote ID ...   # what if
     python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
@@ -21,6 +21,10 @@ and the choice is recorded in the artifact's params.
 
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
+`--blind` shows the answer as a labeller should read it: the question, the
+answer and its chain down to the quoted bytes, with nothing the pipeline
+decided about it — no status, bounds, attack outcomes, judge verdicts or
+counters — so a label cannot echo the status it is meant to check.
 With `--drop-attack ATTACKER:TARGET` or `--reject-quote ID` (each repeatable)
 it edits those stored replies first and prints the answer before and after:
 what would change it, computed by replay. Nothing is written, and an edit the
@@ -34,10 +38,13 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
-                     replay, run, stored_run, unread_judge_pairs, what_if)
+                     derivation_nodes, question_details, replay, run, stored_run,
+                     support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
+from .types import Status
 
 
 def _judged_when(art: Artifact) -> str:
@@ -64,13 +71,89 @@ def _served(art: Artifact) -> str:
     return line
 
 
-def _show(a: Answer) -> None:
+# What each status means, in a reader's words. Keyed on the status, never on
+# the wording of its bounds: the bounds say which limit, this says what the
+# status itself claims (status.py has the rules).
+MEANING = {
+    Status.ESTABLISHED: "a checked quote states it word for word, and at least two "
+                        "independent sources say it",
+    Status.HYPOTHESIS: "the sources support it, but something beneath it is not settled: "
+                       "the model's own wording or reasoning, a single source, or a link "
+                       "nobody checked. 'bound by' names which",
+    Status.PROVISIONAL: "only weakly supported: an analogy, a quote too short to prove "
+                        "anything, or a link the judge could not decide",
+    Status.CONTESTED: "the arguments conflict, and one consistent reading of them accepts "
+                      "this answer while another does not",
+    Status.OPEN: "the arguments conflict, and no consistent reading of them accepts this answer",
+}
+
+NO_RUN = "not shown (no stored run given)"
+
+
+def _chain(a: Answer, support: Optional[dict], blind: bool) -> None:
+    """The answer's derivation down to the bytes, each link with its own
+    check: verbatim, support, attack outcome — or that it was not checked."""
+    print("   derivation, from the answer down to the quoted bytes:")
+    for depth, n, again in derivation_nodes(a):
+        pad = "      " + "   " * depth
+        if again:
+            print(f"{pad}{n['id']} (shown above)")
+            continue
+        tag = "" if blind else f" [{n['status'] or 'rejected'}]"
+        print(f"{pad}{n['id']} {n['kind']}{tag}: {n['conclusion']}")
+        if n["kind"] == "quote":
+            sp = n["span"]
+            checks = f"verbatim: {sp['verdict']}"
+            if not blind:
+                said = NO_RUN if support is None else (support.get(n["id"]) or "not judged")
+                checks += f" · support: {said}"
+            print(f"{pad}   \"{sp['quote']}\"")
+            print(f"{pad}   {checks} · {sp['url']} characters {sp['start']}–{sp['end']}")
+            print(f"{pad}   text sha256 {sp['text_sha256']} · snapshot {sp['snapshot_id']}")
+            print(f"{pad}   revision: {sp.get('revision_url') or 'not recorded'}")
+        if not blind:
+            if not n["attacks_received"]:
+                print(f"{pad}   attacked by: none")
+            for x in n["attacks_received"]:
+                print(f"{pad}   attacked by {x['attacker']} ({x['type']}): "
+                      f"{'succeeded' if x['succeeded'] else 'failed'} — {x['rationale']}")
+
+
+def _question_details(a: Answer, art: Optional[Artifact]) -> None:
+    """Details the question supplied are suppositions, never observations:
+    say for each whether a quote beneath the answer states it (#181's
+    predicate). Said every time, including when it cannot look."""
+    if art is None:
+        print(f"   question details: {NO_RUN}")
+        return
+    nums, rows = question_details(a, art)
+    if not nums:
+        print("   question details: the question has no whole number, so this check cannot "
+              "fire (it reads whole numbers only)")
+    for num, carried, stated in rows:
+        print(f"   question detail {num}: " + (
+            "carried by the answer, and stated by a quote beneath it" if stated else
+            "carried by the answer, but no quote beneath it states it: the question "
+            "supplied it, nothing observed it" if carried else
+            "not carried by the answer"))
+
+
+def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> None:
     print(f"\nQ: {a.question}")
+    if blind:
+        print(f"ABSTAINED — {a.abstain_reason}" if a.abstained else f"A: {a.conclusion}")
+        if not a.abstained:
+            _chain(a, None, blind=True)
+        for s in a.snapshots:
+            print(f"source {s['urls'][0]}\n   revision: "
+                  f"{s.get('revision_url') or 'not recorded'}")
+        return
     if a.abstained:
         print(f"ABSTAINED — {a.abstain_reason}")
     else:
         print(f"A: {a.conclusion}")
         print(f"   status: {a.status.value}   bound by: {'; '.join(a.status_bound_by)}")
+        print(f"   meaning: {MEANING[a.status]}")
         if a.status_set is not None:
             print(f"   status set: {{{', '.join(s.value for s in a.status_set)}}}")
         print(f"   {a.status_set_note}")
@@ -83,6 +166,8 @@ def _show(a: Answer) -> None:
             print(f"      {q['id']} \"{q['quote']}\"")
             for x in q["by"]:
                 print(f"         defeated by {x['attacker']}: {x['why']}")
+        _question_details(a, art)
+        _chain(a, None if art is None else support_verdicts(art), blind=False)
     if a.positions and "wordings" not in a.positions[0]:
         print("   positions grouped by exact wording (same-answer judge not run)")
     for p in a.positions:
@@ -246,6 +331,8 @@ def main(argv: list[str] | None = None) -> int:
     rp = sub.add_parser("replay")
     rp.add_argument("file")
     rp.add_argument("--calibration")
+    rp.add_argument("--blind", action="store_true",
+                    help="show it as a labeller reads it: no status or anything decided")
     rp.add_argument("--drop-attack", action="append", default=[], metavar="ATTACKER:TARGET",
                     help="what if this attack had not been proposed (repeatable)")
     rp.add_argument("--reject-quote", action="append", default=[], metavar="ID",
@@ -425,23 +512,26 @@ def main(argv: list[str] | None = None) -> int:
                                calibration=cal)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))
-        _show(answer)
+        _show(answer, artifact)
         print(f"\nartifact: {out}")
         return 0
 
     stored = json.loads(Path(args.file).read_text())
     artifact = Artifact.model_validate(stored["artifact"])
     answer = replay(artifact, cal)
+    if args.blind:
+        _show(answer, artifact, blind=True)
+        return 0
     if args.drop_attack or args.reject_quote:
         return _what_if(artifact, answer, args.drop_attack, args.reject_quote, cal)
     if cal is not None:
-        _show(answer)
+        _show(answer, artifact)
         print(_judged_when(artifact))
         print(_served(artifact))
         print("\n(calibrated replay: not compared with the stored answer)")
         return 0
     same = canonical(answer) == json.dumps(stored["answer"], sort_keys=True, ensure_ascii=False)
-    _show(answer)
+    _show(answer, artifact)
     print(_judged_when(artifact))
     print(_served(artifact))
     print(f"\nreplay {'MATCHES' if same else 'DIFFERS FROM'} the stored answer")

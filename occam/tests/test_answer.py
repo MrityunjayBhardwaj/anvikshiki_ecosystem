@@ -467,3 +467,26 @@ def test_an_attack_that_failed_is_not_a_defeat():
     q = ans.derivation["sub_arguments"][0]
     assert q["id"] == "A0000" and [x["succeeded"] for x in q["attacks_received"]] == [False]
     assert contradicted_quotes(ans) == ([], 1)
+
+
+# ── a single source tied with a ceiling (#202) ─────────────
+
+def test_a_quote_answer_on_one_host_names_both_limits_and_old_artifacts_do_not():
+    """The answer is a restated quote from one host. Lifting the restatement
+    alone would leave it at hypothesis, so both limits are named. An artifact
+    stored before the setting replays as it was; forced to 2 it names both."""
+    ans, art = ask([argue_reply([VIABLE], "q1")] * 3, NO_ATTACKS)
+    assert ans.status == Status.HYPOTHESIS
+    assert ans.status_bound_by == (f"quote {ans.answer_id} restated in the model's words",
+                                   "rests on a single source (en.wikipedia.org)")
+
+    old = json.loads(art.model_dump_json())
+    del old["params"]["bound_ties"]
+    stored = Artifact.model_validate(old)
+    assert stored.params.bound_ties == 1
+    before = replay(stored)
+    assert before.status == ans.status and before.conclusion == ans.conclusion
+    assert before.status_bound_by == (f"quote {ans.answer_id} restated in the model's words",)
+    forced = replay(stored.model_copy(update={"params": stored.params.model_copy(
+        update={"bound_ties": 2})}))
+    assert canonical(forced) == canonical(ans)

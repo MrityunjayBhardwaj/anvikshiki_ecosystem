@@ -16,7 +16,7 @@ import base64
 import json
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Optional, Sequence
+from typing import Any, Iterator, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -43,7 +43,8 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
 }
 
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
-           "canonical", "stored_run", "contradicted_quotes", "what_if", "WhatIfRefused",
+           "canonical", "stored_run", "contradicted_quotes", "derivation_nodes",
+           "support_verdicts", "question_details", "what_if", "WhatIfRefused",
            "unread_judge_pairs"]
 
 ARTIFACT_VERSION = 1
@@ -102,6 +103,12 @@ class Params(BaseModel):
     # lattice (types.STATUS_ORDER), which sets ceilings and attack strength,
     # is untouched. An artifact without the field shows what it showed.
     shown_order: int = 2
+    # Whether a tied "rests on a single source" is named (occam.status). 2
+    # (#202): a quote capped at hypothesis by its ceiling also names the
+    # single-source bound when it holds, since lifting the ceiling's limit
+    # alone would not raise it. Statuses are unchanged. An artifact without
+    # the field names what it named.
+    bound_ties: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -192,6 +199,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "shown_order" not in data["params"]:
             data = {**data, "params": {**data["params"], "shown_order": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "bound_ties" not in data["params"]:
+            data = {**data, "params": {**data["params"], "bound_ties": 1}}
         return data
 
 
@@ -281,7 +291,8 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
         claim_group = same.groups("claim", [v.pair.a for v in same.verdicts] +
                                   [v.pair.b for v in same.verdicts])
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
-                     max_age_days=artifact.params.max_age_days, claim_group=claim_group)
+                     max_age_days=artifact.params.max_age_days, claim_group=claim_group,
+                     bound_ties=artifact.params.bound_ties)
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
                     same, raw)
 
@@ -356,9 +367,8 @@ def contradicted_quotes(answer: Answer) -> tuple[list[dict[str, Any]], int]:
     replay is unchanged. An abstained answer has no quotes beneath it."""
     hit: dict[str, dict[str, Any]] = {}
     quotes: set[str] = set()
-
-    def walk(node: dict[str, Any]) -> None:
-        if node["kind"] == "quote" and node["id"] not in quotes:
+    for _, node, again in derivation_nodes(answer):
+        if node["kind"] == "quote" and not again:
             quotes.add(node["id"])
             won = [x for x in node["attacks_received"] if x["succeeded"]]
             if won:
@@ -367,12 +377,53 @@ def contradicted_quotes(answer: Answer) -> tuple[list[dict[str, Any]], int]:
                                    "url": span.get("url", ""),
                                    "by": [{"attacker": x["attacker"], "why": x["rationale"]}
                                           for x in won]}
-        for sub in node["sub_arguments"]:      # a tree: _tree cuts cycles when built
-            walk(sub)
+    return [hit[k] for k in sorted(hit)], len(quotes)
+
+
+def derivation_nodes(answer: Answer) -> Iterator[tuple[int, dict[str, Any], bool]]:
+    """Every node of the shown answer's derivation, depth first, with its
+    depth and whether its id was already met. `_tree` cuts cycles but not
+    sharing, so an argument two steps rest on appears under both: it is
+    yielded again, marked, with its subtree only the first time. Nothing for
+    an abstained answer."""
+    seen: set[str] = set()
+
+    def walk(node: dict[str, Any], depth: int) -> Iterator[tuple[int, dict[str, Any], bool]]:
+        again = node["id"] in seen
+        seen.add(node["id"])
+        yield depth, node, again
+        if not again:              # its subtree was walked where it was first met
+            for sub in node["sub_arguments"]:
+                yield from walk(sub, depth + 1)
 
     if answer.derivation is not None:
-        walk(answer.derivation)
-    return [hit[k] for k in sorted(hit)], len(quotes)
+        yield from walk(answer.derivation, 0)
+
+
+def support_verdicts(artifact: Artifact) -> dict[str, Optional[str]]:
+    """Each surviving quote argument's support verdict, read from the stored
+    run: the check on the link between a quote and the conclusion drawn from
+    it. None means the judge was never asked (artifacts before #146 or
+    without support replies). Read when the answer is shown, not stored in
+    it, so every stored answer replays as it was."""
+    _, _, _, argued, _ = _argued(artifact)
+    return {a.id: a.support for a in argued.arguments if a.kind == "quote"}
+
+
+def question_details(answer: Answer, artifact: Artifact) -> tuple[tuple[str, ...],
+                                                                   list[tuple[str, bool, bool]]]:
+    """The details the question supplied that the premise counters can read
+    (whole numbers only, #181), and for each: whether the shown answer
+    carries it, and whether a quote beneath the answer states it. A detail
+    carried with no quote beneath is the question's, not an observation.
+    Uses the counters' own predicate (`unquoted_question_numbers`)."""
+    nums = question_numbers(answer.question)
+    if answer.answer_id is None:
+        return nums, []
+    _, _, _, argued, _ = _argued(artifact)
+    unquoted = unquoted_question_numbers(answer.question, answer.answer_id, argued.by_id())
+    carried = set(question_numbers(answer.conclusion or ""))
+    return nums, [(n, n in carried, n in carried and n not in unquoted) for n in nums]
 
 
 class WhatIfRefused(ValueError):
