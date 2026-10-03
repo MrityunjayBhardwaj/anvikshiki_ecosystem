@@ -56,6 +56,12 @@ rejected source vouch for an accepted one. And the ceiling is the argument's
 strength in the attack graph: one well-quoted page is exactly as strong
 against a rival as it was, it simply is not enough on its own to be the top.
 
+A quote already capped at hypothesis by its ceiling is checked too, and when
+it also rests on one source the bound is named beside the ceiling's (#202):
+the two tie, and naming only one would say that lifting it raises the status
+when it would not. The status itself is the same either way. `bound_ties`
+selects this, so artifacts made before it replay as they were.
+
 Hosts are a proxy for independence, and a weak one in both directions: two
 pages on one site count once, and two sites copying each other count twice.
 Every Wikipedia-only answer is one host, so it tops out at hypothesis.
@@ -183,7 +189,8 @@ def ceilings(arguments: Sequence[Argument], store: SnapshotStore, as_of: datetim
 def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
            store: SnapshotStore, *, as_of: datetime,
            max_age_days: int = MAX_AGE_DAYS,
-           claim_group: Optional[Mapping[str, str]] = None) -> StatusResult:
+           claim_group: Optional[Mapping[str, str]] = None,
+           bound_ties: int = 2) -> StatusResult:
     """Solve, then read every argument's status off the two extensions.
 
     `as_of` is required and never defaulted to now: freshness must come out
@@ -224,17 +231,34 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             key = group(a.conclusion)
             hosts_of.setdefault(key, set()).update(host(u) for u in snap.urls)
             texts_of.setdefault(key, set()).add(snap.text_sha256)
+
+    def single_source(hosts: set[str], texts: set[str]) -> Optional[str]:
+        # ≥2 hosts and ≥2 distinct texts together mean two different documents
+        # on two different hosts: a mirror adds a host but no text (#165), a
+        # second page on one site adds a text but no host.
+        if len(hosts) < MIN_HOSTS or len(texts) < MIN_HOSTS:
+            return f"rests on a single source ({', '.join(sorted(hosts))})"
+        return None
+
     for a in arguments:
-        st, _ = by_label[a.id]
+        st, bound = by_label[a.id]
+        key = group(a.conclusion)
         if st == Status.ESTABLISHED:
-            key = group(a.conclusion)
-            hosts = hosts_of[key]
-            if len(hosts) < MIN_HOSTS or len(texts_of[key]) < MIN_HOSTS:
-                by_label[a.id] = (Status.HYPOTHESIS,
-                                  (f"rests on a single source ({', '.join(sorted(hosts))})",))
-    # ≥2 hosts and ≥2 distinct texts together mean two different documents on
-    # two different hosts: a mirror adds a host but no text (#165), a second
-    # page on one site adds a text but no host.
+            why = single_source(hosts_of[key], texts_of[key])
+            if why:
+                by_label[a.id] = (Status.HYPOTHESIS, (why,))
+        elif (bound_ties >= 2 and st == Status.HYPOTHESIS and a.kind == "quote"
+              and solved.grounded[a.id] == Label.IN
+              and (snap := _snapshot(a, store)) is not None):
+            # Already capped at hypothesis by its ceiling, and one source would
+            # cap it there too: a tie, so both are named (#202). Its own
+            # snapshot counts, as it would if the ceiling's limit were lifted.
+            # A snapshot not held has no hosts to count; its ceiling already
+            # says so, and "single source" would be a guess.
+            why = single_source(hosts_of.get(key, set()) | {host(u) for u in snap.urls},
+                                texts_of.get(key, set()) | {snap.text_sha256})
+            if why and why not in bound:
+                by_label[a.id] = (st, bound + (why,))
 
     # No second weakest-link pass over labels. Lifting attacks to the
     # arguments containing their targets already orders the labels: a parent
