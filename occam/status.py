@@ -190,7 +190,8 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
            store: SnapshotStore, *, as_of: datetime,
            max_age_days: int = MAX_AGE_DAYS,
            claim_group: Optional[Mapping[str, str]] = None,
-           bound_ties: int = 2) -> StatusResult:
+           bound_ties: int = 2,
+           reason_bounds: Optional[Mapping[str, str]] = None) -> StatusResult:
     """Solve, then read every argument's status off the two extensions.
 
     `as_of` is required and never defaulted to now: freshness must come out
@@ -259,6 +260,17 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
                                 texts_of.get(key, set()) | {snap.text_sha256})
             if why and why not in bound:
                 by_label[a.id] = (st, bound + (why,))
+
+    # A quote answering a question that asks for a cause, without showing it
+    # gives that reason (occam.reason, #194). Like corroboration, a fact about
+    # the answer, not the argument's strength: applied to the status, after
+    # solving, and named beside any tied bound.
+    for aid, why in (reason_bounds or {}).items():
+        st, bound = by_label[aid]
+        if st == Status.ESTABLISHED:
+            by_label[aid] = (Status.HYPOTHESIS, (why,))
+        elif st == Status.HYPOTHESIS and why not in bound:
+            by_label[aid] = (st, bound + (why,))
 
     # No second weakest-link pass over labels. Lifting attacks to the
     # arguments containing their targets already orders the labels: a parent

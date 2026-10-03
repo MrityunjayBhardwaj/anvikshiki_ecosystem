@@ -26,6 +26,7 @@ from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
 from .gather import HttpGet, WebSearch, gather, urllib_get
+from .reason import judge_reasons, reason_bounds
 from .model import Model, extract_json
 from .snapshot import Snapshot, SnapshotStore, host
 from .solve import chain_pramana
@@ -117,6 +118,11 @@ class Params(BaseModel):
     # was given, so it records what happened, not what was hoped for. Replay
     # reads the stored snapshots and never searches.
     web_sources: int = 0
+    # Whether a quote answering a question that asks for a cause must show it
+    # gives that reason (occam.reason). 2 (#194): its words carry a causal link
+    # and a fresh judge call says so, or it stays at hypothesis. An artifact
+    # without the field was made before the check and replays without it.
+    why_check: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -169,6 +175,9 @@ class Artifact(BaseModel):
     support_replies: tuple[str, ...] = ()     # empty: support was never judged
     same_replies: tuple[str, ...] = ()        # the same-answer judge: X/Y, then Y/X
     attack_replies: tuple[str, ...]
+    # The reason judge (#194): (quote id, reply), keyed so a reply is read
+    # against the statement it judged, never by position.
+    reason_replies: tuple[tuple[str, str], ...] = ()
     # When the same-answer judge was asked (#177), for audit: `as_of` for a
     # live run, the rejudge's own clock for one judged later. None: not
     # recorded — the judge did not run, or the artifact predates the field
@@ -210,6 +219,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "bound_ties" not in data["params"]:
             data = {**data, "params": {**data["params"], "bound_ties": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "why_check" not in data["params"]:
+            data = {**data, "params": {**data["params"], "why_check": 1}}
         return data
 
 
@@ -261,6 +273,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     support_replies: list[str] = []
     attack_replies: list[str] = []
     same_replies: list[str] = []
+    reason_replies: list[tuple[str, str]] = []
     if readable:
         argue_replies, argued = argue(model, question, readable, k=params.k_argue,
                                       temperature=params.t_argue, max_chars=params.max_chars)
@@ -268,6 +281,9 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                                           temperature=params.t_support)
         if support_replies:
             argued, _ = apply_support(argued, judged)
+        if params.why_check >= 2:
+            reason_replies = judge_reasons(model, argued, question,
+                                           temperature=params.t_support)
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
         if params.judge_same:
@@ -281,6 +297,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         support_replies=tuple(support_replies),
                         attack_replies=tuple(attack_replies),
                         same_replies=tuple(same_replies),
+                        reason_replies=tuple(reason_replies),
                         same_judged_at=as_of if params.judge_same else None,
                         served_by=_served_since(model, start))
     return replay(artifact, calibration), artifact
@@ -307,7 +324,10 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
                                   [v.pair.b for v in same.verdicts])
     derived = derive(argued.arguments, attacked.attacks, store, as_of=artifact.as_of,
                      max_age_days=artifact.params.max_age_days, claim_group=claim_group,
-                     bound_ties=artifact.params.bound_ties)
+                     bound_ties=artifact.params.bound_ties,
+                     reason_bounds=(reason_bounds(argued, artifact.question,
+                                                  artifact.reason_replies)
+                                    if artifact.params.why_check >= 2 else None))
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
                     same, raw)
 
