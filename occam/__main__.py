@@ -362,6 +362,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="turn off the same-answer judge (on by default)")
     ms.add_argument("--out")
     ms.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ms.add_argument("--resume", action="store_true",
+                    help="keep the questions already written to --out and run only the rest; "
+                         "refused if a kept one was made by another model")
     ms.add_argument("--web", type=int, default=3,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     cp = sub.add_parser("calibrate")
@@ -460,19 +463,34 @@ def main(argv: list[str] | None = None) -> int:
         from .model import make_model
         outdir = Path(args.out or
                       f"traces/occam/measure-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}")
-        if _refuse_overwrite([outdir / f"q{i:02d}.json"
-                              for i in range(1, len(FACTUAL_QUESTIONS) + 1)]):
+        paths = [outdir / f"q{i:02d}.json" for i in range(1, len(FACTUAL_QUESTIONS) + 1)]
+        if not args.resume and _refuse_overwrite(paths):
             return 2
         model = make_model(args.model)
+        # A resumed run keeps what it wrote and never writes over it. Every kept
+        # question must come from this model: one run, one instrument.
+        kept = {p: json.loads(p.read_text()) for p in paths if args.resume and p.exists()}
+        other = [f"{p} ({d['artifact']['params']['model']})" for p, d in kept.items()
+                 if d["artifact"]["params"]["model"] != model.name]
+        if other:
+            print(f"refusing to resume with {model.name}: made by another model: "
+                  f"{', '.join(other)}", file=sys.stderr)
+            return 2
         outdir.mkdir(parents=True, exist_ok=True)
         pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
         claimed = abstained = 0
         statuses: dict[str, int] = {}
         for i, q in enumerate(FACTUAL_QUESTIONS, 1):
-            answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same,
-                                                           web_sources=args.web),
-                                   web_search=getattr(model, "web_search", None) if args.web else None)
-            (outdir / f"q{i:02d}.json").write_text(stored_run(answer, artifact))
+            path = outdir / f"q{i:02d}.json"
+            if path in kept:
+                answer = Answer.model_validate(kept[path]["answer"])
+                print(f"q{i:02d} kept from an earlier pass ({kept[path]['artifact']['as_of']})")
+            else:
+                answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same,
+                                                               web_sources=args.web),
+                                       web_search=getattr(model, "web_search", None)
+                                       if args.web else None)
+                path.write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
                 pooled[v] += int(c[f"{v}_frac"].n)
@@ -488,7 +506,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{pooled['unresolvable']}")
         print(f"abstained {abstained} of {len(FACTUAL_QUESTIONS)}; statuses {statuses}")
         if hasattr(model, "credits"):
-            print(f"spent: {model.credits:g} kie.ai credits, as the provider counted them")
+            print(f"spent: {model.credits:g} kie.ai credits in this pass, as the provider "
+                  f"counted them ({len(kept)} question(s) kept from earlier passes not included)")
         print(f"artifacts: {outdir}/")
         return 0
 

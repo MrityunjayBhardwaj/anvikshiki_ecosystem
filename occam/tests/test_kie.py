@@ -67,6 +67,26 @@ def test_a_busy_server_is_asked_again_and_only_the_answer_is_kept(monkeypatch):
     assert len(sent) == 3 and pauses == [10.0, 20.0] and k.credits == 1.0
 
 
+def test_a_read_that_times_out_is_asked_again(monkeypatch):
+    calls = []
+
+    class R(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def urlopen(req, timeout=0):
+        calls.append(timeout)
+        if len(calls) == 1:
+            raise TimeoutError("The read operation timed out")
+        return R(json.dumps(reply("ok")).encode())
+    monkeypatch.setattr(m.urllib.request, "urlopen", urlopen)
+    assert KieModel(api_key="x", sleep=lambda s: None).complete("p", temperature=0.0) == "ok"
+    assert calls == [600.0, 600.0]
+
+
 def test_a_busy_server_that_stays_busy_fails_loudly(monkeypatch):
     busy = {"code": 500, "msg": "Server exception, please try again later", "data": None}
     stub(monkeypatch, busy, busy, busy, busy)

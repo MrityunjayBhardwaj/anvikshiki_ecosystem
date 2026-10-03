@@ -176,7 +176,7 @@ class KieModel:
     TOO_LONG = "The message you submitted was too long"
 
     def __init__(self, model: str = "gpt-5-2", *, api_key: Optional[str] = None,
-                 timeout: float = 300.0, empty_retries: int = 2,
+                 timeout: float = 600.0, empty_retries: int = 2,
                  busy_retries: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
         self.name = f"kie/{model}"
         self._model = model
@@ -221,6 +221,10 @@ class KieModel:
                 out = json.loads(r.read())
         except urllib.error.HTTPError as e:
             return None, e.code, f"HTTP {e.code}: {e.read()[:300]!r}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            # No reply at all: as retryable as a busy server (run 5, q03: a read
+            # timed out), and as unrecorded.
+            return None, 503, f"no reply: {type(e).__name__}: {e}"
         if not isinstance(out, dict) or "choices" not in out:
             # kie.ai reports some failures as HTTP 200 with its own code.
             code = out.get("code") if isinstance(out, dict) else None
