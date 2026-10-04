@@ -684,3 +684,76 @@ for the resumed pass. The calls themselves report 86.69 for the resumed pass,
 1.81 below the drop in the balance. Where the 1.81 went is not known: the
 web-search calls report their credits through the same client, so they are
 not the obvious gap.
+
+## Amendment 7 — 2026-10-04: run 6, a source that covers the answer corroborates it (#212)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In run 5, prediction 4 failed: **0 of 10** answers were
+`established`, against 1–4 predicted. Read pair by pair, the cause was
+corroboration's test, not the sources. A second host counted only if the
+claim-lens judge called its sentence *the same* as the answer's, and every
+pair across two hosts was kept apart because one sentence said more.
+`established` vouches for the answer's words only, so what it needs is
+one-way: does the source state everything the answer states?
+
+**The probe that licensed building it** (2026-10-04, `traces/occam/probe-covers/`,
+1.78 credits). The criteria were written before any call. On 7 controls
+written by hand, all 6 that must stay apart did (a different cause, a source
+that says less, a conflicting number, a negation, water at 50 °C, related but
+not covering), and the one that must cover did. Of run 5's 15 pairs across two
+hosts, 5 covered, lifting q02 (weather.gov, Wikipedia) and q04 (Wikipedia).
+Those pairs were chosen after reading them, so the probe licensed the build
+and measured no rate. Its prompt differs from the built one only in layout
+(one blank line).
+
+**Instrument change** (commit 93eb83c, `covers_check 2`, occam/covers.py):
+- For each answer that is a quote in its own words, every other such
+  conclusion from a host the answer isn't on is asked about, in a fresh call,
+  with both orders shown. It covers only if both orders say `covers`.
+- Vetoed before any call: a number in the answer that the source lacks or
+  contradicts, or a negation on one side only. A source that only adds a
+  number reaches the judge.
+- The status stage adds the covering sources' hosts and texts to the answer's
+  own. Covering never chains. Replies are keyed by (answer, source, order).
+- **Replay of run 5 under it**, with the probe's replies: q02 and q04 move
+  from `hypothesis` to `established`, and nothing else moves. 58 of 70 stored
+  runs replay byte for byte, as before.
+- Also in force since run 5: `why_check 3` (#213).
+- Everything else as in run 5: `kie/gemini-3.1-pro`, k = 3, temperatures
+  0.7 / 0.2, judge on, `veto_words 2`, 3 Wikipedia pages and `--web 3`.
+
+**Run 6** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run6` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run6-controls`.
+
+**Baselines** (run 5, measured 2026-10-04): ≥2 readable web pages in 8 of 10;
+restated quotes 0 of 64; quote answers 7 of 10; `established` 0 of 10; 10
+`hypothesis`.
+
+**Predictions:**
+1. Sources: ≥2 readable web pages in **at least 7 of 10** questions. The
+   search is not deterministic: run 5 got 8 with 10 of 30 pages refused.
+2. Restated quote arguments stay at **at most 10%** of quote arguments.
+3. Quote answers: **at least 5 of 10**.
+4. `established`: **1 to 4 of 10.** This is the prediction run 5 failed. The
+   replay of run 5 gives 2, and new pages and samples will move it.
+5. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the two pages copy each other. Copies are
+   reported as such and not counted as independent.
+6. The reason check: no cause question reaches `established` with a quote
+   answer whose link or judge failed (by construction; the listing checks the
+   wiring live).
+7. Controls as in Amendment 5. Each control has one host, so the covers check
+   asks no question there, and the controls only show that nothing else
+   moved. The adversarial pair (50 °C against 100 °C) is tested offline: it is
+   vetoed before any judge.
+8. Every artifact replays to its stored answer with no key.
+
+**Kill criteria:** those of Amendment 6, plus: an `established` answer that is
+**false on reading**, or whose covering sentence does **not** in fact state
+it, means **STOP: covers has failed**, and it is reported before anything
+else. Spend is read from kie.ai's balance before and after each command.
+
+**Status spread.** As in Amendment 6: run 6 reports the counts with their
+denominator and whether the calibration gate *would* be met.
