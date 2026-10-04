@@ -684,3 +684,142 @@ for the resumed pass. The calls themselves report 86.69 for the resumed pass,
 1.81 below the drop in the balance. Where the 1.81 went is not known: the
 web-search calls report their credits through the same client, so they are
 not the obvious gap.
+
+## Amendment 7 — 2026-10-04: run 6, a source that covers the answer corroborates it (#212)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In run 5, prediction 4 failed: **0 of 10** answers were
+`established`, against 1–4 predicted. Read pair by pair, the cause was
+corroboration's test, not the sources. A second host counted only if the
+claim-lens judge called its sentence *the same* as the answer's, and every
+pair across two hosts was kept apart because one sentence said more.
+`established` vouches for the answer's words only, so what it needs is
+one-way: does the source state everything the answer states?
+
+**The probe that licensed building it** (2026-10-04, `traces/occam/probe-covers/`,
+1.78 credits). The criteria were written before any call. On 7 controls
+written by hand, all 6 that must stay apart did (a different cause, a source
+that says less, a conflicting number, a negation, water at 50 °C, related but
+not covering), and the one that must cover did. Of run 5's 15 pairs across two
+hosts, 5 covered, lifting q02 (weather.gov, Wikipedia) and q04 (Wikipedia).
+Those pairs were chosen after reading them, so the probe licensed the build
+and measured no rate. Its prompt differs from the built one only in layout
+(one blank line).
+
+**Instrument change** (commit 93eb83c, `covers_check 2`, occam/covers.py):
+- For each answer that is a quote in its own words, every other such
+  conclusion from a host the answer isn't on is asked about, in a fresh call,
+  with both orders shown. It covers only if both orders say `covers`.
+- Vetoed before any call: a number in the answer that the source lacks or
+  contradicts, or a negation on one side only. A source that only adds a
+  number reaches the judge.
+- The status stage adds the covering sources' hosts and texts to the answer's
+  own. Covering never chains. Replies are keyed by (answer, source, order).
+- **Replay of run 5 under it**, with the probe's replies: q02 and q04 move
+  from `hypothesis` to `established`, and nothing else moves. 58 of 70 stored
+  runs replay byte for byte, as before.
+- Also in force since run 5: `why_check 3` (#213).
+- Everything else as in run 5: `kie/gemini-3.1-pro`, k = 3, temperatures
+  0.7 / 0.2, judge on, `veto_words 2`, 3 Wikipedia pages and `--web 3`.
+
+**Run 6** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run6` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run6-controls`.
+
+**Baselines** (run 5, measured 2026-10-04): ≥2 readable web pages in 8 of 10;
+restated quotes 0 of 64; quote answers 7 of 10; `established` 0 of 10; 10
+`hypothesis`.
+
+**Predictions:**
+1. Sources: ≥2 readable web pages in **at least 7 of 10** questions. The
+   search is not deterministic: run 5 got 8 with 10 of 30 pages refused.
+2. Restated quote arguments stay at **at most 10%** of quote arguments.
+3. Quote answers: **at least 5 of 10**.
+4. `established`: **1 to 4 of 10.** This is the prediction run 5 failed. The
+   replay of run 5 gives 2, and new pages and samples will move it.
+5. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the two pages copy each other. Copies are
+   reported as such and not counted as independent.
+6. The reason check: no cause question reaches `established` with a quote
+   answer whose link or judge failed (by construction; the listing checks the
+   wiring live).
+7. Controls as in Amendment 5. Each control has one host, so the covers check
+   asks no question there, and the controls only show that nothing else
+   moved. The adversarial pair (50 °C against 100 °C) is tested offline: it is
+   vetoed before any judge.
+8. Every artifact replays to its stored answer with no key.
+
+**Kill criteria:** those of Amendment 6, plus: an `established` answer that is
+**false on reading**, or whose covering sentence does **not** in fact state
+it, means **STOP: covers has failed**, and it is reported before anything
+else. Spend is read from kie.ai's balance before and after each command.
+
+**Status spread.** As in Amendment 6: run 6 reports the counts with their
+denominator and whether the calibration gate *would* be met.
+
+### Results — 2026-10-04, read against the predictions above
+
+Run 6 is `traces/occam/run6/` and `traces/occam/run6-controls/`, from commit
+45285e8 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 69 of 81 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). The scorer is run 5's, plus a listing of
+every cover pair with its veto or its two verdicts.
+
+| prediction | result |
+|---|---|
+| 1. ≥2 readable web pages in ≥7 of 10 | ✗ **5 of 10.** 17 of 30 pages fetched had text. The 13 without: 7 were HTTP 403 (britannica ×4, physics.stackexchange, britishmuseum, nih.gov) and 6 were HTTP 404 (thestructuralengineer, rainbowsymphony, earthsky, nps.gov, smithsonianmag, optics4kids). A 404 is a link the search reply gave that does not resolve. This is the fetch, not the covers check, and the check can only work with pages it gets. |
+| 2. restated quote arguments ≤10% | ✓ **0 of 47.** |
+| 3. quote answers ≥5 of 10 | ✓ **7 of 10** (q01, q02, q04, q06, q07, q08, q09). q03, q05 and q10 are inferences. |
+| 4. `established` 1–4 of 10 | ✓ **2 of 10**: q02 and q04, the two the replay of run 5 predicted. |
+| 5. every `established` answer read by hand | ✓ both, below. No copies found. |
+| 6. the reason check, listed | ✓ wired. Cause questions are q01, q02, q04, q05, q07 and q08. q05 is an inference. q01, q02, q04 and q08 pass the link check and get `gives_reason`. q07's only link is the temporal "since the 1980s", which link rule 3 (#213) now refuses, so q07 is capped at `hypothesis` and names why. Both `established` answers had a link and `gives_reason`. |
+| 7. controls | ✓ all 4 PASS, the same lines as run 5 on this model. Each has one host, so the covers check asked nothing there (0 cover replies in each). |
+| 8. every artifact replays | ✓ 10 of 10, plus 4 of 4 controls. |
+
+**Kill criteria:** none triggered. Both `established` answers are true on
+reading, and each covering sentence states its answer.
+
+- **q02**, "Earth's tilted axis causes the seasons." (spaceplace.nasa.gov).
+  Covered, `covers` in both orders, by weather.gov's "The earth's spin axis is
+  tilted with respect to its orbital plane. This is what causes the seasons."
+  and by two Wikipedia sentences: "The seasons result from the Earth's axis of
+  rotation being tilted with respect to its orbital plane by an angle of
+  approximately 23.4 degrees." and "This variation in the weather (because of
+  the direction of the Earth's axial tilt) results in the seasons." The first
+  of these adds a number, which a source may. Copies: the longest run of text
+  either web page shares with a Wikipedia page is 41 characters ("tilted with
+  respect to its orbital plane"), a stock phrase, not a copied passage.
+- **q04**, "The Tacoma Narrows Bridge collapsed primarily due to the aeroelastic
+  flutter." (simscale.com). Covered by Wikipedia's Aeroelasticity page: "The
+  original Tacoma Narrows Bridge was destroyed as a result of aeroelastic
+  flutter." Both quotes were checked verbatim on their pages. The source says
+  "destroyed", not "collapsed". Read as stating the collapse in substance;
+  this is the one place a reader might hold the line stricter. Copies: the
+  longest shared run with Wikipedia is 41 characters.
+
+**The 18 cover pairs.** 3 were vetoed before any call: q03's two on "1912",
+and q04's "did not allow wind to pass through" on the negation. 15 were judged,
+30 replies, every one readable. 4 covered, all in q02 and q04. The rest, read
+by hand:
+- q01, q08 and q09: each source states less than the answer (the Rogers
+  Commission and the burning gas; that the sky is blue; that the versions
+  differ little). `does_not` in both orders is right.
+- q04: Wikipedia's lede "collapsed possibly because of aeroelastic flutter" is
+  hedged, and `does_not` is right. But **"the bridge collapsed because moderate
+  winds produced aeroelastic flutter"** got `does_not` in both orders, while
+  "destroyed as a result of aeroelastic flutter" got `covers`. The rejected
+  sentence is the more literal match. The judge erred toward keeping apart,
+  which costs a host and never vouches wrongly, but it is noise.
+- **Order mattered once in 15**: q02's "The seasons are a result of that tilt
+  and are caused by the differential intensity of sunlight" got `does_not`
+  shown first and `covers` shown second. Asking both orders kept it out.
+
+**Status spread:** 8 `hypothesis` and 2 `established` out of 10, so 2
+statuses; the calibration gate would not be met.
+
+**Spend:** read from kie.ai's balance. **86.71 credits** for all of run 6,
+9586.12 before and 9499.41 after. The measure calls report 85.61. The
+remaining 1.10 is the controls and any gap; the controls command does not
+report its own credits, so the two are not separated.

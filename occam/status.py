@@ -62,6 +62,11 @@ the two tie, and naming only one would say that lifting it raises the status
 when it would not. The status itself is the same either way. `bound_ties`
 selects this, so artifacts made before it replay as they were.
 
+With `covers_check` 2 (#212), a conclusion also counts the hosts and texts
+of every conclusion that covers it — a source sentence stating every claim
+the answer states, judged one way (occam.covers). The claim-lens groups still
+count; covering adds to them and never chains.
+
 Hosts are a proxy for independence, and a weak one in both directions: two
 pages on one site count once, and two sites copying each other count twice.
 Every Wikipedia-only answer is one host, so it tops out at hypothesis.
@@ -191,7 +196,8 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
            max_age_days: int = MAX_AGE_DAYS,
            claim_group: Optional[Mapping[str, str]] = None,
            bound_ties: int = 2,
-           reason_bounds: Optional[Mapping[str, str]] = None) -> StatusResult:
+           reason_bounds: Optional[Mapping[str, str]] = None,
+           covered_by: Optional[Mapping[str, frozenset[str]]] = None) -> StatusResult:
     """Solve, then read every argument's status off the two extensions.
 
     `as_of` is required and never defaulted to now: freshness must come out
@@ -233,6 +239,17 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             hosts_of.setdefault(key, set()).update(host(u) for u in snap.urls)
             texts_of.setdefault(key, set()).add(snap.text_sha256)
 
+    def counted(conclusion: str) -> tuple[set[str], set[str]]:
+        # Its own group's hosts and texts, and those of every conclusion that
+        # covers it (#212, occam.covers). Covering is one-way and does not
+        # chain: a source counts for the answer it covers, nothing else.
+        hosts, texts = set(hosts_of.get(group(conclusion), ())), \
+            set(texts_of.get(group(conclusion), ()))
+        for s in sorted((covered_by or {}).get(norm_conclusion(conclusion), ())):
+            hosts |= hosts_of.get(group(s), set())
+            texts |= texts_of.get(group(s), set())
+        return hosts, texts
+
     def single_source(hosts: set[str], texts: set[str]) -> Optional[str]:
         # ≥2 hosts and ≥2 distinct texts together mean two different documents
         # on two different hosts: a mirror adds a host but no text (#165), a
@@ -243,9 +260,9 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
 
     for a in arguments:
         st, bound = by_label[a.id]
-        key = group(a.conclusion)
+        hosts, texts = counted(a.conclusion)
         if st == Status.ESTABLISHED:
-            why = single_source(hosts_of[key], texts_of[key])
+            why = single_source(hosts, texts)
             if why:
                 by_label[a.id] = (Status.HYPOTHESIS, (why,))
         elif (bound_ties >= 2 and st == Status.HYPOTHESIS and a.kind == "quote"
@@ -256,8 +273,8 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             # snapshot counts, as it would if the ceiling's limit were lifted.
             # A snapshot not held has no hosts to count; its ceiling already
             # says so, and "single source" would be a guess.
-            why = single_source(hosts_of.get(key, set()) | {host(u) for u in snap.urls},
-                                texts_of.get(key, set()) | {snap.text_sha256})
+            why = single_source(hosts | {host(u) for u in snap.urls},
+                                texts | {snap.text_sha256})
             if why and why not in bound:
                 by_label[a.id] = (st, bound + (why,))
 
