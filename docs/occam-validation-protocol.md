@@ -621,3 +621,66 @@ after 300 seconds and stopped it. It is **resumed**, not restarted: `measure
 retrying a timed-out read and waiting up to 600 seconds. Each artifact
 records its own `as_of`. The four controls on this model finished in the
 first pass (`traces/occam/run5-controls-gemini/`, all PASS).
+
+### Results — 2026-10-04, read against the predictions above
+
+Run 5 is `traces/occam/run5/` on `kie/gemini-3.1-pro`, with `argue_prompt 3`,
+`web_sources 3`, `why_check 2`, the judge on and `veto_words 2`. The model
+changed as well as the other three things, so no row below separates the model
+from the change. q01–q02 come from the first pass (commit 152916c) and q03–q10
+from the resumed pass (commit 16c69b6). The two commits differ only in
+`--resume` and the timeout retry. All 10 artifacts replay byte for byte to
+their stored answers with no key. The scorer is the one used for every row.
+
+| prediction | result |
+|---|---|
+| 1. ≥2 readable web pages in ≥8 of 10 | ✓ **8 of 10**, exactly at the line. 20 of 30 pages fetched had text; the 10 without were HTTP 403 (britannica, noaa, loc, amnh, britishmuseum, smarthistory) or 404 (sciencedaily, structuralengineer, nasa.gov, livescience). q06 and q09 have 1 readable web page each. |
+| 2. restated quote arguments ≤ half | ✓ **0 of 64** (run 3: 42 of 42). |
+| 3. quote answers ≥5 of 10 | ✓ **7 of 10** (run 3: 3). 4 of the 7 quote a web page (spaceplace.nasa.gov, britannica.com, simscale.com, news.utexas.edu) and 3 quote Wikipedia. q01, q05 and q10 are inferences. |
+| 4. `established` 1–4 of 10 | ✗ **0 of 10.** All 7 quote answers are bound by "rests on a single source". See below. |
+| 5. the reason check, listed | ✓ wired. Cause questions are q01, q02, q04, q05, q07 and q08. q01 and q05 are inferences, so the reason judge doesn't read them. The 4 quote answers (q02, q04, q07, q08) all pass the link check and get `gives_reason` from the judge. Read by hand, q07's link is **the temporal "since"** ("the leading hypothesis *since the 1980s*"): the rule lets a "since" through when a word follows it, and "the" is a word. The judge's `gives_reason` is right on reading (the sentence names the asteroid), but the link check passed for the wrong reason (#213). No status moved, because the single source binds q07 anyway. |
+| 6. controls | ✓ all 4 PASS on this model (`run5-controls-gemini/`, and on gpt-5-2 in `run5-controls/`); adversarial at `hypothesis`, bound by its single host; all 4 replay. |
+| 7. every artifact replays | ✓ 10 of 10, plus 4 of 4 controls. |
+
+**Kill criteria:** none triggered. Web search found pages beyond Wikipedia in
+10 of 10 questions. **Status spread:** 10 `hypothesis` out of 10, so 1 status,
+and the calibration gate would not be met.
+
+**Why nothing was established.** In none of the 7 quote answers did a second
+host quote the same words. So corroboration needed the claim-lens judge to
+merge the answer with another host's sentence. Every cross-host claim pair
+holding an answer was kept apart, and every reason, read by hand, is the same
+one: **one sentence says more than the other.**
+- **q02:** weather.gov says "The earth's spin axis is tilted with respect to
+  its orbital plane. This is what causes the seasons." The answer (from
+  spaceplace) says "Earth's tilted axis causes the seasons." The judge's
+  reason: "Y specifies … the spin axis … which X does not mention."
+- **q08:** spaceplace says "Blue light is scattered more than the other colors
+  because it travels as shorter, smaller waves." The answer is "Since blue
+  light wavelengths scatter more, the diffuse sky seen in daytime is blue."
+  The judge called them different.
+- **q02, q04, q07, q09:** the Wikipedia sentence carries a number the answer
+  lacks ("23.4°", "1940", "1820s"), and the claim-lens veto stops it before
+  any judge sees it.
+
+The claim lens asks whether two sentences are **the same**, and the judge
+answers that faithfully. But vouching for an answer needs a one-way relation:
+**the second host's sentence states everything the answer states.** A sentence
+that says more still vouches for one that says less. The claim lens was made
+strict on purpose (#172: `established` vouches for every word shown). That
+strictness is about the answer's words, and a superset covers all of them.
+Whether an entailment lens would lift q02 can't be computed by replay, because
+it needs new judge calls. It is **not measured** (#212).
+
+**All 24 vetoes, read by hand:** every one is "numbers differ" under the claim
+lens, where one side has a number and the other has none. Each is correct
+under the rule as written. There were no negation vetoes, so the "not violet"
+case from the live `ask` didn't come up.
+
+**Spend:** read from kie.ai's balance. **115.53 credits** for all of run 5 on
+gemini, 9703.43 before and 9587.90 after. That is 27.03 for the first pass
+(the four controls, q01, q02, and the q03 calls lost to the timeout) and 88.50
+for the resumed pass. The calls themselves report 86.69 for the resumed pass,
+1.81 below the drop in the balance. Where the 1.81 went is not known: the
+web-search calls report their credits through the same client, so they are
+not the obvious gap.
