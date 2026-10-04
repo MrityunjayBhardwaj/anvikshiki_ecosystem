@@ -26,6 +26,7 @@ from .attack import AttackResult, attack, attack_from_replies
 from .conformal import ABSTAINED, Calibration
 from .equiv import EquivResult, candidate_pairs, equiv_from_replies, judge_same
 from .gather import HttpGet, WebSearch, gather, urllib_get
+from .covers import cover_pairs, covered_by, hosts_of_snapshots, judge_covers
 from .reason import judge_reasons, reason_bounds
 from .model import Model, extract_json
 from .snapshot import Snapshot, SnapshotStore, host
@@ -125,6 +126,11 @@ class Params(BaseModel):
     # not. An artifact without the field was made before the check and
     # replays without it; each run replays under its own link rule.
     why_check: int = 3
+    # Whether a second source can corroborate an answer by covering it — its
+    # sentence stating every claim the answer states, judged one way
+    # (occam.covers, #212). 2: yes, beside the claim-lens groups. An artifact
+    # without the field was made before it and replays without it.
+    covers_check: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -180,6 +186,8 @@ class Artifact(BaseModel):
     # The reason judge (#194): (quote id, reply), keyed so a reply is read
     # against the statement it judged, never by position.
     reason_replies: tuple[tuple[str, str], ...] = ()
+    # (answer, source, order shown, reply): keyed, never read by position.
+    cover_replies: tuple[tuple[str, str, int, str], ...] = ()
     # When the same-answer judge was asked (#177), for audit: `as_of` for a
     # live run, the rejudge's own clock for one judged later. None: not
     # recorded — the judge did not run, or the artifact predates the field
@@ -224,6 +232,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "why_check" not in data["params"]:
             data = {**data, "params": {**data["params"], "why_check": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "covers_check" not in data["params"]:
+            data = {**data, "params": {**data["params"], "covers_check": 1}}
         return data
 
 
@@ -276,6 +287,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     attack_replies: list[str] = []
     same_replies: list[str] = []
     reason_replies: list[tuple[str, str]] = []
+    cover_replies: list[tuple[str, str, int, str]] = []
     if readable:
         argue_replies, argued = argue(model, question, readable, k=params.k_argue,
                                       temperature=params.t_argue, max_chars=params.max_chars)
@@ -287,6 +299,9 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
             reason_replies = judge_reasons(model, argued, question,
                                            temperature=params.t_support,
                                            rule=params.why_check)
+        if params.covers_check >= 2:
+            cover_replies = judge_covers(model, cover_pairs(argued, hosts_of_snapshots(snaps)),
+                                         temperature=params.t_same)
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
         if params.judge_same:
@@ -301,6 +316,7 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         attack_replies=tuple(attack_replies),
                         same_replies=tuple(same_replies),
                         reason_replies=tuple(reason_replies),
+                        cover_replies=tuple(cover_replies),
                         same_judged_at=as_of if params.judge_same else None,
                         served_by=_served_since(model, start))
     return replay(artifact, calibration), artifact
@@ -331,7 +347,10 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
                      reason_bounds=(reason_bounds(argued, artifact.question,
                                                   artifact.reason_replies,
                                                   artifact.params.why_check)
-                                    if artifact.params.why_check >= 2 else None))
+                                    if artifact.params.why_check >= 2 else None),
+                     covered_by=(covered_by(cover_pairs(argued, hosts_of_snapshots(snaps)),
+                                            artifact.cover_replies)
+                                 if artifact.params.covers_check >= 2 else None))
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
                     same, raw)
 
