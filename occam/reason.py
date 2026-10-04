@@ -46,10 +46,9 @@ __all__ = ["REASON_VERDICTS", "CAUSAL_LINKS", "asks_for_a_cause", "states_a_link
 REASON_VERDICTS = ("gives_reason", "does_not", "cannot_tell")
 
 # Word sequences that link a cause to an effect. "so" is left out: it is as
-# often about degree as about cause. "since" is about time as often as cause,
-# so it counts only when no number follows it: "Since blue light scatters
-# more, the sky is blue" (the live reply that showed it was needed) passes,
-# "since 1940" does not. What passes is still judged before it can lift.
+# often about degree as about cause. "since" is about time as often as cause;
+# which uses of it count is the link rule (`Params.why_check`, see
+# states_a_link). What passes is still judged before it can lift.
 CAUSAL_LINKS: tuple[tuple[str, ...], ...] = tuple(tuple(p.split()) for p in (
     "because", "due to", "owing to", "caused by", "cause", "causes", "caused", "causing",
     "result of", "results from", "resulted from", "resulting from", "as a result",
@@ -80,23 +79,39 @@ def asks_for_a_cause(question: str) -> bool:
     return any(w in CAUSE_WORDS for w in _words(question))
 
 
-def states_a_link(text: str) -> bool:
-    """Whether the text carries a causal link, matched on whole words."""
-    ws = _words(text)
-    if any(tuple(ws[i:i + len(p)]) == p for p in CAUSAL_LINKS for i in range(len(ws))):
-        return True
-    # "since" before a word, never before a number. _words drops digits, so
-    # read the raw text after each "since".
+# Where a causal "since" can stand: opening the text or a clause.
+_CLAUSE_OPENERS = ".,;:!?(\u2014\u2013\"'\u201c\u2018"
+
+
+def _since_links(text: str, rule: int) -> bool:
+    """Rule 2 (#194): any "since" a letter follows. "since 1940" fails, but so
+    does nothing about "since the 1980s" (run 5, q07), which is time.
+    Rule 3 (#213): only a "since" that opens the text or a clause, before a
+    letter. "Since blue light scatters more, the sky is blue" passes; "the
+    leading hypothesis since the 1980s" and "Since 1940, …" do not. A clause
+    "since" can still be time ("…, since the 1980s") — the judge reads it."""
     low = text.casefold()
     i = low.find("since")
     while i >= 0:
-        if low[i + 5:i + 6] in (" ", ",") and low[i + 5:].lstrip(" ,")[:1].isalpha():
-            return True
+        after = low[i + 5:]
+        if after[:1] in (" ", ",") and after.lstrip(" ,")[:1].isalpha():
+            before = low[:i].rstrip()
+            if rule < 3 or not before or before[-1] in _CLAUSE_OPENERS:
+                return True
         i = low.find("since", i + 5)
     return False
 
 
-def reason_candidates(argued: ArgueResult, question: str) -> list[Argument]:
+def states_a_link(text: str, rule: int = 3) -> bool:
+    """Whether the text carries a causal link, matched on whole words, under
+    link rule `rule` (`Params.why_check`)."""
+    ws = _words(text)
+    if any(tuple(ws[i:i + len(p)]) == p for p in CAUSAL_LINKS for i in range(len(ws))):
+        return True
+    return _since_links(text, rule)
+
+
+def reason_candidates(argued: ArgueResult, question: str, rule: int = 3) -> list[Argument]:
     """The quotes a reason judge is asked about: on a question that asks for a
     cause, every quote some sample gave as its answer whose words carry a link.
     In id order, one function for the live run and the replay."""
@@ -104,7 +119,7 @@ def reason_candidates(argued: ArgueResult, question: str) -> list[Argument]:
         return []
     by = argued.by_id()
     ids = sorted({x for x in argued.answers if x and by[x].kind == "quote"})
-    return [by[x] for x in ids if states_a_link(by[x].conclusion)]
+    return [by[x] for x in ids if states_a_link(by[x].conclusion, rule)]
 
 
 def reason_prompt(question: str, statement: str) -> str:
@@ -124,10 +139,10 @@ def reason_prompt(question: str, statement: str) -> str:
 
 
 def judge_reasons(model: Model, argued: ArgueResult, question: str, *,
-                  temperature: float = 0.0) -> list[tuple[str, str]]:
+                  temperature: float = 0.0, rule: int = 3) -> list[tuple[str, str]]:
     """One fresh call per candidate, stored as (quote id, reply)."""
     return [(a.id, model.complete(reason_prompt(question, a.conclusion), temperature=temperature))
-            for a in reason_candidates(argued, question)]
+            for a in reason_candidates(argued, question, rule)]
 
 
 def _verdict(reply: Optional[str]) -> Optional[str]:
@@ -137,7 +152,7 @@ def _verdict(reply: Optional[str]) -> Optional[str]:
 
 
 def reason_bounds(argued: ArgueResult, question: str,
-                  replies: Sequence[tuple[str, str]]) -> dict[str, str]:
+                  replies: Sequence[tuple[str, str]], rule: int = 3) -> dict[str, str]:
     """For each quote answer on a question asking for a cause that has not
     shown it gives the reason: the bound the status stage names. Deterministic."""
     if not asks_for_a_cause(question):
@@ -146,7 +161,7 @@ def reason_bounds(argued: ArgueResult, question: str,
     by = argued.by_id()
     out: dict[str, str] = {}
     for aid in sorted({x for x in argued.answers if x and by[x].kind == "quote"}):
-        if not states_a_link(by[aid].conclusion):
+        if not states_a_link(by[aid].conclusion, rule):
             out[aid] = (f"quote {aid} answers a question asking for a cause, but its words "
                         f"state no causal link")
             continue

@@ -144,3 +144,45 @@ def test_an_artifact_made_before_the_check_replays_without_it():
     del stored["params"]["why_check"]
     old = replay(type(art).model_validate(stored))
     assert old.status == Status.ESTABLISHED and ans.status == Status.HYPOTHESIS
+
+
+# ── #213: a "since" links only where it opens a clause ─────
+
+Q07 = ("Death by asteroid rather than by a series of volcanic eruptions or some other global "
+       "calamity has been the leading hypothesis since the 1980s, when scientists found "
+       "asteroid dust in the geologic layer that marks the extinction of the dinosaurs.")
+
+
+def test_a_since_about_time_is_no_link_under_rule_3():
+    assert not states_a_link(Q07)                            # run 5, q07: time, not cause
+    assert not states_a_link("Since 1940, the bridge has been rebuilt twice.")
+    assert not states_a_link("The sky has looked blue ever since the dawn of time.")
+    # where it opens the text or a clause, it can link
+    assert states_a_link("Since blue light wavelengths scatter more, the diffuse sky seen "
+                         "in daytime is blue.")              # run 5, q08
+    assert states_a_link("The sky is blue, since blue light is scattered most.")
+    assert states_a_link("The sky is blue (since blue light is scattered most).")
+
+
+def test_rule_2_keeps_its_own_answer_so_old_runs_replay():
+    assert states_a_link(Q07, rule=2)
+
+
+Q07_QUESTION = "What caused the extinction of the dinosaurs?"
+
+
+def test_under_rule_3_a_time_since_stays_a_hypothesis_and_the_judge_is_not_asked():
+    ans, art, model = ask(Q07_QUESTION, quotes(Q07), [], sentence=Q07)
+    assert ans.status == Status.HYPOTHESIS
+    assert ans.status_bound_by == (f"quote {ans.answer_id} answers a question asking for a "
+                                   f"cause, but its words state no causal link",)
+    assert art.reason_replies == ()
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_a_run_made_under_rule_2_replays_under_rule_2():
+    ans, art, _ = ask(Q07_QUESTION, quotes(Q07), [GIVES], sentence=Q07,
+                      params=Params(k_argue=1, k_attack=1, web_sources=1, why_check=2))
+    assert art.params.why_check == 2 and art.reason_replies == (("A0000", GIVES),)
+    assert ans.status == Status.ESTABLISHED
+    assert canonical(replay(art)) == canonical(ans)
