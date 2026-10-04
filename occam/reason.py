@@ -84,8 +84,8 @@ _CLAUSE_OPENERS = ".,;:!?(\u2014\u2013\"'\u201c\u2018"
 
 
 def _since_links(text: str, rule: int) -> bool:
-    """Rule 2 (#194): any "since" a letter follows. "since 1940" fails, but so
-    does nothing about "since the 1980s" (run 5, q07), which is time.
+    """Rule 2 (#194): any "since" a letter follows. "since 1940" fails, but
+    "since the 1980s" (run 5, q07), which is time, passes.
     Rule 3 (#213): only a "since" that opens the text or a clause, before a
     letter. "Since blue light scatters more, the sky is blue" passes; "the
     leading hypothesis since the 1980s" and "Since 1940, …" do not. A clause
