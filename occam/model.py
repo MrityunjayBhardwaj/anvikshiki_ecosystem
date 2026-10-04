@@ -6,8 +6,8 @@ deterministic stages re-run from the recorded strings, so a disputed step can
 be recomputed without asking the model again — and without the model getting
 a second chance to say something different.
 
-Two implementations. `OpenRouterModel` calls a real model over HTTP with the
-standard library alone. `ScriptedModel` returns canned replies in order, which
+Three implementations. `OpenRouterModel` and `KieModel` call a real model
+over HTTP with the standard library alone. `ScriptedModel` returns canned replies in order, which
 is how the laws and the validation controls run without a network: a control
 fixture scripts exactly the output whose handling it is testing.
 """
@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 __all__ = ["Model", "OpenRouterModel", "ScriptedModel", "extract_json"]
 
@@ -73,6 +74,45 @@ class OpenRouterModel:
         raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
                            f"(finish_reason {finish!r})")
 
+    def web_search(self, question: str, n: int) -> tuple[list[str], str]:
+        """URLs a web search cited for the question, and the raw response for audit.
+
+        Discovery only (#209): the model's reply text is never used — the URLs
+        are fetched and quoted like any other page, and every check applies to
+        what they say, not to what the model said about them."""
+        from .gather import EXCLUDED_HOSTS
+        payload = json.dumps({
+            "model": self._model,
+            "messages": [{"role": "user", "content":
+                          f"Find web pages that answer this question.\n\nQUESTION: {question}"}],
+            "temperature": 0.0,
+            "max_tokens": 300,
+            "plugins": [{"id": "web", "max_results": n,
+                         "exclude_domains": list(EXCLUDED_HOSTS)}],
+        }).encode()
+        req = urllib.request.Request(self.URL, data=payload, headers={
+            "Authorization": f"Bearer {self._key}",
+            "Content-Type": "application/json",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as r:
+                raw = r.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"{self.name}: web search HTTP {e.code}: {e.read()[:300]!r}") from e
+        body = json.loads(raw)
+        self.served.append(f"{body.get('model') or self._model} via "
+                           f"{body.get('provider') or 'an unreported provider'}")
+        urls: list[str] = []
+        try:
+            notes = body["choices"][0]["message"].get("annotations") or []
+        except (KeyError, IndexError, TypeError) as e:
+            raise RuntimeError(f"{self.name}: unexpected web search response {raw[:300]}") from e
+        for a in notes:
+            url = (a.get("url_citation") or {}).get("url") if isinstance(a, dict) else None
+            if isinstance(url, str) and url not in urls:
+                urls.append(url)
+        return urls, raw
+
     def _once(self, prompt: str, temperature: float) -> tuple[str, Any]:
         payload = json.dumps({
             "model": self._model,
@@ -96,6 +136,146 @@ class OpenRouterModel:
             return choice["message"]["content"] or "", choice.get("finish_reason")
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"{self.name}: unexpected response {str(body)[:300]}") from e
+
+
+def urls_in(text: str) -> list[str]:
+    """Every http(s) URL written in a text, in order, once each — bare or as a
+    markdown link. Read character by character, no pattern matching: a URL
+    runs to whitespace or a closing bracket or quote, and loses a trailing
+    full stop, comma, colon or semicolon (sentence punctuation, not path)."""
+    out: list[str] = []
+    i = 0
+    while True:
+        starts = [j for j in (text.find("https://", i), text.find("http://", i)) if j >= 0]
+        if not starts:
+            return out
+        j = k = min(starts)
+        while k < len(text) and not text[k].isspace() and text[k] not in ")]>\"'<":
+            k += 1
+        url = text[j:k].rstrip(".,;:")
+        if url not in out:
+            out.append(url)
+        i = k
+
+
+class KieModel:
+    """A chat model behind kie.ai's OpenAI-format endpoint, `/{slug}/v1/chat/completions`.
+
+    kie.ai reports neither the provider nor a version, only a model name, so
+    `served` records that name. Its web search returns no structured
+    citations: `web_search` reads the URLs the model writes in its reply. Those
+    may come from the search or from the model's memory — the response does
+    not say — which is why every one is fetched and checked by us, and a URL
+    that does not exist fails at the fetch and is recorded as such (#209)."""
+
+    BASE = "https://api.kie.ai"
+    # kie.ai answers a prompt over its limit for some models (gpt-5-2: about
+    # 23k tokens, measured 2026-10-04) with this as an ordinary reply. Read as
+    # a reply it would be a malformed sample, and "could not ask" would print
+    # as the model's answer; it is an error instead, and not asked again.
+    TOO_LONG = "The message you submitted was too long"
+
+    def __init__(self, model: str = "gpt-5-2", *, api_key: Optional[str] = None,
+                 timeout: float = 600.0, empty_retries: int = 2,
+                 busy_retries: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.name = f"kie/{model}"
+        self._model = model
+        self._key = api_key or os.environ.get("KIE_API_KEY", "")
+        if not self._key:
+            raise RuntimeError(
+                "KIE_API_KEY is not set. Occam refuses to run a model stage without "
+                "a model rather than produce an empty answer that reads like "
+                "'no evidence found'."
+            )
+        self._timeout = timeout
+        self._empty_retries = empty_retries
+        self._busy_retries = busy_retries
+        self._sleep = sleep
+        self.served: list[str] = []
+        # kie.ai bills each call in credits and says how many; summed here so a
+        # run can report what it spent from the provider's own count.
+        self.credits = 0.0
+
+    def _post(self, body: dict[str, Any]) -> dict[str, Any]:
+        """One call. A server-side failure (5xx or 429, as HTTP or as kie's own
+        code) is asked again after a pause, up to `busy_retries` times: one
+        "please try again later" must not end a ten-question run. Nothing from
+        a failed call is recorded, and after the last try it raises."""
+        for attempt in range(self._busy_retries + 1):
+            out, code, why = self._post_once(body)
+            if out is not None:
+                return out
+            if not (code == 429 or 500 <= code < 600) or attempt == self._busy_retries:
+                raise RuntimeError(f"{self.name}: {why}")
+            self._sleep(10.0 * (attempt + 1))
+        raise AssertionError("unreachable")
+
+    def _post_once(self, body: dict[str, Any]) -> tuple[Optional[dict[str, Any]], int, str]:
+        req = urllib.request.Request(
+            f"{self.BASE}/{self._model}/v1/chat/completions",
+            data=json.dumps({**body, "stream": False}).encode(),
+            headers={"Authorization": f"Bearer {self._key}",
+                     "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as r:
+                out = json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            return None, e.code, f"HTTP {e.code}: {e.read()[:300]!r}"
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+            # No reply at all: as retryable as a busy server (run 5, q03: a read
+            # timed out), and as unrecorded.
+            return None, 503, f"no reply: {type(e).__name__}: {e}"
+        if not isinstance(out, dict) or "choices" not in out:
+            # kie.ai reports some failures as HTTP 200 with its own code.
+            code = out.get("code") if isinstance(out, dict) else None
+            return None, code if isinstance(code, int) else 0, \
+                f"unexpected response {str(out)[:300]}"
+        self.served.append(f"{out.get('model') or self._model} via kie.ai")
+        self.credits += float(out.get("credits_consumed") or 0)
+        return out, 200, ""
+
+    def complete(self, prompt: str, *, temperature: float) -> str:
+        """The model's reply, never an empty one (see OpenRouterModel.complete)."""
+        finish = None
+        for _ in range(1 + self._empty_retries):
+            out = self._post({"messages": [{"role": "user", "content": prompt}],
+                              "temperature": temperature})
+            choice = out["choices"][0]
+            reply, finish = (choice.get("message") or {}).get("content") or "", \
+                choice.get("finish_reason")
+            if reply.strip().startswith(self.TOO_LONG):
+                raise RuntimeError(f"{self.name}: the prompt is over this model's input "
+                                   f"limit ({len(prompt)} characters); kie.ai said: {reply[:120]!r}")
+            if reply.strip():
+                return reply
+        raise RuntimeError(f"{self.name}: empty reply {1 + self._empty_retries} times "
+                           f"(finish_reason {finish!r})")
+
+    def web_search(self, question: str, n: int) -> tuple[list[str], str]:
+        """URLs the model wrote after searching the web, and the raw response.
+        Discovery only: nothing it says about the pages is used."""
+        from .gather import EXCLUDED_HOSTS
+        out = self._post({
+            "messages": [{"role": "user", "content":
+                          f"Search the web for up to {n} pages that answer the question "
+                          f"below. Do not use {', '.join(EXCLUDED_HOSTS)}. List each page's "
+                          f"full URL on its own line.\n\nQUESTION: {question}"}],
+            "temperature": 0.0,
+            # Each family names its search tool differently; the wrong name is
+            # ignored silently and returns no URLs (observed on gemini-3.1-pro).
+            "tools": [{"type": "function", "function": {
+                "name": "googleSearch" if self._model.startswith("gemini") else "web_search"}}],
+        })
+        content = (out["choices"][0].get("message") or {}).get("content") or ""
+        return urls_in(content), json.dumps(out)
+
+
+def make_model(spec: str) -> "Model":
+    """`kie/<slug>` for kie.ai; anything else is an OpenRouter model slug,
+    with or without an `openrouter/` prefix (as `Params.model` records it)."""
+    if spec.startswith("kie/"):
+        return KieModel(spec[len("kie/"):])
+    return OpenRouterModel(spec[len("openrouter/"):] if spec.startswith("openrouter/") else spec)
 
 
 class ScriptedModel:

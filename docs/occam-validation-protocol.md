@@ -487,3 +487,200 @@ there the control flags it. One question, one model, one run: this is not a rate
 The abstention reason reads "the model found no answer in the sources", but the
 page does answer the corrected question ("catchment area"). A reader can't tell
 "the premise is false" from "the sources are silent".
+
+## Amendment 6 — 2026-10-04: run 5, a second source, prompt 3 and the reason check (#208)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In runs 2–4 every answer rests on one host (Wikipedia), so
+`established` was unreachable by construction (Amendment 2), and 33 of 34
+replayable answers are `hypothesis`. Calibration needs a spread of statuses.
+Three changes go in together, because measured offline none moves a status
+alone: lifting the "restated in the model's words" limit changed 0 of 31
+statuses (#201), since the single-source limit ties with it.
+
+**Instrument changes** (the commit carrying this amendment):
+- **Web pages as a second source (#209).** OpenRouter's web-search plugin,
+  run on the same model with Wikipedia and its mirrors excluded, discovers up
+  to 3 URLs per question (`web_sources 3`). Only the URLs are kept. Each page
+  is fetched by Occam, snapshotted and quoted like any other, and every check
+  applies to it. The plugin's own text is stored for audit and never read.
+- **Argue prompt 3 (#210).** A quote's conclusion is copied from its quote. A
+  passage stating the answer, reason included, is the answer. A point two
+  sources state is quoted from each.
+- **The reason check (#194, `why_check 2`).** On a question asking for a
+  cause, a quote answer stays at `hypothesis` unless its words carry a causal
+  link *and* a fresh judge call says it gives the reason asked for.
+- Everything else as in Amendment 4: `openrouter/z-ai/glm-5.2`, k = 3,
+  temperatures 0.7 / 0.2, same-answer judge on, `veto_words 2`, 3 Wikipedia
+  pages per question.
+
+**Run 5** = `python -m occam measure --out traces/occam/run5` (the ten
+questions, `--web 3` by default) and `python -m occam controls --out
+traces/occam/run5-controls`. The controls take their pages by hand, so no web
+search runs for them: they test that nothing else moved.
+
+**Baselines** (run 3, measured 2026-10-04 by replay): quote arguments whose
+conclusion is not their quote's own words, **42 of 42**; answers that are
+quotes, **3 of 10** (7 inferences); hosts per question, **1** in 10 of 10;
+statuses, 9 `hypothesis`, 1 `open`. Across runs 2–4, quote answers to the 18
+answered cause questions: 7, all stating a link, **0 of 7** in the source's
+own words.
+
+**Predictions:**
+1. Sources: at least 2 readable web pages in **at least 8 of 10** questions
+   (one probe on 2026-10-03: 4 of 5 fetched; Britannica returned 403). Hosts
+   per question rise from 1 to at least 2 in those questions.
+2. Restated quote arguments fall from 42 of 42 to **at most half** of the quote
+   arguments made.
+3. Quote answers rise from 3 of 10 to **at least 5 of 10**.
+4. `established`: **1 to 4 of 10.** It needs two verbatim quotes on two hosts
+   that the claim-lens judge calls the same, which the strict lens rarely
+   does (1 claim pair in 37 runs before prompt 3). Most answers stay
+   `hypothesis`.
+5. The reason check: on the 6 cause questions, every quote answer is listed
+   with its link and the judge's verdict. No cause question reaches
+   `established` with a quote answer whose link check failed (this holds by
+   construction; listing it checks the wiring live).
+6. Controls as in Amendment 5: positive answers "1987"; negative abstains;
+   adversarial adopts at `hypothesis`, bound by its single host;
+   `false_premise` PASS.
+7. Every artifact replays to its stored answer with no key.
+
+**Read by hand, reported with every `established` answer:** the hosts and
+quotes that corroborate it, and whether the two are independent. Copies (two
+agencies publishing one text, as NASA's and NOAA's pages on the sky do) and
+Wikipedia mirrors are counted apart. They are a known weakness of counting
+hosts (`status.py`), measured here, not assumed away.
+
+**Kill criteria:** unchanged (positive missed → VOID; negative answers → STOP;
+adversarial at `established` → STOP: corroboration has failed). New: if the web
+search fails or finds nothing beyond Wikipedia on **5 or more of 10**
+questions, predictions 1–4 are **NOT MEASURED** and are reported as such, not
+as a negative. A failed live call is reported with the question it cost. The
+spend is read from OpenRouter's usage counter before and after and reported.
+
+**Status spread.** The calibration gate asks for at least 3 statuses at 10% or
+more. Ten questions cannot show that reliably; run 5 reports the counts with
+their denominator and says whether the gate *would* be met, nothing more.
+
+### Note — 2026-10-04: the model changes before run 5
+
+Written before run 5, after one live `ask` on the new instrument. Nothing
+above is changed.
+
+- **Model:** `kie/gpt-5-2` (GPT-5.2 through kie.ai), not `openrouter/z-ai/glm-5.2`,
+  whose account ran out of credit. Every model stage changes model at once.
+  **So run 5 against run 3 can't separate the model from the prompt or the
+  source.** The baselines above stay as they are, and run 5 reports this beside
+  each comparison.
+- **Web search:** kie.ai returns no structured citations. The URLs are read out
+  of the model's reply, and may come from its search or its memory. The pages
+  are fetched and checked either way. Prediction 1 counts pages fetched with
+  text, so a URL that doesn't exist counts against it.
+- **The reason check:** "since" now counts as a causal link unless a number
+  follows it. The one live reply used "Since blue light wavelengths scatter
+  more, the diffuse sky … is blue", a true reason the earlier word list
+  rejected.
+- **Spend:** read from kie.ai's credit balance before and after each command,
+  and from the credits each call reports. The one live `ask`: **6.66 credits**.
+- **Read in run 5:** the live `ask` kept two answers apart for "negation
+  differs: not" over "The sky looks blue, *not violet*". That `not` negates a
+  noun phrase, not the statement, like "without" in #192. Every negation veto in
+  run 5 is listed and read by hand.
+
+Command: `python -m occam measure --model kie/gpt-5-2 --out traces/occam/run5`
+and `python -m occam controls --model kie/gpt-5-2 --out traces/occam/run5-controls`.
+
+### Note — 2026-10-04 (later): run 5 moves to `kie/gemini-3.1-pro`
+
+Written before the run that is reported. Two attempts on `kie/gpt-5-2` ended
+early and are **not** run 5:
+- **Attempt 1** stopped at q01's first argue call: kie.ai returned `{"code": 500,
+  "msg": "Server exception…"}`, with nothing written. Since then, a 5xx or 429
+  is asked again 3 times with pauses.
+- **Attempt 2** answered q01 and q02 (kept in `traces/occam/run5-attempt2/`,
+  never reported as run 5), then hit 500 on every try at q03. Measured
+  directly, gpt-5-2 on kie.ai accepts about **22k input tokens** (80k characters
+  worked; at 90k it returned an ordinary reply, "The message you submitted was
+  too long…"; at 170k and above it returned 500). A six-source argue prompt
+  runs to about 240k characters. That reply is now an error, never a sample.
+
+**Model for run 5:** `kie/gemini-3.1-pro`. It took a 240k-character prompt
+(68k tokens, 6.83 credits), and its search tool (`googleSearch`) returns URLs
+when asked to list them. Everything else is as in Amendment 6 and the note
+above. Run 5 against run 3 still can't separate the model from the other
+changes. The four controls above ran on `kie/gpt-5-2`, so they are re-run on
+this model too, into `traces/occam/run5-controls-gemini/`.
+
+### Note — 2026-10-04 (later still): run 5 resumed after a timeout
+
+The run on `kie/gemini-3.1-pro` wrote q01 and q02, then a read at q03 timed out
+after 300 seconds and stopped it. It is **resumed**, not restarted: `measure
+--resume` keeps q01 and q02 as written, and runs q03–q10 on the same model, now
+retrying a timed-out read and waiting up to 600 seconds. Each artifact
+records its own `as_of`. The four controls on this model finished in the
+first pass (`traces/occam/run5-controls-gemini/`, all PASS).
+
+### Results — 2026-10-04, read against the predictions above
+
+Run 5 is `traces/occam/run5/` on `kie/gemini-3.1-pro`, with `argue_prompt 3`,
+`web_sources 3`, `why_check 2`, the judge on and `veto_words 2`. The model
+changed as well as the other three things, so no row below separates the model
+from the change. q01–q02 come from the first pass (commit 152916c) and q03–q10
+from the resumed pass (commit 16c69b6). The two commits differ only in
+`--resume` and the timeout retry. All 10 artifacts replay byte for byte to
+their stored answers with no key. The scorer is the one used for every row.
+
+| prediction | result |
+|---|---|
+| 1. ≥2 readable web pages in ≥8 of 10 | ✓ **8 of 10**, exactly at the line. 20 of 30 pages fetched had text; the 10 without were HTTP 403 (britannica, noaa, loc, amnh, britishmuseum, smarthistory) or 404 (sciencedaily, structuralengineer, nasa.gov, livescience). q06 and q09 have 1 readable web page each. |
+| 2. restated quote arguments ≤ half | ✓ **0 of 64** (run 3: 42 of 42). |
+| 3. quote answers ≥5 of 10 | ✓ **7 of 10** (run 3: 3). 4 of the 7 quote a web page (spaceplace.nasa.gov, britannica.com, simscale.com, news.utexas.edu) and 3 quote Wikipedia. q01, q05 and q10 are inferences. |
+| 4. `established` 1–4 of 10 | ✗ **0 of 10.** All 7 quote answers are bound by "rests on a single source". See below. |
+| 5. the reason check, listed | ✓ wired. Cause questions are q01, q02, q04, q05, q07 and q08. q01 and q05 are inferences, so the reason judge doesn't read them. The 4 quote answers (q02, q04, q07, q08) all pass the link check and get `gives_reason` from the judge. Read by hand, q07's link is **the temporal "since"** ("the leading hypothesis *since the 1980s*"): the rule lets a "since" through when a word follows it, and "the" is a word. The judge's `gives_reason` is right on reading (the sentence names the asteroid), but the link check passed for the wrong reason (#213). No status moved, because the single source binds q07 anyway. |
+| 6. controls | ✓ all 4 PASS on this model (`run5-controls-gemini/`, and on gpt-5-2 in `run5-controls/`); adversarial at `hypothesis`, bound by its single host; all 4 replay. |
+| 7. every artifact replays | ✓ 10 of 10, plus 4 of 4 controls. |
+
+**Kill criteria:** none triggered. Web search found pages beyond Wikipedia in
+10 of 10 questions. **Status spread:** 10 `hypothesis` out of 10, so 1 status,
+and the calibration gate would not be met.
+
+**Why nothing was established.** In none of the 7 quote answers did a second
+host quote the same words. So corroboration needed the claim-lens judge to
+merge the answer with another host's sentence. Every cross-host claim pair
+holding an answer was kept apart, and every reason, read by hand, is the same
+one: **one sentence says more than the other.**
+- **q02:** weather.gov says "The earth's spin axis is tilted with respect to
+  its orbital plane. This is what causes the seasons." The answer (from
+  spaceplace) says "Earth's tilted axis causes the seasons." The judge's
+  reason: "Y specifies … the spin axis … which X does not mention."
+- **q08:** spaceplace says "Blue light is scattered more than the other colors
+  because it travels as shorter, smaller waves." The answer is "Since blue
+  light wavelengths scatter more, the diffuse sky seen in daytime is blue."
+  The judge called them different.
+- **q02, q04, q07, q09:** the Wikipedia sentence carries a number the answer
+  lacks ("23.4°", "1940", "1820s"), and the claim-lens veto stops it before
+  any judge sees it.
+
+The claim lens asks whether two sentences are **the same**, and the judge
+answers that faithfully. But vouching for an answer needs a one-way relation:
+**the second host's sentence states everything the answer states.** A sentence
+that says more still vouches for one that says less. The claim lens was made
+strict on purpose (#172: `established` vouches for every word shown). That
+strictness is about the answer's words, and a superset covers all of them.
+Whether an entailment lens would lift q02 can't be computed by replay, because
+it needs new judge calls. It is **not measured** (#212).
+
+**All 24 vetoes, read by hand:** every one is "numbers differ" under the claim
+lens, where one side has a number and the other has none. Each is correct
+under the rule as written. There were no negation vetoes, so the "not violet"
+case from the live `ask` didn't come up.
+
+**Spend:** read from kie.ai's balance. **115.53 credits** for all of run 5 on
+gemini, 9703.43 before and 9587.90 after. That is 27.03 for the first pass
+(the four controls, q01, q02, and the q03 calls lost to the timeout) and 88.50
+for the resumed pass. The calls themselves report 86.69 for the resumed pass,
+1.81 below the drop in the balance. Where the 1.81 went is not known: the
+web-search calls report their credits through the same client, so they are
+not the obvious gap.

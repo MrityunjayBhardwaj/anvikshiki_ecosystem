@@ -216,3 +216,17 @@ def test_extract_json_takes_the_object_out_of_prose():
 def test_the_prompt_forbids_outside_knowledge_and_allows_abstention():
     p = argue_prompt("q?", [SNAP])
     assert '"answer": null' in p and "outside knowledge" in p
+
+
+def test_prompt_3_asks_for_the_sources_own_words_and_each_source_separately():
+    """#210: the three asks that let an answer pass `states()` and be
+    corroborated. Each is a sentence a reword could drop without notice."""
+    p = argue_prompt("Why is the sky blue?", [SNAP])
+    assert "copied word for word from its own quote" in p
+    assert "the answer is that quote step itself" in p
+    assert "quote each of them as a step of its own" in p
+
+
+def test_new_runs_record_prompt_3():
+    from occam.answer import Params
+    assert Params().argue_prompt == 3
