@@ -1062,3 +1062,80 @@ false on reading, or whose covering sentence does not state it, means
 before, between and after the two commands.
 
 **Status spread.** As in Amendment 6.
+
+### Results — 2026-10-06, read against the predictions above
+
+Run 8 is `traces/occam/run8/` and `traces/occam/run8-controls/`, from commit
+3811cd1 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 102 of 114 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). Counts use the predicates stated in the
+baselines.
+
+| prediction | result |
+|---|---|
+| 1. fragments ≤1 | ✓ **0 of 49** quote arguments (run 7: 6 of 78). |
+| 2. attribution cuts ≤2; no kept attribution refused | ✓ **0** cuts. 2 quotes kept their attribution, and neither was refused. |
+| 3. refused by the support check ≤10% | ✓ **0 of 49** (run 7: 16 of 78). |
+| 4. abstentions ≤1 of 10 | ✓ **0** (run 7: 2). |
+| 5. inference answers ≤3 of 10 | ✓ **2** (q05, q09). |
+| 6. quote answers ≥5 of 10 | ✓ **8 of 10.** |
+| 7. `established` 1–4 of 10 | ✓ **3 of 10**: q02, q04, q10. One answer carries an attribution: q01, "The Rogers Commission concluded that…", bound by "rests on a single source (en.wikipedia.org)". It had no cover pair at all: all 3 of its quotes are from Wikipedia, so the covers check had nothing to read. |
+| 8. arguments lost to a refused premise | reported: **0** (run 7: 5). |
+| 9. sources and checks | ✓ ≥2 distinct readable hosts in **10 of 10**; every fill note adds up, 10 of 10; restated quotes **0 of 49**. The reason check is wired: q02 and q04, the established cause questions, pass the link check and get `gives_reason`; q07's quote states no causal link and is capped, naming why. |
+| 10. every `established` answer read by hand | ✓ all 3, below. No stop. One is borderline and its second source partly draws on Wikipedia. |
+| 11. controls and replay | ✓ all 4 PASS with the same verdicts. Under prompt 4 the positive and adversarial answers are now whole sentences ("…ratified in 1987 by fourteen member states.", "…at sea level under standard atmospheric pressure."), still `hypothesis`. Replay as above. |
+
+**Kill criteria:** none triggered. Each `established` answer is true on
+reading, and each covering sentence states it, in two cases in substance
+rather than word for word.
+
+- **q02**, "Earth's tilted axis causes the seasons." (spaceplace.nasa.gov),
+  as in runs 6 and 7. Covered both ways by weather.gov ("the seasons are
+  caused by the Earth being tilted on its axis by an average of 23.5
+  degrees"), science.nasa.gov and two Wikipedia sentences. Longest shared
+  run between any two pages: 35 characters, a stock phrase.
+- **q04**, "The Tacoma Narrows Bridge collapsed primarily due to the
+  aeroelastic flutter." (simscale.com), as in run 6. Covered by Wikipedia's
+  "The original Tacoma Narrows Bridge was destroyed as a result of
+  aeroelastic flutter." Destroyed, not collapsed: as in run 6, read as
+  stating it in substance. Longest shared run: 33 characters, the bridge's
+  name.
+- **q10**, "The primary function of mitochondria in a cell is to produce ATP,
+  the main energy currency of the cell." (studymind.co.uk). Covered both
+  ways by Wikipedia's "The most prominent roles of mitochondria are to
+  produce the energy currency of the cell, ATP (i.e., phosphorylation of
+  ADP), through respiration and to regulate cellular metabolism." True on
+  reading. Two cautions:
+  - **"Primary function" against "most prominent roles".** The source names
+    two roles, and the answer ranks one first. Read as stated in substance;
+    a stricter reader could refuse it, as with q04's "destroyed".
+  - **The second source partly draws on the first.** studymind's next
+    sentence, "In addition to energy production, mitochondria also play a
+    role in other cellular processes, such as cell signaling, cellular
+    differentiation, and cell death", follows Wikipedia's "In addition to
+    supplying cellular energy, mitochondria are involved in other tasks,
+    such as signaling, cellular differentiation, and cell death" (52
+    characters shared). The answer sentence itself is not copied. But the
+    two hosts are less independent than two hosts are taken to be, and
+    nothing in the mechanism sees a paraphrase. It was found here only by
+    reading.
+
+**The 25 cover pairs.** 7 were vetoed before any call. 18 were judged, 36
+replies, every one readable. 6 covered, in q02, q04 and q10. Order mattered
+once (q05, an inference answer).
+
+**What moved.** Against run 7, the support check refused nothing (16 before),
+and no question abstained. The losses run 7 traced to the model's claims are
+gone. The answers still held back are bound by a single source (q01, q03,
+q06, q08), an inference (q05, q09) or the reason check (q07). #218's second
+question, whether one refused premise should sink an inference, cost nothing
+here (0 lost) and does not need building on this evidence.
+
+**Status spread:** 7 `hypothesis` and 3 `established` out of 10. The
+calibration gate would not be met.
+
+**Spend:** read from kie.ai's balance. **93.99 credits** for the measure
+command (9339.88 before, 9245.89 between) and **1.55** for the controls (to
+9244.34). The measure calls report 93.99, exactly the balance. Run 7's
+21.85-credit gap did not recur, and stays unexplained.
