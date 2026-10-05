@@ -974,3 +974,91 @@ In run 6 the two agreed to within the controls. The 21.85 gap is not
 explained: failed calls, which are retried and never recorded, may be billed,
 or another user of the key spent in the window. The balance figure is the one
 to quote.
+
+## Amendment 9 — 2026-10-06: run 8, argue prompt 4 (#219, #218)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** Run 7 had readable pages on 2 or more hosts for all 10
+questions but established 1. Read pair by pair, two of the losses were the
+claims the model wrote, not the fetch or the checks:
+- q09 abstained because its claims were fragments ("the Egyptian
+  scripts."), which assert nothing (#219).
+- q01 abstained because its claims cut "The Rogers Commission concluded
+  that" off a reported finding, and the support check refuses a view the
+  source only reports (#218).
+
+**Instrument change** (#221, merged as c77f8f3, `argue_prompt 4`,
+occam/argue.py). The instruction now says:
+- a quote's conclusion reads as a sentence on its own, with its own subject
+  and verb, to someone who has not seen the question; if no shorter part of
+  the quote does that, the conclusion is the whole quote;
+- when a passage reports what a person, body or study found, the
+  conclusion keeps who found it, copied from the start of that wording.
+
+The support check is unchanged; the user chose this over counting official
+findings as the source's own claim. Replay never re-prompts, so every stored
+run replays as before (86 of 98, the same 12 pre-artifact runs failing).
+
+**Observed live**, one question each, so no rate is measured:
+- q09 (`traces/occam/probe-219/`, 11.27 credits, before the attribution
+  sentence): 0 fragments, 5 of 5 quotes supported, answer `hypothesis` —
+  but every sample answered with an inference, not a quote.
+- q01 (`traces/occam/probe-218/`, 12.73 credits): 5 of 5 attributed quotes
+  supported, the answer a quote — but `hypothesis`, "rests on a single
+  source": an answer that names the commission was not covered by another
+  host's differently attributed sentence.
+
+Everything else as in run 7: `kie/gemini-3.1-pro`, k = 3, temperatures 0.7 /
+0.2, judge on, `veto_words 2`, `why_check 3`, `covers_check 2`, `web_fill 2`,
+3 Wikipedia pages and `--web 3`.
+
+**Run 8** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run8` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run8-controls`.
+
+**Baselines**, from the stored artifacts of runs 6 and 7 (measured
+2026-10-06). A fragment is a quote conclusion of 4 words or fewer. An
+attribution cut is a quote containing "<verb> that" for concluded, found,
+determined, reported, said, stated, showed, argued, believed or suggested,
+whose conclusion contains none.
+
+| | run 6 | run 7 |
+|---|---|---|
+| quote arguments | 55 | 78 |
+| fragments | 4 | 6 |
+| attribution cuts (refused) | 2 (2) | 6 (6) |
+| refused by the support check | 8 | 16 |
+| arguments lost to a refused premise | 1 | 5 |
+| answers: quote / inference / abstained | 7 / 3 / 0 | 7 / 1 / 2 |
+| `established` | 2 | 1 |
+
+**Predictions:**
+1. Fragments: **at most 1** in the whole run.
+2. Attribution cuts: **at most 2**, and no attributed quote that keeps its
+   attribution is refused for being a reported view (each refusal of a quote
+   with "<verb> that" is read).
+3. Refused by the support check: **at most 10%** of quote arguments.
+4. Abstentions: **at most 1 of 10.**
+5. Answers that are inferences: **at most 3 of 10.** More would mean the
+   whole-quote rule pushes the model to compose answers, which caps them at
+   `hypothesis`.
+6. Quote answers: **at least 5 of 10.**
+7. `established`: **1 to 4 of 10.** Attributed answers may find no covering
+   sentence on another host (q01's probe); every answer whose conclusion
+   carries an attribution is listed with what bound it.
+8. Arguments lost to a refused premise: reported, with no prediction; it
+   decides whether #218's second question needs building.
+9. Sources and checks as in run 7: ≥2 distinct readable web hosts in ≥8 of
+   10, every fill note adds up, restated quotes ≤10%, the reason check
+   listed live.
+10. Every `established` answer read by hand: the covering sentence, its host
+    and page, and whether the two pages copy each other.
+11. Controls as in Amendment 8, and every artifact replays with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before, between and after the two commands.
+
+**Status spread.** As in Amendment 6.
