@@ -236,6 +236,16 @@ def test_prompt_4_asks_for_a_conclusion_that_stands_without_the_question():
     assert "copied word for word from its own quote" in p        # prompt 3's ask stands
 
 
+def test_prompt_4_keeps_who_reported_a_finding():
+    """#218: run 7's q01 cut "an O-ring seal … failed" out of "The Rogers
+    Commission concluded that an O-ring seal … failed", and the support check
+    refused it as a reported view. Keeping the attribution lets it pass
+    without loosening what the check accepts."""
+    p = argue_prompt("Why did it fail?", [SNAP])
+    assert "the conclusion keeps who found or said it" in p
+    assert 'never from after "that"' in p
+
+
 def test_new_runs_record_prompt_4():
     from occam.answer import Params
     assert Params().argue_prompt == 4

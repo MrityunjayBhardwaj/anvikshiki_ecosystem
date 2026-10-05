@@ -87,8 +87,10 @@ class Params(BaseModel):
     # point two sources state is quoted from each. 4 (#219): that conclusion
     # reads as a sentence without the question, never a fragment such as
     # "the Egyptian scripts.", which asserts nothing the support check can
-    # accept. An artifact without the field was argued under 1, and shows no
-    # counter that 2 introduced.
+    # accept; and (#218) a reported finding keeps who found it, since the
+    # support check rightly refuses "X" cut out of "the inquiry found that X".
+    # An artifact without the field was argued under 1, and shows no counter
+    # that 2 introduced.
     argue_prompt: int = 4
     # Which counters the answer shows, so adding one does not change what an
     # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
