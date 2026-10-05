@@ -823,3 +823,74 @@ statuses; the calibration gate would not be met.
 9586.12 before and 9499.41 after. The measure calls report 85.61. The
 remaining 1.10 is the controls and any gap; the controls command does not
 report its own credits, so the two are not separated.
+
+## Amendment 8 — 2026-10-05: run 7, ask for more web pages and keep what loads (#216)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In run 6, prediction 1 failed: only **5 of 10** questions had
+two readable web pages, against at least 7 predicted. 13 of 30 pages had no
+text: 7 refused us (HTTP 403) and 6 were 404, 5 of which are still 404 to a
+browser. kie.ai's search reply carries no citations, so every URL is one the
+model wrote, and some were never there. The covers check can only read the
+pages it gets.
+
+**The probe that licensed building it** (2026-10-05,
+`traces/occam/probe-search/`, 4.70 credits; criteria written before each
+part). Part 1: neither the plain nor the streamed reply carries citations,
+and kie.ai's docs list none, so reading them is not an option. Part 2: on
+run 6's 10 questions, asking for 9 links and fetching all, **8 of 10** got
+readable pages on 2 or more hosts (bar 8). 20 of 88 links were 404 and 16
+were 403. q03 and q09 fell short; their good hosts refuse our fetcher. One
+search per question, so this licensed the build and measured no rate.
+
+**Instrument change** (commit e728b57, `web_fill 2`, occam/gather.py):
+- Ask the search for 3 × `web_sources` pages; fetch in order until
+  `web_sources` readable pages on different hosts are held. A second page on
+  a host already held is not fetched.
+- Every failed fetch stays in the artifact. One note per question counts
+  every URL named: readable on distinct hosts, each failure reason,
+  same-host skips, not fetched.
+- Gathering only. Replay reads the stored snapshots, so every stored run
+  replays as before (72 of 84 byte for byte, the same 12 pre-artifact runs
+  failing).
+- **Observed live** on q09, with the real search and fetch (0.38 credits):
+  5 links failed (2 × 403, 3 × 404), then 3 readable pages on 3 hosts
+  (arce.org, smithsonianmag.com, worldhistory.org). Run 6 had 1.
+- Everything else as in run 6: `kie/gemini-3.1-pro`, k = 3, temperatures
+  0.7 / 0.2, judge on, `veto_words 2`, `why_check 3`, `covers_check 2`, 3
+  Wikipedia pages and `--web 3`.
+
+**Run 7** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run7` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run7-controls`.
+
+**Baselines** (run 6, measured 2026-10-04): ≥2 readable web pages in 5 of 10;
+restated quotes 0 of 47; quote answers 7 of 10; `established` 2 of 10 (q02,
+q04); 8 `hypothesis`.
+
+**Predictions:**
+1. Sources: readable web pages on **≥2 distinct hosts in at least 8 of 10**
+   questions. Counted by host, because a second page on one host is not a
+   second source.
+2. Every question with a web search carries the fill note, and its counts
+   add up: readable + failures + same-host skips + not fetched = named.
+3. Restated quote arguments stay at **at most 10%**.
+4. Quote answers: **at least 5 of 10**.
+5. `established`: **2 to 5 of 10.** More hosts give the covers check more
+   pairs. Fewer than 2 with prediction 1 met would point at the judge or the
+   answers, not the fetch, and is read pair by pair.
+6. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the two pages copy each other.
+7. The reason check: no cause question reaches `established` with a quote
+   answer whose link or judge failed (listed live).
+8. Controls as in Amendment 7. They are given their URLs, so nothing is
+   searched and the fill rule does not act.
+9. Every artifact replays to its stored answer with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before and after each command.
+
+**Status spread.** As in Amendment 6.
