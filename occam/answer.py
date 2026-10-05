@@ -131,6 +131,13 @@ class Params(BaseModel):
     # (occam.covers, #212). 2: yes, beside the claim-lens groups. An artifact
     # without the field was made before it and replays without it.
     covers_check: int = 2
+    # How web pages are filled (occam.gather._web_pages). 1: ask the search
+    # for `web_sources` pages and fetch those. 2 (#216): ask for three times
+    # as many and fetch in order until `web_sources` readable pages on
+    # different hosts are held, keeping every failed fetch on the record. It
+    # acts only when gathering; replay reads the stored snapshots. An artifact
+    # without the field was gathered under rule 1.
+    web_fill: int = 2
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
@@ -235,6 +242,9 @@ class Artifact(BaseModel):
         if isinstance(data, dict) and isinstance(data.get("params"), dict) \
                 and "covers_check" not in data["params"]:
             data = {**data, "params": {**data["params"], "covers_check": 1}}
+        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
+                and "web_fill" not in data["params"]:
+            data = {**data, "params": {**data["params"], "web_fill": 1}}
         return data
 
 
@@ -280,7 +290,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     start = len(getattr(model, "served", ()))
     snaps, notes, gather_replies = gather(question, at=as_of, urls=urls, n=n_sources,
                                           http_get=http_get, model=model,
-                                          web_search=web_search, n_web=params.web_sources)
+                                          web_search=web_search, n_web=params.web_sources,
+                                          web_fill=params.web_fill)
     readable = [s for s in snaps if s.text.strip()]
     argue_replies: list[str] = []
     support_replies: list[str] = []

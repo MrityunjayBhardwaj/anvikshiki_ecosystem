@@ -193,15 +193,29 @@ def search_queries(model: "Model", question: str) -> tuple[list[str], str]:
     return qs, reply
 
 
+# Fill rule 2 (#216) asks the search for this many times the pages wanted.
+WEB_OVERASK = 3
+
+
 def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
-               http_get: HttpGet, notes: list[str], raw: list[str]) -> list[Snapshot]:
-    """Up to n pages a web search found, fetched and snapshotted by us (#209).
+               http_get: HttpGet, notes: list[str], raw: list[str],
+               fill: int = 1) -> list[Snapshot]:
+    """Pages a web search found, fetched and snapshotted by us (#209).
 
     The search only discovers: what is kept is the URLs, and each page is
     read through `fetch` exactly as a URL given by hand would be. A Wikipedia
-    or mirror URL is skipped (EXCLUDED_HOSTS)."""
+    or mirror URL is skipped (EXCLUDED_HOSTS).
+
+    Fill rule 1: ask for n pages and fetch them, whatever comes back.
+    Fill rule 2 (#216): a search can name pages that do not exist — kie.ai's
+    reply carries no citations, so its URLs are the model's words, and in run
+    6, 5 of 30 were dead. So ask for WEB_OVERASK × n and fetch in order until
+    n readable pages on n different hosts are held. A second page on a host
+    already held adds no corroboration and is not fetched. Every page fetched
+    is kept, readable or not, so each failure stays on the record, and one
+    note counts what happened to every URL named."""
     try:
-        found, reply = web_search(question, n)
+        found, reply = web_search(question, n * WEB_OVERASK if fill >= 2 else n)
     except Exception as e:  # noqa: BLE001 — could not look is a note, never silence
         notes.append(f"web search failed: {type(e).__name__}: {e}")
         return []
@@ -211,12 +225,36 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
         notes.append(f"web search: skipped {len(found) - len(kept)} Wikipedia or mirror page(s)")
     if not kept:
         notes.append(f"web search returned no pages beyond Wikipedia for {question!r}")
-    return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]
+    if fill < 2:
+        return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]
+    snaps: list[Snapshot] = []
+    held: list[str] = []
+    same_host = unfetched = 0
+    why: dict[str, int] = {}
+    for u in kept:
+        if len(held) == n:
+            unfetched += 1
+            continue
+        if host(u) in held:
+            same_host += 1
+            continue
+        s = fetch(u, at=at, http_get=http_get)
+        snaps.append(s)
+        if s.text.strip():
+            held.append(host(u))
+        else:
+            why[s.empty_reason] = why.get(s.empty_reason, 0) + 1
+    if kept:
+        failed = "".join(f", {c} {r}" for r, c in sorted(why.items()))
+        notes.append(f"web search: named {len(kept)}; readable on distinct hosts "
+                     f"{len(held)} of {n} wanted{failed}; skipped {same_host} on a host "
+                     f"already held; not fetched {unfetched}")
+    return snaps
 
 
 def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
            n: int = 3, http_get: HttpGet = urllib_get, model: Optional["Model"] = None,
-           web_search: Optional[WebSearch] = None, n_web: int = 0,
+           web_search: Optional[WebSearch] = None, n_web: int = 0, web_fill: int = 1,
            ) -> tuple[list[Snapshot], list[str], list[str]]:
     """Snapshots for a question, notes on anything that degraded, and the
     model's raw replies — its search queries, then the web search — for audit.
@@ -225,8 +263,8 @@ def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
     model, if given, proposes search queries and each query's top pages are
     taken, deduplicated by title, up to `n`; without a model the question
     itself is the query. Then, with `web_search` and `n_web`, up to `n_web`
-    web pages follow Wikipedia's. A search that returns nothing is a note,
-    not silence.
+    web pages follow Wikipedia's, under fill rule `web_fill` (_web_pages). A
+    search that returns nothing is a note, not silence.
     """
     notes: list[str] = []
     if urls:
@@ -257,5 +295,5 @@ def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
     snaps = [_wiki_page(t, at=at, http_get=http_get) for t in titles]
     if web_search is not None and n_web > 0:
         snaps += _web_pages(question, n_web, web_search, at=at, http_get=http_get,
-                            notes=notes, raw=raw)
+                            notes=notes, raw=raw, fill=web_fill)
     return snaps, notes, raw
