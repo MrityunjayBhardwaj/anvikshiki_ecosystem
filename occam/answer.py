@@ -84,9 +84,12 @@ class Params(BaseModel):
     # Which argue instruction wrote the replies. 2 (#161): a quote's conclusion
     # does not repeat the question's details. 3 (#210): a quote's conclusion is
     # its own words, a passage that states the answer is the answer, and a
-    # point two sources state is quoted from each. An artifact without the
-    # field was argued under 1, and shows no counter that 2 introduced.
-    argue_prompt: int = 3
+    # point two sources state is quoted from each. 4 (#219): that conclusion
+    # reads as a sentence without the question, never a fragment such as
+    # "the Egyptian scripts.", which asserts nothing the support check can
+    # accept. An artifact without the field was argued under 1, and shows no
+    # counter that 2 introduced.
+    argue_prompt: int = 4
     # Which counters the answer shows, so adding one does not change what an
     # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
     # (#181): both premise counters say what they could read in the question.
