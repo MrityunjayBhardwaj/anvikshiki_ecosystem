@@ -823,3 +823,154 @@ statuses; the calibration gate would not be met.
 9586.12 before and 9499.41 after. The measure calls report 85.61. The
 remaining 1.10 is the controls and any gap; the controls command does not
 report its own credits, so the two are not separated.
+
+## Amendment 8 — 2026-10-05: run 7, ask for more web pages and keep what loads (#216)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** In run 6, prediction 1 failed: only **5 of 10** questions had
+two readable web pages, against at least 7 predicted. 13 of 30 pages had no
+text: 7 refused us (HTTP 403) and 6 were 404, 5 of which are still 404 to a
+browser. kie.ai's search reply carries no citations, so every URL is one the
+model wrote, and some were never there. The covers check can only read the
+pages it gets.
+
+**The probe that licensed building it** (2026-10-05,
+`traces/occam/probe-search/`, 4.70 credits; criteria written before each
+part). Part 1: neither the plain nor the streamed reply carries citations,
+and kie.ai's docs list none, so reading them is not an option. Part 2: on
+run 6's 10 questions, asking for 9 links and fetching all, **8 of 10** got
+readable pages on 2 or more hosts (bar 8). 20 of 88 links were 404 and 16
+were 403. q03 and q09 fell short; their good hosts refuse our fetcher. One
+search per question, so this licensed the build and measured no rate.
+
+**Instrument change** (commit e728b57, `web_fill 2`, occam/gather.py):
+- Ask the search for 3 × `web_sources` pages; fetch in order until
+  `web_sources` readable pages on different hosts are held. A second page on
+  a host already held is not fetched.
+- Every failed fetch stays in the artifact. One note per question counts
+  every URL named: readable on distinct hosts, each failure reason,
+  same-host skips, not fetched.
+- Gathering only. Replay reads the stored snapshots, so every stored run
+  replays as before (72 of 84 byte for byte, the same 12 pre-artifact runs
+  failing).
+- **Observed live** on q09, with the real search and fetch (0.38 credits):
+  5 links failed (2 × 403, 3 × 404), then 3 readable pages on 3 hosts
+  (arce.org, smithsonianmag.com, worldhistory.org). Run 6 had 1.
+- Everything else as in run 6: `kie/gemini-3.1-pro`, k = 3, temperatures
+  0.7 / 0.2, judge on, `veto_words 2`, `why_check 3`, `covers_check 2`, 3
+  Wikipedia pages and `--web 3`.
+
+**Run 7** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run7` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run7-controls`.
+
+**Baselines** (run 6, measured 2026-10-04): ≥2 readable web pages in 5 of 10;
+restated quotes 0 of 47; quote answers 7 of 10; `established` 2 of 10 (q02,
+q04); 8 `hypothesis`.
+
+**Predictions:**
+1. Sources: readable web pages on **≥2 distinct hosts in at least 8 of 10**
+   questions. Counted by host, because a second page on one host is not a
+   second source.
+2. Every question with a web search carries the fill note, and its counts
+   add up: readable + failures + same-host skips + not fetched = named.
+3. Restated quote arguments stay at **at most 10%**.
+4. Quote answers: **at least 5 of 10**.
+5. `established`: **2 to 5 of 10.** More hosts give the covers check more
+   pairs. Fewer than 2 with prediction 1 met would point at the judge or the
+   answers, not the fetch, and is read pair by pair.
+6. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the two pages copy each other.
+7. The reason check: no cause question reaches `established` with a quote
+   answer whose link or judge failed (listed live).
+8. Controls as in Amendment 7. They are given their URLs, so nothing is
+   searched and the fill rule does not act.
+9. Every artifact replays to its stored answer with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before and after each command.
+
+**Status spread.** As in Amendment 6.
+
+### Results — 2026-10-05, read against the predictions above
+
+Run 7 is `traces/occam/run7/` and `traces/occam/run7-controls/`, from commit
+555e645 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 86 of 98 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). The scorer is run 6's, plus a count of
+distinct readable hosts and a check that each fill note adds up.
+
+| prediction | result |
+|---|---|
+| 1. ≥2 distinct readable web hosts in ≥8 of 10 | ✓ **10 of 10** (run 6: 5). 7 questions held 3 hosts, 3 held 2 (q04, q06, q09). Of the 90 links named: 27 readable pages kept; 32 fetched without text (15 HTTP 404, 14 HTTP 403, 1 HTTP 202, 1 unknown host, 1 page with no visible text); 3 skipped on a host already held; 28 not fetched. |
+| 2. the fill note adds up | ✓ **10 of 10**: readable + failures + same-host skips + not fetched = 9 named, in every question. |
+| 3. restated quote arguments ≤10% | ✓ **0 of 62.** |
+| 4. quote answers ≥5 of 10 | ✓ **7 of 10.** q05 is an inference; q01 and q09 abstained. |
+| 5. `established` 2–5 of 10 | ✗ **1 of 10** (q02). Prediction 1 was met, so this is read pair by pair, below. It is not the fetch. |
+| 6. every `established` answer read by hand | ✓ q02, below. No copies found. |
+| 7. the reason check, listed | ✓ wired. q02's quote passes the link check and gets `gives_reason`. q04 and q08 do too and are bound elsewhere. q07's quote states no causal link and is capped at `hypothesis`, naming why. q01 abstained before the check. |
+| 8. controls | ✓ all 4 PASS, the same lines as run 6. Nothing was searched. |
+| 9. every artifact replays | ✓ 10 of 10, plus 4 of 4 controls. |
+
+**Kill criteria:** none triggered. The one `established` answer is true on
+reading, and each covering sentence states it.
+
+- **q02**, "Earth's tilted axis causes the seasons." (spaceplace.nasa.gov), as
+  in run 6. Covered, `covers` in both orders, by weather.gov's "The earth's
+  spin axis is tilted with respect to its orbital plane. This is what causes
+  the seasons." and by three Wikipedia sentences. Copies: the longest run of
+  text any web page shares with another page is 41 characters ("tilted with
+  respect to its orbital plane"), a stock phrase.
+
+**Why only one.** Each of the other nine, read:
+- **q01 (Challenger) abstained: the support check refused a finding.** It
+  judged 6 quotes `does_not_support`, and each is a sentence that reports a
+  finding: "The Rogers Commission concluded that…", "The commission found
+  that…", "The investigation determined that…". In each the model's claim
+  dropped the attribution. The support prompt counts a source that "only
+  reports that someone else holds the view" as not supporting, which was
+  written for "critics say"; here it caught the official investigation. Both
+  inference answers rested in part on those quotes and fell with them,
+  although the 9 quotes that were kept state the same cause. In run 6 the
+  model kept "The Rogers Commission concluded that" in its claim, and the
+  same sentence passed.
+- **q09 (Rosetta Stone) abstained: the claims were fragments.** The model
+  wrote "the Egyptian scripts." and "hieroglyphic writing" as its
+  conclusions. A fragment asserts nothing, and the support check, which is
+  not shown the question, refused all 7. This is right as the check is
+  written; the answers were unusable.
+- **q08 (blue sky): the covers judge held them apart.** 8 pairs, 16 replies,
+  one `covers`. "Since blue light wavelengths scatter more, the diffuse sky
+  seen in daytime is blue" against "…because molecules in the air scatter
+  blue light from the Sun more than they scatter red light" got `does_not`
+  both ways. The answer names molecules and red light, which the source does
+  not; a reader could go either way. One order split, and asking both kept
+  it out.
+- **Held back correctly:** q03 and q06, where the answer carries a number the
+  web pages lack ("6 January 1912", "6 km"), so every pair was vetoed. q04,
+  whose web pages say "high winds", not flutter. q07, whose quote states no
+  causal link. q10, whose answer makes two claims where the sources state
+  one. q05 is an inference.
+
+So the fill rule did what it was built for, and what stopped more answers
+was the support check's attribution rule (q01), the model's fragment
+answers (q09) and a strict judge (q08). None vouched wrongly.
+
+**The 30 cover pairs.** 7 were vetoed before any call (q03 ×3 and q06 ×4, on
+numbers). 23 were judged, 46 replies, every one readable. 5 covered, all in
+q02. Order mattered once in 23 (q08).
+
+**Status spread:** 7 `hypothesis`, 1 `established` and 2 abstained, out of
+10. The calibration gate would not be met.
+
+**Spend:** read from kie.ai's balance. **129.35 credits** for the measure
+command (9494.33 before, 9364.98 after) and **1.10** for the controls (to
+9363.88). The measure calls report 107.5, of which the 10 searches are 3.94.
+In run 6 the two agreed to within the controls. The 21.85 gap is not
+explained: failed calls, which are retried and never recorded, may be billed,
+or another user of the key spent in the window. The balance figure is the one
+to quote.
