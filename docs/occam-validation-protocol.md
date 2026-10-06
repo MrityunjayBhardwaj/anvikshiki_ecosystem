@@ -1193,3 +1193,80 @@ band, not a point, and a miss by one question is reported as such.
 false on reading, or whose covering sentence does not state it, means
 **STOP**, reported before anything else. Spend is read from kie.ai's balance
 before, between and after the two commands.
+
+### Results — 2026-10-07, read against the predictions above
+
+Run 9 is `traces/occam/run9/` and `traces/occam/run9-controls/`, from commit
+73f97c4 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 116 of 128 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). Counts use the predicates stated in the
+baselines.
+
+**The headline, as registered: 0 of 10 `established`.** Prediction 7 said 0
+would mean run 8's result was fitted to its ten questions. That is the
+finding. What was fitted is narrower than the reading rules, as below.
+
+| prediction | result |
+|---|---|
+| 1. fragments ≤2 | ✓ **0 of 42** quote arguments. |
+| 2. attribution cuts ≤2 | ✓ **0** cuts. 1 quote kept its attribution, and it was not refused. |
+| 3. refused by the support check ≤15% | ✓ **0 of 42.** |
+| 4. abstentions ≤2 of 10 | ✓ **0.** |
+| 5. ≥2 readable web hosts in ≥8 of 10; fill notes add up | ✓ **9 of 10** (q08 got 1: 2 HTTP 403, 5 HTTP 404, 1 timeout). Every fill note adds up, 10 of 10. |
+| 6. quote answers ≥5 of 10 | ✓ **5 of 10**, on the edge (run 8: 8). The other 5 are inferences: q01, q05, q08, q09, q10. |
+| 7. `established` 1–5 of 10 | ✗ **0 of 10.** All 10 are `hypothesis`. |
+| 8. every `established` answer read by hand | nothing to read. All 10 answers were read anyway, below. |
+| 9. the reason check on the six cause questions | listed: q02, q03, q04 and q06 answer with a quote, pass the link check and get `gives_reason`. q01 and q05 answer with an inference, so the check is not asked. |
+| 10. controls and replay | ✓ all 4 PASS with the same verdicts as run 8. Replay as above. |
+
+**Kill criteria:** none triggered. There is no `established` answer to be
+false. All 10 answers are true on reading, so the pipeline held back true
+answers rather than vouching for a false one.
+
+**Where the ten stopped.**
+- **5 inference answers** (q01, q05, q08, q09, q10). An inference is capped at
+  `hypothesis` by design.
+- **3 quote answers with no covering source:**
+  - **q07** ("Penicillin was discovered in 1928 by the Scottish physician
+    Alexander Fleming"): all 3 quotes come from Wikipedia, though
+    nobelprize.org, sciencemuseum.org.uk and cdc.gov were readable. There
+    was no cover pair. This is run 8's q01 again.
+  - **q02** (tides, 39 words) and **q04** (rainbows, 29 words): the other
+    host's sentence was judged not to cover the answer, in both orders.
+    Example: "A rainbow is formed when light (generally sunlight) passes
+    through water droplets" does not state refraction, internal reflection,
+    dispersion or a spectrum.
+- **2 quote answers vetoed on a number:**
+  - **q03**: "Almost 80 years of research … in 1937: … caused by an
+    electrostatic discharge" carries 80 and 1937, which no other source
+    states.
+  - **q06**: "The 1918–1920 flu pandemic" against who.int's "from 1918 to
+    1919". The sources do differ there, and the veto is right to stop.
+
+**The 24 cover pairs.** 10 were vetoed before any call. 14 were judged, 28
+replies, every one readable. **None covered** (run 8: 6). I read every
+refusal against its two sentences. Each names something the source really
+does not state: "main function" for red blood cells (q09), "off the coast of
+Newfoundland" (q01), "inertial effects" (q02). None was a misreading.
+
+**What was fitted.** The rules tuned on runs 7 and 8 held on new questions:
+predictions 1–6 all held, with 0 fragments, 0 cuts, 0 refusals and 0
+abstentions. What did not carry over is the shape of the answers. Run 8's
+three `established` answers were short single claims, of 6, 11 and 19 words
+("Earth's tilted axis causes the seasons."). Here the quote answers average
+31 words against run 8's 25. Three of the five (q02, q04, q06) are
+Wikipedia sentences, 29 to 39 words long, that pack several claims into one;
+q03 is a 43-word sentence from airships.net. Each time the model answered
+with the whole sentence. The covers check asks whether another source states *every*
+claim in the answer. A many-claim answer is rarely covered, and the one
+short answer (q07) had no second host quoted. This is a reading after the
+fact, from ten questions. It is not a registered prediction, and it does not
+license a fix on this set.
+
+**Status spread:** 10 `hypothesis` out of 10. The calibration gate would not
+be met.
+
+**Spend:** read from kie.ai's balance. **103.31 credits** for the measure
+command (9244.34 before, 9141.03 between) and **1.87** for the controls (to
+9139.16). The measure calls report 103.27, 0.04 under the balance.
