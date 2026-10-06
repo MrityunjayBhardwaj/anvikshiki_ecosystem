@@ -974,3 +974,168 @@ In run 6 the two agreed to within the controls. The 21.85 gap is not
 explained: failed calls, which are retried and never recorded, may be billed,
 or another user of the key spent in the window. The balance figure is the one
 to quote.
+
+## Amendment 9 — 2026-10-06: run 8, argue prompt 4 (#219, #218)
+
+Added before any live call under the change. Nothing above is changed.
+
+**Why a run.** Run 7 had readable pages on 2 or more hosts for all 10
+questions but established 1. Read pair by pair, two of the losses were the
+claims the model wrote, not the fetch or the checks:
+- q09 abstained because its claims were fragments ("the Egyptian
+  scripts."), which assert nothing (#219).
+- q01 abstained because its claims cut "The Rogers Commission concluded
+  that" off a reported finding, and the support check refuses a view the
+  source only reports (#218).
+
+**Instrument change** (#221, merged as c77f8f3, `argue_prompt 4`,
+occam/argue.py). The instruction now says:
+- a quote's conclusion reads as a sentence on its own, with its own subject
+  and verb, to someone who has not seen the question; if no shorter part of
+  the quote does that, the conclusion is the whole quote;
+- when a passage reports what a person, body or study found, the
+  conclusion keeps who found it, copied from the start of that wording.
+
+The support check is unchanged; the user chose this over counting official
+findings as the source's own claim. Replay never re-prompts, so every stored
+run replays as before (86 of 98, the same 12 pre-artifact runs failing).
+
+**Observed live**, one question each, so no rate is measured:
+- q09 (`traces/occam/probe-219/`, 11.27 credits, before the attribution
+  sentence): 0 fragments, 5 of 5 quotes supported, answer `hypothesis` —
+  but every sample answered with an inference, not a quote.
+- q01 (`traces/occam/probe-218/`, 12.73 credits): 5 of 5 attributed quotes
+  supported, the answer a quote — but `hypothesis`, "rests on a single
+  source": an answer that names the commission was not covered by another
+  host's differently attributed sentence.
+
+Everything else as in run 7: `kie/gemini-3.1-pro`, k = 3, temperatures 0.7 /
+0.2, judge on, `veto_words 2`, `why_check 3`, `covers_check 2`, `web_fill 2`,
+3 Wikipedia pages and `--web 3`.
+
+**Run 8** = `python -m occam measure --model kie/gemini-3.1-pro --out
+traces/occam/run8` and `python -m occam controls --model kie/gemini-3.1-pro
+--out traces/occam/run8-controls`.
+
+**Baselines**, from the stored artifacts of runs 6 and 7 (measured
+2026-10-06). A fragment is a quote conclusion of 4 words or fewer. An
+attribution cut is a quote containing "<verb> that" for concluded, found,
+determined, reported, said, stated, showed, argued, believed or suggested,
+whose conclusion contains none.
+
+| | run 6 | run 7 |
+|---|---|---|
+| quote arguments | 55 | 78 |
+| fragments | 4 | 6 |
+| attribution cuts (refused) | 2 (2) | 6 (6) |
+| refused by the support check | 8 | 16 |
+| arguments lost to a refused premise | 1 | 5 |
+| answers: quote / inference / abstained | 7 / 3 / 0 | 7 / 1 / 2 |
+| `established` | 2 | 1 |
+
+**Predictions:**
+1. Fragments: **at most 1** in the whole run.
+2. Attribution cuts: **at most 2**, and no attributed quote that keeps its
+   attribution is refused for being a reported view (each refusal of a quote
+   with "<verb> that" is read).
+3. Refused by the support check: **at most 10%** of quote arguments.
+4. Abstentions: **at most 1 of 10.**
+5. Answers that are inferences: **at most 3 of 10.** More would mean the
+   whole-quote rule pushes the model to compose answers, which caps them at
+   `hypothesis`.
+6. Quote answers: **at least 5 of 10.**
+7. `established`: **1 to 4 of 10.** Attributed answers may find no covering
+   sentence on another host (q01's probe); every answer whose conclusion
+   carries an attribution is listed with what bound it.
+8. Arguments lost to a refused premise: reported, with no prediction; it
+   decides whether #218's second question needs building.
+9. Sources and checks as in run 7: ≥2 distinct readable web hosts in ≥8 of
+   10, every fill note adds up, restated quotes ≤10%, the reason check
+   listed live.
+10. Every `established` answer read by hand: the covering sentence, its host
+    and page, and whether the two pages copy each other.
+11. Controls as in Amendment 8, and every artifact replays with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before, between and after the two commands.
+
+**Status spread.** As in Amendment 6.
+
+### Results — 2026-10-06, read against the predictions above
+
+Run 8 is `traces/occam/run8/` and `traces/occam/run8-controls/`, from commit
+3811cd1 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 102 of 114 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). Counts use the predicates stated in the
+baselines.
+
+| prediction | result |
+|---|---|
+| 1. fragments ≤1 | ✓ **0 of 49** quote arguments (run 7: 6 of 78). |
+| 2. attribution cuts ≤2; no kept attribution refused | ✓ **0** cuts. 2 quotes kept their attribution, and neither was refused. |
+| 3. refused by the support check ≤10% | ✓ **0 of 49** (run 7: 16 of 78). |
+| 4. abstentions ≤1 of 10 | ✓ **0** (run 7: 2). |
+| 5. inference answers ≤3 of 10 | ✓ **2** (q05, q09). |
+| 6. quote answers ≥5 of 10 | ✓ **8 of 10.** |
+| 7. `established` 1–4 of 10 | ✓ **3 of 10**: q02, q04, q10. One answer carries an attribution: q01, "The Rogers Commission concluded that…", bound by "rests on a single source (en.wikipedia.org)". It had no cover pair at all: all 3 of its quotes are from Wikipedia, so the covers check had nothing to read. |
+| 8. arguments lost to a refused premise | reported: **0** (run 7: 5). |
+| 9. sources and checks | ✓ ≥2 distinct readable hosts in **10 of 10**; every fill note adds up, 10 of 10; restated quotes **0 of 49**. The reason check is wired: q02 and q04, the established cause questions, pass the link check and get `gives_reason`; q07's quote states no causal link and is capped, naming why. |
+| 10. every `established` answer read by hand | ✓ all 3, below. No stop. One is borderline and its second source partly draws on Wikipedia. |
+| 11. controls and replay | ✓ all 4 PASS with the same verdicts. Under prompt 4 the positive and adversarial answers are now whole sentences ("…ratified in 1987 by fourteen member states.", "…at sea level under standard atmospheric pressure."), still `hypothesis`. Replay as above. |
+
+**Kill criteria:** none triggered. Each `established` answer is true on
+reading, and each covering sentence states it, in two cases in substance
+rather than word for word.
+
+- **q02**, "Earth's tilted axis causes the seasons." (spaceplace.nasa.gov),
+  as in runs 6 and 7. Covered both ways by weather.gov ("the seasons are
+  caused by the Earth being tilted on its axis by an average of 23.5
+  degrees"), science.nasa.gov and two Wikipedia sentences. Longest shared
+  run between any two pages: 35 characters, a stock phrase.
+- **q04**, "The Tacoma Narrows Bridge collapsed primarily due to the
+  aeroelastic flutter." (simscale.com), as in run 6. Covered by Wikipedia's
+  "The original Tacoma Narrows Bridge was destroyed as a result of
+  aeroelastic flutter." Destroyed, not collapsed: as in run 6, read as
+  stating it in substance. Longest shared run: 33 characters, the bridge's
+  name.
+- **q10**, "The primary function of mitochondria in a cell is to produce ATP,
+  the main energy currency of the cell." (studymind.co.uk). Covered both
+  ways by Wikipedia's "The most prominent roles of mitochondria are to
+  produce the energy currency of the cell, ATP (i.e., phosphorylation of
+  ADP), through respiration and to regulate cellular metabolism." True on
+  reading. Two cautions:
+  - **"Primary function" against "most prominent roles".** The source names
+    two roles, and the answer ranks one first. Read as stated in substance;
+    a stricter reader could refuse it, as with q04's "destroyed".
+  - **The second source partly draws on the first.** studymind's next
+    sentence, "In addition to energy production, mitochondria also play a
+    role in other cellular processes, such as cell signaling, cellular
+    differentiation, and cell death", follows Wikipedia's "In addition to
+    supplying cellular energy, mitochondria are involved in other tasks,
+    such as signaling, cellular differentiation, and cell death" (52
+    characters shared). The answer sentence itself is not copied. But the
+    two hosts are less independent than two hosts are taken to be, and
+    nothing in the mechanism sees a paraphrase. It was found here only by
+    reading.
+
+**The 25 cover pairs.** 7 were vetoed before any call. 18 were judged, 36
+replies, every one readable. 6 covered, in q02, q04 and q10. Order mattered
+once (q05, an inference answer).
+
+**What moved.** Against run 7, the support check refused nothing (16 before),
+and no question abstained. The losses run 7 traced to the model's claims are
+gone. The answers still held back are bound by a single source (q01, q03,
+q06, q08), an inference (q05, q09) or the reason check (q07). #218's second
+question, whether one refused premise should sink an inference, cost nothing
+here (0 lost) and does not need building on this evidence.
+
+**Status spread:** 7 `hypothesis` and 3 `established` out of 10. The
+calibration gate would not be met.
+
+**Spend:** read from kie.ai's balance. **93.99 credits** for the measure
+command (9339.88 before, 9245.89 between) and **1.55** for the controls (to
+9244.34). The measure calls report 93.99, exactly the balance. Run 7's
+21.85-credit gap did not recur, and stays unexplained.
