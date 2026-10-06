@@ -90,6 +90,8 @@ class Params(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     # Which row of RULES the seven reading rules below default from (#223).
+    # Set it when building Params, never through model_copy: a copy skips
+    # validation, so the rules keep the old row's values, stored as departures.
     rules: int = LATEST_RULES
     k_argue: int = 3
     k_attack: int = 3
