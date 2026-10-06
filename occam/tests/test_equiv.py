@@ -16,6 +16,7 @@ from occam.status import derive
 from occam.tests.test_answer import AS_OF, QUERIES, SUPPORT_ALL, VIABLE, attacks, argue_reply, wiki
 from occam.tests.test_status import LONG1, NOW, q, second, world
 from occam.types import Status
+from occam.tests.test_answer import made_before_rules
 
 Q01 = "Why did the Challenger space shuttle break apart in 1986?"
 Q03 = "Who proposed the theory of continental drift, and when?"
@@ -227,7 +228,7 @@ def test_set_1_vetoes_it_and_an_artifact_without_the_field_replays_under_set_1()
     wrong pairs."""
     ans, art, model = run_words(1, all_same(1))
     assert model._replies == [] and ans.counters["same_question_vetoed"].n == 2
-    old = json.loads(art.model_dump_json())
+    old = made_before_rules(json.loads(art.model_dump_json()))
     del old["params"]["veto_words"]
     stored = Artifact.model_validate(old)
     assert stored.params.veto_words == 1

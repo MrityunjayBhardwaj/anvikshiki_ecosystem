@@ -18,7 +18,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Iterator, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
 
 from .argue import (ArgueResult, adds_question_number, argue, argue_from_replies, norm_conclusion,
                     question_numbers, unquoted_question_numbers)
@@ -51,6 +51,26 @@ __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", 
 
 ARTIFACT_VERSION = 1
 
+# How stored replies are read (#223): each rules version names one setting
+# of the seven reading rules, as they shipped together. A run records its
+# version; a rule set by hand for a what-if is recorded beside it as a
+# departure. Each row extends the one before, and every stored artifact
+# matches a row (2026-10-06: rows 1-4 cover all 114). The next change to how
+# replies are read is a new row, never a new switch.
+RULE_FIELDS = ("counter_set", "reason_wording", "veto_words", "shown_order", "bound_ties",
+               "why_check", "covers_check")
+RULES: dict[int, dict[str, int]] = {
+    1: dict(counter_set=1, reason_wording=1, veto_words=1, shown_order=1, bound_ties=1,
+            why_check=1, covers_check=1),          # challenger, runs 1-3
+    2: dict(counter_set=3, reason_wording=1, veto_words=1, shown_order=1, bound_ties=1,
+            why_check=1, covers_check=1),          # run 4
+    3: dict(counter_set=3, reason_wording=2, veto_words=2, shown_order=2, bound_ties=2,
+            why_check=2, covers_check=1),          # run 5
+    4: dict(counter_set=3, reason_wording=2, veto_words=2, shown_order=2, bound_ties=2,
+            why_check=3, covers_check=2),          # runs 6-8
+}
+LATEST_RULES = max(RULES)
+
 
 class Count(BaseModel):
     """n of a population. `frac` is None over an empty population."""
@@ -69,6 +89,8 @@ class Count(BaseModel):
 class Params(BaseModel):
     model_config = ConfigDict(frozen=True)
 
+    # Which row of RULES the seven reading rules below default from (#223).
+    rules: int = LATEST_RULES
     k_argue: int = 3
     k_attack: int = 3
     t_argue: float = 0.7
@@ -96,28 +118,28 @@ class Params(BaseModel):
     # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
     # (#181): both premise counters say what they could read in the question.
     # An artifact without the field shows the counters it was made with.
-    counter_set: int = 3
+    counter_set: int = RULES[LATEST_RULES]["counter_set"]
     # Which wording the abstain reasons use, for the same reason. 2 (#188):
     # when the model returns no answer, say only that — not that the sources
     # have none. An artifact without the field keeps the wording it was made with.
-    reason_wording: int = 2
+    reason_wording: int = RULES[LATEST_RULES]["reason_wording"]
     # Which negation words the same-answer veto reads (occam.equiv
     # NEGATIONS_BY_SET). 2 (#192): "without" is not a negation. An artifact
     # without the field was judged under 1, and its stored replies line up
     # with set 1's pairs only.
-    veto_words: int = 2
+    veto_words: int = RULES[LATEST_RULES]["veto_words"]
     # Which order picks the answer shown and orders the positions. 2 (#191):
     # contested above open — a contested answer has a coherent case for it,
     # an open one has none. Only the choice of what to show: the status
     # lattice (types.STATUS_ORDER), which sets ceilings and attack strength,
     # is untouched. An artifact without the field shows what it showed.
-    shown_order: int = 2
+    shown_order: int = RULES[LATEST_RULES]["shown_order"]
     # Whether a tied "rests on a single source" is named (occam.status). 2
     # (#202): a quote capped at hypothesis by its ceiling also names the
     # single-source bound when it holds, since lifting the ceiling's limit
     # alone would not raise it. Statuses are unchanged. An artifact without
     # the field names what it named.
-    bound_ties: int = 2
+    bound_ties: int = RULES[LATEST_RULES]["bound_ties"]
     # How many web pages were asked for beside Wikipedia's (#209): found by a
     # web search, then fetched and quoted like any page. 0 — as in every
     # artifact made before it — means Wikipedia only. Set by `run` from what it
@@ -130,12 +152,12 @@ class Params(BaseModel):
     # "since" is a link only where it opens a clause, so "since the 1980s" is
     # not. An artifact without the field was made before the check and
     # replays without it; each run replays under its own link rule.
-    why_check: int = 3
+    why_check: int = RULES[LATEST_RULES]["why_check"]
     # Whether a second source can corroborate an answer by covering it — its
     # sentence stating every claim the answer states, judged one way
     # (occam.covers, #212). 2: yes, beside the claim-lens groups. An artifact
     # without the field was made before it and replays without it.
-    covers_check: int = 2
+    covers_check: int = RULES[LATEST_RULES]["covers_check"]
     # How web pages are filled (occam.gather._web_pages). 1: ask the search
     # for `web_sources` pages and fetch those. 2 (#216): ask for three times
     # as many and fetch in order until `web_sources` readable pages on
@@ -146,6 +168,28 @@ class Params(BaseModel):
     max_chars: int = 40_000
     max_age_days: int = MAX_AGE_DAYS
     model: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _rules_from_the_table(cls, data: Any) -> Any:
+        """Each reading rule not given defaults from the row `rules` names."""
+        if not isinstance(data, dict):
+            return data
+        n = data.get("rules", LATEST_RULES)
+        if n not in RULES:
+            raise ValueError(f"rules {n!r}: no such row (known: {sorted(RULES)})")
+        return {**RULES[n], **data}
+
+    @model_serializer(mode="wrap")
+    def _only_departures(self, handler: Any) -> dict[str, Any]:
+        """Stored as `rules` and the reading rules that differ from its row."""
+        row = RULES[self.rules]
+        return {k: v for k, v in handler(self).items() if not (k in row and v == row[k])}
+
+
+# Fields outside the rules table, as an artifact made before each reads
+# them: no judge (#172), the first argue instruction, the first fill rule.
+PREDATES: dict[str, Any] = {"judge_same": False, "argue_prompt": 1, "web_fill": 1}
 
 
 class StoredSnapshot(BaseModel):
@@ -217,40 +261,20 @@ class Artifact(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _predates_the_judge(cls, data: Any) -> Any:
-        # Params.judge_same defaults to True for new runs. A stored artifact
-        # without the field was made before the judge existed; reading it as
-        # True would replay it through a stage it never ran (#172).
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "judge_same" not in data["params"]:
-            data = {**data, "params": {**data["params"], "judge_same": False}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "argue_prompt" not in data["params"]:
-            data = {**data, "params": {**data["params"], "argue_prompt": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "counter_set" not in data["params"]:
-            data = {**data, "params": {**data["params"], "counter_set": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "reason_wording" not in data["params"]:
-            data = {**data, "params": {**data["params"], "reason_wording": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "veto_words" not in data["params"]:
-            data = {**data, "params": {**data["params"], "veto_words": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "shown_order" not in data["params"]:
-            data = {**data, "params": {**data["params"], "shown_order": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "bound_ties" not in data["params"]:
-            data = {**data, "params": {**data["params"], "bound_ties": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "why_check" not in data["params"]:
-            data = {**data, "params": {**data["params"], "why_check": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "covers_check" not in data["params"]:
-            data = {**data, "params": {**data["params"], "covers_check": 1}}
-        if isinstance(data, dict) and isinstance(data.get("params"), dict) \
-                and "web_fill" not in data["params"]:
-            data = {**data, "params": {**data["params"], "web_fill": 1}}
-        return data
+        # A field a stored artifact lacks was added after it was made, and is
+        # read as what the run did then — never as today's default, which
+        # would replay it through a stage it never ran (#172).
+        if not (isinstance(data, dict) and isinstance(data.get("params"), dict)):
+            return data
+        params = {**PREDATES, **data["params"]}
+        if "rules" not in data["params"]:
+            # Made before rules versions (#223): each reading rule it lacks
+            # was not yet written, so is row 1's. Named by its row when its
+            # rules match one; otherwise row 1 with its own as departures.
+            rules = {f: data["params"].get(f, RULES[1][f]) for f in RULE_FIELDS}
+            row = next((n for n, r in RULES.items() if r == rules), 1)
+            params = {**params, **rules, "rules": row}
+        return {**data, "params": params}
 
 
 class Answer(BaseModel):

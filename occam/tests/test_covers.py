@@ -12,6 +12,7 @@ from occam.covers import CoverPair, cover_veto, covered_by, covers_prompt
 from occam.model import ScriptedModel
 from occam.tests.test_answer import SUPPORT_ALL, argue_reply, attacks
 from occam.types import Status
+from occam.tests.test_answer import made_before_rules
 
 AS_OF = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
 QUESTION = "Where do Earth's seasons come from?"
@@ -150,7 +151,7 @@ def test_covering_is_one_way():
 
 def test_an_artifact_made_before_the_check_replays_without_it():
     ans, art, _ = ask([COVERS, COVERS])
-    stored = json.loads(art.model_dump_json())
+    stored = made_before_rules(json.loads(art.model_dump_json()))
     del stored["params"]["covers_check"]
     old = replay(type(art).model_validate(stored))
     assert old.status == Status.HYPOTHESIS and ans.status == Status.ESTABLISHED

@@ -15,6 +15,7 @@ from occam.model import ScriptedModel
 from occam.tests.test_answer import (AS_OF, QUERIES, SUPPORT_ALL, VIABLE, argue_reply, attacks,
                                      wiki)
 from occam.tests.test_equiv import SAME, v
+from occam.tests.test_answer import made_before_rules
 
 ANSWERS = ["Growth is the first cause of viability.", "Growth is the second cause of viability.",
            "Growth is the third cause of viability.", "Margins alone decide viability.",
@@ -62,7 +63,7 @@ def test_no_argument_changes_status_only_what_is_shown():
 
 def test_an_artifact_without_the_field_shows_what_it_showed():
     ans, art = shown(1)
-    old = json.loads(art.model_dump_json())
+    old = made_before_rules(json.loads(art.model_dump_json()))
     del old["params"]["shown_order"]
     stored = Artifact.model_validate(old)
     assert stored.params.shown_order == 1

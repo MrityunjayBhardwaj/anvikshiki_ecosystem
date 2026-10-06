@@ -21,6 +21,7 @@ from occam.model import ScriptedModel
 from occam.spans import SpanRef
 from occam.tests.test_answer import AS_OF, INFER, QUERIES, SUPPORT_ALL, VIABLE, attacks, argue_reply, wiki
 from occam.types import Pramana
+from occam.tests.test_answer import made_before_rules
 
 Q04 = "Why did the Tacoma Narrows Bridge collapse in 1940?"
 QUOTE = ("the bridge collapsed because moderate winds produced aeroelastic flutter "
@@ -196,7 +197,7 @@ def test_an_artifact_made_before_the_step_counter_does_not_show_it():
     """Run 2 and run 3 must replay to what they stored."""
     from occam.answer import canonical, replay
     ans, art = _run_infer(INFER["conclusion"], "Is growth alone enough to make a business viable?")
-    old = json.loads(art.model_dump_json())
+    old = made_before_rules(json.loads(art.model_dump_json()))
     del old["params"]["counter_set"]
     a = Artifact.model_validate(old)
     assert a.params.counter_set == 1
