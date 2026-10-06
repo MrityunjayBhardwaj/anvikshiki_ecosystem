@@ -11,6 +11,7 @@ from occam.model import ScriptedModel
 from occam.reason import asks_for_a_cause, reason_prompt, states_a_link
 from occam.tests.test_answer import SUPPORT_ALL, argue_reply, attacks
 from occam.types import Status
+from occam.tests.test_answer import made_before_rules
 
 AS_OF = datetime(2026, 10, 4, 12, tzinfo=timezone.utc)
 WHY = "Why is the sky blue?"
@@ -140,7 +141,7 @@ def test_the_bound_ties_with_one_already_there():
 
 def test_an_artifact_made_before_the_check_replays_without_it():
     ans, art, _ = ask(WHY, quotes(LINKED), [DOES_NOT])
-    stored = json.loads(art.model_dump_json())
+    stored = made_before_rules(json.loads(art.model_dump_json()))
     del stored["params"]["why_check"]
     old = replay(type(art).model_validate(stored))
     assert old.status == Status.ESTABLISHED and ans.status == Status.HYPOTHESIS

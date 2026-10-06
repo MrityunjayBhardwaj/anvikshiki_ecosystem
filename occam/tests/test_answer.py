@@ -29,6 +29,18 @@ PAGES = {
 }
 
 
+def made_before_rules(stored):
+    """A stored artifact as one made before rules versions (#223) was: every
+    reading rule written out, no `rules`. Delete a rule from it to stand for
+    an artifact made before that rule."""
+    from occam.answer import RULE_FIELDS, RULES
+    p = stored["params"]
+    row = RULES[p["rules"]]
+    stored["params"] = {**{f: row[f] for f in RULE_FIELDS},
+                        **{k: v for k, v in p.items() if k != "rules"}}
+    return stored
+
+
 def wiki(url):
     q = parse_qs(urlparse(url).query)
     if q.get("list") == ["search"]:
@@ -230,7 +242,7 @@ def test_an_artifact_made_before_the_new_wording_keeps_the_old_one():
     import json
     from occam.answer import Artifact, canonical, replay
     ans, art = ask([argue_reply([], None)] * 3, [])
-    old = json.loads(art.model_dump_json())
+    old = made_before_rules(json.loads(art.model_dump_json()))
     del old["params"]["reason_wording"]                  # as every artifact before #188
     a = Artifact.model_validate(old)
     assert a.params.reason_wording == 1
@@ -480,7 +492,7 @@ def test_a_quote_answer_on_one_host_names_both_limits_and_old_artifacts_do_not()
     assert ans.status_bound_by == (f"quote {ans.answer_id} restated in the model's words",
                                    "rests on a single source (en.wikipedia.org)")
 
-    old = json.loads(art.model_dump_json())
+    old = made_before_rules(json.loads(art.model_dump_json()))
     del old["params"]["bound_ties"]
     stored = Artifact.model_validate(old)
     assert stored.params.bound_ties == 1
