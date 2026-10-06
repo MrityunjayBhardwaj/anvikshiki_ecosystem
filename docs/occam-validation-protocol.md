@@ -1139,3 +1139,57 @@ calibration gate would not be met.
 command (9339.88 before, 9245.89 between) and **1.55** for the controls (to
 9244.34). The measure calls report 93.99, exactly the balance. Run 7's
 21.85-credit gap did not recur, and stays unexplained.
+
+## Amendment 10 — 2026-10-06: run 9, ten held-out questions (#226)
+
+Added before any live call on these questions. Nothing above is changed.
+
+**Why a run.** Runs 5 to 8 all used the same ten questions
+(`controls.FACTUAL_QUESTIONS`), and every recent fix (#212, #216, #218, #219)
+came from reading their failures. Run 8's 3 of 10 `established` cannot be
+told apart from fitting to those ten. This run asks whether the pipeline as
+it stands does as well on questions it has never seen.
+
+**The held-out set** is `occam/questions/held-out-1.txt`, committed with this
+amendment. I drafted it and the user approved it before any call. It
+mirrors the built-in set's shape: six cause questions (Titanic, ocean tides,
+Hindenburg, rainbows, autumn leaves, the 1918 pandemic) and four fact
+questions (penicillin, the first modern Olympics, red blood cells, the Great
+Wall). No rule has been written or tuned on it. Its answers are not labelled,
+so it is not a calibration set.
+
+**Instrument:** unchanged from run 8 apart from the question list: `rules 4`,
+argue prompt 4, `web_fill 2`, `kie/gemini-3.1-pro`, k = 3, temperatures 0.7 /
+0.2, judge on, 3 Wikipedia pages and `--web 3`. `measure --questions` is the
+only code change (#226, commit dc845e8), and it touches nothing a question
+passes through.
+
+**Run 9** = `python -m occam measure --model kie/gemini-3.1-pro --questions
+occam/questions/held-out-1.txt --out traces/occam/run9` and `python -m occam
+controls --model kie/gemini-3.1-pro --out traces/occam/run9-controls`.
+
+**Baseline:** run 8 on the built-in ten (Amendment 9's results). Ten
+questions are few: one question is 10 points. So each prediction states a
+band, not a point, and a miss by one question is reported as such.
+
+**Predictions:**
+1. Fragments (quote conclusions of 4 words or fewer): **at most 2** in the
+   run (run 8: 0).
+2. Attribution cuts: **at most 2** (run 8: 0).
+3. Refused by the support check: **at most 15%** of quote arguments (run 8:
+   0%).
+4. Abstentions: **at most 2 of 10** (run 8: 0).
+5. ≥2 distinct readable web hosts in **at least 8 of 10**; every fill note
+   adds up.
+6. Quote answers: **at least 5 of 10** (run 8: 8).
+7. `established`: **1 to 5 of 10** (run 8: 3). **0** would say run 8's
+   result was fitted to its ten questions, and is reported as the finding.
+8. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the pages copy or paraphrase each other (#225).
+9. The reason check is listed for the six cause questions.
+10. Controls as in Amendment 9, and every artifact replays with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before, between and after the two commands.
