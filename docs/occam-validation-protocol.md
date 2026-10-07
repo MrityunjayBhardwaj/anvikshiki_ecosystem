@@ -1139,3 +1139,134 @@ calibration gate would not be met.
 command (9339.88 before, 9245.89 between) and **1.55** for the controls (to
 9244.34). The measure calls report 93.99, exactly the balance. Run 7's
 21.85-credit gap did not recur, and stays unexplained.
+
+## Amendment 10 — 2026-10-06: run 9, ten held-out questions (#226)
+
+Added before any live call on these questions. Nothing above is changed.
+
+**Why a run.** Runs 5 to 8 all used the same ten questions
+(`controls.FACTUAL_QUESTIONS`), and every recent fix (#212, #216, #218, #219)
+came from reading their failures. Run 8's 3 of 10 `established` cannot be
+told apart from fitting to those ten. This run asks whether the pipeline as
+it stands does as well on questions it has never seen.
+
+**The held-out set** is `occam/questions/held-out-1.txt`, committed with this
+amendment. I drafted it and the user approved it before any call. It
+mirrors the built-in set's shape: six cause questions (Titanic, ocean tides,
+Hindenburg, rainbows, autumn leaves, the 1918 pandemic) and four fact
+questions (penicillin, the first modern Olympics, red blood cells, the Great
+Wall). No rule has been written or tuned on it. Its answers are not labelled,
+so it is not a calibration set.
+
+**Instrument:** unchanged from run 8 apart from the question list: `rules 4`,
+argue prompt 4, `web_fill 2`, `kie/gemini-3.1-pro`, k = 3, temperatures 0.7 /
+0.2, judge on, 3 Wikipedia pages and `--web 3`. `measure --questions` is the
+only code change (#226, commit dc845e8), and it touches nothing a question
+passes through.
+
+**Run 9** = `python -m occam measure --model kie/gemini-3.1-pro --questions
+occam/questions/held-out-1.txt --out traces/occam/run9` and `python -m occam
+controls --model kie/gemini-3.1-pro --out traces/occam/run9-controls`.
+
+**Baseline:** run 8 on the built-in ten (Amendment 9's results). Ten
+questions are few: one question is 10 points. So each prediction states a
+band, not a point, and a miss by one question is reported as such.
+
+**Predictions:**
+1. Fragments (quote conclusions of 4 words or fewer): **at most 2** in the
+   run (run 8: 0).
+2. Attribution cuts: **at most 2** (run 8: 0).
+3. Refused by the support check: **at most 15%** of quote arguments (run 8:
+   0%).
+4. Abstentions: **at most 2 of 10** (run 8: 0).
+5. ≥2 distinct readable web hosts in **at least 8 of 10**; every fill note
+   adds up.
+6. Quote answers: **at least 5 of 10** (run 8: 8).
+7. `established`: **1 to 5 of 10** (run 8: 3). **0** would say run 8's
+   result was fitted to its ten questions, and is reported as the finding.
+8. Every `established` answer is read by hand: the covering sentence, its
+   host and page, and whether the pages copy or paraphrase each other (#225).
+9. The reason check is listed for the six cause questions.
+10. Controls as in Amendment 9, and every artifact replays with no key.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is
+false on reading, or whose covering sentence does not state it, means
+**STOP**, reported before anything else. Spend is read from kie.ai's balance
+before, between and after the two commands.
+
+### Results — 2026-10-07, read against the predictions above
+
+Run 9 is `traces/occam/run9/` and `traces/occam/run9-controls/`, from commit
+73f97c4 on `kie/gemini-3.1-pro`, in one pass each. All 10 artifacts and all 4
+controls replay byte for byte to their stored answers with no key. Across every
+stored run, 116 of 128 replay; the 12 that don't are the same pre-artifact runs
+as before (challenger ×2, run1 ×10). Counts use the predicates stated in the
+baselines.
+
+**The headline, as registered: 0 of 10 `established`.** Prediction 7 said 0
+would mean run 8's result was fitted to its ten questions. That is the
+finding. What was fitted is narrower than the reading rules, as below.
+
+| prediction | result |
+|---|---|
+| 1. fragments ≤2 | ✓ **0 of 42** quote arguments. |
+| 2. attribution cuts ≤2 | ✓ **0** cuts. 1 quote kept its attribution, and it was not refused. |
+| 3. refused by the support check ≤15% | ✓ **0 of 42.** |
+| 4. abstentions ≤2 of 10 | ✓ **0.** |
+| 5. ≥2 readable web hosts in ≥8 of 10; fill notes add up | ✓ **9 of 10** (q08 got 1: 2 HTTP 403, 5 HTTP 404, 1 timeout). Every fill note adds up, 10 of 10. |
+| 6. quote answers ≥5 of 10 | ✓ **5 of 10**, on the edge (run 8: 8). The other 5 are inferences: q01, q05, q08, q09, q10. |
+| 7. `established` 1–5 of 10 | ✗ **0 of 10.** All 10 are `hypothesis`. |
+| 8. every `established` answer read by hand | nothing to read. All 10 answers were read anyway, below. |
+| 9. the reason check on the six cause questions | listed: q02, q03, q04 and q06 answer with a quote, pass the link check and get `gives_reason`. q01 and q05 answer with an inference, so the check is not asked. |
+| 10. controls and replay | ✓ all 4 PASS with the same verdicts as run 8. Replay as above. |
+
+**Kill criteria:** none triggered. There is no `established` answer to be
+false. All 10 answers are true on reading, so the pipeline held back true
+answers rather than vouching for a false one.
+
+**Where the ten stopped.**
+- **5 inference answers** (q01, q05, q08, q09, q10). An inference is capped at
+  `hypothesis` by design.
+- **3 quote answers with no covering source:**
+  - **q07** ("Penicillin was discovered in 1928 by the Scottish physician
+    Alexander Fleming"): all 3 quotes come from Wikipedia, though
+    nobelprize.org, sciencemuseum.org.uk and cdc.gov were readable. There
+    was no cover pair. This is run 8's q01 again.
+  - **q02** (tides, 39 words) and **q04** (rainbows, 29 words): the other
+    host's sentence was judged not to cover the answer, in both orders.
+    Example: "A rainbow is formed when light (generally sunlight) passes
+    through water droplets" does not state refraction, internal reflection,
+    dispersion or a spectrum.
+- **2 quote answers vetoed on a number:**
+  - **q03**: "Almost 80 years of research … in 1937: … caused by an
+    electrostatic discharge" carries 80 and 1937, which no other source
+    states.
+  - **q06**: "The 1918–1920 flu pandemic" against who.int's "from 1918 to
+    1919". The sources do differ there, and the veto is right to stop.
+
+**The 24 cover pairs.** 10 were vetoed before any call. 14 were judged, 28
+replies, every one readable. **None covered** (run 8: 6). I read every
+refusal against its two sentences. Each names something the source really
+does not state: "main function" for red blood cells (q09), "off the coast of
+Newfoundland" (q01), "inertial effects" (q02). None was a misreading.
+
+**What was fitted.** The rules tuned on runs 7 and 8 held on new questions:
+predictions 1–6 all held, with 0 fragments, 0 cuts, 0 refusals and 0
+abstentions. What did not carry over is the shape of the answers. Run 8's
+three `established` answers were short single claims, of 6, 11 and 19 words
+("Earth's tilted axis causes the seasons."). Here the quote answers average
+31 words against run 8's 25. Three of the five (q02, q04, q06) are
+Wikipedia sentences, 29 to 39 words long, that pack several claims into one;
+q03 is a 43-word sentence from airships.net. Each time the model answered
+with the whole sentence. The covers check asks whether another source states *every*
+claim in the answer. A many-claim answer is rarely covered, and the one
+short answer (q07) had no second host quoted. This is a reading after the
+fact, from ten questions. It is not a registered prediction, and it does not
+license a fix on this set.
+
+**Status spread:** 10 `hypothesis` out of 10. The calibration gate would not
+be met.
+
+**Spend:** read from kie.ai's balance. **103.31 credits** for the measure
+command (9244.34 before, 9141.03 between) and **1.87** for the controls (to
+9139.16). The measure calls report 103.27, 0.04 under the balance.

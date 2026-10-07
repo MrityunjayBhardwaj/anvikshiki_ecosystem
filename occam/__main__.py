@@ -367,6 +367,9 @@ def main(argv: list[str] | None = None) -> int:
                          "refused if a kept one was made by another model")
     ms.add_argument("--web", type=int, default=3,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
+    ms.add_argument("--questions", metavar="FILE",
+                    help="one question per line (blank and #-lines skipped) instead of the "
+                         "built-in ten, e.g. a held-out set (#226)")
     cp = sub.add_parser("calibrate")
     cp.add_argument("labels")
     cp.add_argument("--population", required=True)
@@ -461,9 +464,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "measure":
         from .controls import FACTUAL_QUESTIONS
         from .model import make_model
+        # Read before any model is built, so a bad file costs nothing.
+        questions = FACTUAL_QUESTIONS if not args.questions else tuple(
+            line.strip() for line in Path(args.questions).read_text().splitlines()
+            if line.strip() and not line.lstrip().startswith("#"))
+        if not questions:
+            print(f"no questions in {args.questions}", file=sys.stderr)
+            return 2
         outdir = Path(args.out or
                       f"traces/occam/measure-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}")
-        paths = [outdir / f"q{i:02d}.json" for i in range(1, len(FACTUAL_QUESTIONS) + 1)]
+        paths = [outdir / f"q{i:02d}.json" for i in range(1, len(questions) + 1)]
         if not args.resume and _refuse_overwrite(paths):
             return 2
         model = make_model(args.model)
@@ -476,11 +486,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"refusing to resume with {model.name}: made by another model: "
                   f"{', '.join(other)}", file=sys.stderr)
             return 2
+        # Nor from another question list: one run, one set.
+        moved = [f"{p.name} ({d['artifact']['question']!r})" for p, d in kept.items()
+                 if d["artifact"]["question"] != questions[paths.index(p)]]
+        if moved:
+            print(f"refusing to resume: kept for a different question than this list has "
+                  f"there: {', '.join(moved)}", file=sys.stderr)
+            return 2
         outdir.mkdir(parents=True, exist_ok=True)
         pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
         claimed = abstained = 0
         statuses: dict[str, int] = {}
-        for i, q in enumerate(FACTUAL_QUESTIONS, 1):
+        for i, q in enumerate(questions, 1):
             path = outdir / f"q{i:02d}.json"
             if path in kept:
                 answer = Answer.model_validate(kept[path]["answer"])
@@ -504,7 +521,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\npooled over {claimed} quotes claimed: verified {pooled['ok']}, absent "
               f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
               f"{pooled['unresolvable']}")
-        print(f"abstained {abstained} of {len(FACTUAL_QUESTIONS)}; statuses {statuses}")
+        print(f"abstained {abstained} of {len(questions)}; statuses {statuses}")
         if hasattr(model, "credits"):
             print(f"spent: {model.credits:g} kie.ai credits in this pass, as the provider "
                   f"counted them ({len(kept)} question(s) kept from earlier passes not included)")

@@ -1,0 +1,13 @@
+# Held-out set 1 (#226), drafted 2026-10-06 and approved by the user before any
+# run on it. Never used to write or tune a rule. Mirrors the built-in ten:
+# six cause questions, four fact questions.
+Why did the Titanic sink in 1912?
+What causes ocean tides?
+Why did the Hindenburg airship catch fire in 1937?
+What causes a rainbow to form?
+Why do leaves change colour in autumn?
+What caused the 1918 influenza pandemic?
+Who discovered penicillin, and when?
+When and where were the first modern Olympic Games held?
+What is the function of red blood cells?
+What was the Great Wall of China built to do?
