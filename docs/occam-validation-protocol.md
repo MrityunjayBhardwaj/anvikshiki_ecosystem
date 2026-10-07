@@ -1341,3 +1341,108 @@ reported per question beside run 9, with the same counts as predictions 1–9.
 on reading, or whose covering sentence does not state it, means **STOP**,
 reported before anything else. Spend is read from kie.ai's balance before and
 after each command.
+
+### Results — 2026-10-07, read against the predictions above
+
+Runs 10 and 11 are `traces/occam/run10/`, `traces/occam/run10-controls/` and
+`traces/occam/run11/`, from commit 5af6ca7 on `kie/gemini-3.1-pro`, in one pass
+each. All 24 artifacts replay byte for byte to their stored answers with no
+key. Across every stored run, 140 of 152 replay; the 12 that don't are the
+same pre-artifact runs as before (challenger ×2, run1 ×10). Counts use the
+predicates stated in the baselines.
+
+**Run 10, held-out set 2: 2 of 10 `established`**, inside the registered 1–5.
+Every prediction held.
+
+| prediction | result |
+|---|---|
+| 1. fragments ≤2 | ✓ **2 of 65**, on the edge: "Lightning also causes thunder" (q03) and "Jupiter is the largest" (q10). Both pass the 4-word predicate, yet both are whole sentences with a subject and a verb, so neither is a fragment in the sense #219 meant. |
+| 2. attribution cuts ≤2 | ✓ **0**. 2 quotes kept their attribution, and neither was refused. |
+| 3. refused by the support check ≤15% | ✓ **0 of 65.** |
+| 4. abstentions ≤2 of 10 | ✓ **0.** |
+| 5. ≥2 readable web hosts in ≥8 of 10; fill notes add up | ✓ **9 of 10** (q03 got 1); every fill note adds up, 10 of 10. |
+| 6. quote answers ≥5 of 10 | ✓ **7 of 10.** |
+| 7. quote answers average ≤22 words | ✓ **15.1** (run 9: 31.4). |
+| 8. ≥2 cover pairs covered in both orders | ✓ **5** of 20 judged (12 vetoed before any call). |
+| 9. `established` 1–5 of 10 | ✓ **2**: q02 and q10. |
+| 10. hand-read; partial cause answers | ✓ both true, below; **0 of 6** cause answers partial. |
+| 11. controls and replay | ✓ all 4 PASS with the same verdicts. Under prompt 5, the positive and adversarial answers lose a trailing clause ("…ratified in 1987", "…at sea level") and stay `hypothesis`. Replay as above. |
+
+**Kill criteria:** none triggered. Each `established` answer is true on
+reading, and each covering sentence states it.
+
+- **q02**, "Earthquakes are primarily caused by geological faults"
+  (Wikipedia). Covered both ways by bgs.ac.uk: "Earthquakes are the result of
+  sudden movement along faults within the Earth." The answer cuts Wikipedia's
+  "…, but also by volcanism, landslides, and other seismic events". Its
+  "primarily" still says other causes exist, so I don't count it as partial.
+  The longest run the two pages share is 30 characters ("both dip-slip and
+  strike-slip").
+- **q10**, "Jupiter is the biggest planet in our solar system." It is quoted
+  from spaceplace.nasa.gov and nasa.gov, and covered by Wikipedia (two
+  sentences) and science.nasa.gov. Three of the four hosts are NASA, the case
+  #220 asked about. Wikipedia covers it independently, so the outcome does
+  not depend on it. Longest shared run with Wikipedia: 43 characters, a stock
+  phrase. The 105-character run shared between the two NASA pages is an
+  image credit.
+
+**Where the other eight stopped.**
+- **3 inference answers:** q01, q05, q06.
+- **3 vetoed on a number** the answer kept and no other source stated:
+  - **q07** (Everest, 28 words) kept "(left)" and "the 29,035-foot summit". The
+    prompt asked to drop an extra figure, and the model did not.
+  - **q08** (Eiffel Tower) answered "completed in just over two years, on
+    March 31, 1889". Two sources state only 1889 or "the end of March 1889",
+    so those pairs were vetoed on 31. The third (pariscityvision.com) does
+    state March 31st, 1889, but the judge found it does not state "just over
+    two years" (see the next item).
+  - **q09** (ozone) quoted "97 to 99 percent" in a second answer candidate.
+- **Judged not covered, and correctly** (q03, q04, q08, q09):
+  - "Thunder is created when lightning passes through the air" does not state
+    that thunder is a *sound*.
+  - "absorbs much of the ultraviolet" does not state *most*.
+  - pariscityvision does not state "just over two years".
+  - q04's leap-year sources word the reason differently.
+
+  I read all 40 judge replies. None was a misreading.
+
+The prompt was followed unevenly. q07 and q09 still answered with a figure or
+a definition, and both stopped on it.
+
+**Run 11, set 1 again under prompt 5 (not held out): 3 of 10 `established`,
+against run 9's 0.** q02 (tides), q07 (penicillin) and q09 (red blood
+cells) moved:
+
+| question | run 9 (prompt 4) | run 11 (prompt 5) |
+|---|---|---|
+| q02 tides | 39-word definition, not covered | "Tides are caused by gravitational pull of the moon and the sun." (NOAA), covered by 2 Wikipedia sentences |
+| q07 penicillin | only Wikipedia quoted, no pair | "In 1928 Alexander Fleming discovered penicillin" (sciencehistory.org), covered by britannica.com and Wikipedia |
+| q09 red blood cells | an inference | "Red blood cells carry fresh oxygen all over the body." (stanfordchildrens.org), covered by healthline.com and Wikipedia |
+
+Run 11's counts are 0 fragments, 0 cuts and 0 refusals of 65 quotes, 0
+abstentions, 6 quote answers averaging 17.8 words, 9 covered pairs, and 9 of
+10 with ≥2 hosts. All three answers are true on reading. Their longest shared
+runs are 21 to 50 characters, all stock phrases ("the Nobel Prize in
+Physiology or Medicine for"); no page copies another. **q09 is partial:**
+both covering sources go on to say red blood cells also carry carbon
+dioxide, and the answer leaves that out. It is a function question, not a
+cause question, so prediction 10 does not count it, but it is exactly the
+cost prediction 10 was looking for. q04 (rainbow) still answered with a
+many-claim definition and stayed uncovered.
+
+**What this says.** Asking for one claim and for every source moved the
+held-out set from 0 (run 9, set 1) to 2 of 10, and set 1 from 0 to 3. The
+covers check did not change: every answer it now passes, it passes because
+another site states the same short claim. The prediction that would have
+blamed the check (0 on run 10) did not come true, so the check stays. What
+still holds answers back is inference answers (3 in run 10) and quoted
+figures the model does not drop.
+
+**Status spread:** run 10, 8 `hypothesis` and 2 `established`; run 11, 7 and
+3. The calibration gate would not be met.
+
+**Spend:** read from kie.ai's balance.
+- Run 10: **123.71 credits** (9139.16 → 9015.45), exactly as the calls
+  report.
+- Controls: **1.60** (→ 9013.85).
+- Run 11: **119.13** (→ 8894.72), against 119.08 reported.
