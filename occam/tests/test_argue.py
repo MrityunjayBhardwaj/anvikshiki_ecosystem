@@ -246,6 +246,20 @@ def test_prompt_4_keeps_who_reported_a_finding():
     assert 'never from after "that"' in p
 
 
-def test_new_runs_record_prompt_4():
+def test_prompt_5_asks_for_one_claim_and_every_source():
+    """#228: run 9's q02 and q04 answered with whole definition sentences that
+    no second source restated in full, and q07 quoted one site of four
+    readable. The covers check is unchanged; only what is asked for moves."""
+    p = argue_prompt("Why is it so?", [SNAP])
+    assert "The answer's conclusion makes one claim" in p
+    assert "the shortest unbroken run of its quote" in p
+    assert "still reads as a sentence on its own" in p
+    assert "Read every source, not only the first" in p
+    assert "even in other words, quote each of them" in p
+    assert "with its own subject and verb" in p                    # prompt 4's rules stand
+    assert "the conclusion keeps who found or said it" in p
+
+
+def test_new_runs_record_prompt_5():
     from occam.answer import Params
-    assert Params().argue_prompt == 4
+    assert Params().argue_prompt == 5
