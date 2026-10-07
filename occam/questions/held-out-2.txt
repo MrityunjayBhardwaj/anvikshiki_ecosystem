@@ -1,0 +1,13 @@
+# Held-out set 2 (#228), drafted 2026-10-07 and approved by the user before any
+# run on it. Never used to write or tune a rule. Mirrors the built-in ten:
+# six cause questions, four fact questions.
+Why did the Chernobyl reactor explode in 1986?
+What causes earthquakes?
+What causes thunder?
+Why do we have leap years?
+Why did the Tay Bridge collapse in 1879?
+What causes volcanoes to erupt?
+Who first reached the summit of Mount Everest, and when?
+When was the Eiffel Tower completed?
+What does the ozone layer do?
+What is the largest planet in the Solar System?

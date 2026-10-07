@@ -1270,3 +1270,74 @@ be met.
 **Spend:** read from kie.ai's balance. **103.31 credits** for the measure
 command (9244.34 before, 9141.03 between) and **1.87** for the controls (to
 9139.16). The measure calls report 103.27, 0.04 under the balance.
+
+## Amendment 11 — 2026-10-07: runs 10 and 11, argue prompt 5 on held-out set 2 (#228)
+
+Added before any live call under prompt 5 or on these questions. Nothing above
+is changed.
+
+**Why.** Run 9 established 0 of 10 on held-out set 1. Its reading-rule
+predictions all held, and every answer stopped at corroboration or at an
+inference. Two quote answers (q02, q04) were whole definition sentences of 29
+and 39 words. No second source stated every claim in them, and the covers
+check needs that. q07 quoted only Wikipedia, though three other sites were
+readable.
+
+**The change: argue prompt 5** (#228, commit 45f6e0b).
+- The answer's conclusion makes one claim: the shortest unbroken run of its
+  quote that answers what was asked, still a sentence on its own.
+- Every source is read, and a point stated in other words is quoted from each.
+
+No check changes: `rules 4`, the covers check and the support check are as in
+run 9.
+
+**Why a second held-out set.** Prompt 5 was written from run 9's failures, so
+held-out set 1 can no longer test it. **Held-out set 2** is
+`occam/questions/held-out-2.txt`, committed with this amendment. I drafted it
+and the user approved it before any call. It has six cause questions and four
+fact questions, none of them in set 1 or in the built-in ten, and no rule has
+been written or tuned on it.
+
+**Runs.** The instrument is as in run 9 apart from the prompt: `kie/gemini-3.1-pro`,
+k = 3, temperatures 0.7 / 0.2, judge on, 3 Wikipedia pages and `--web 3`.
+- **Run 10** = `measure --questions occam/questions/held-out-2.txt --out
+  traces/occam/run10`, then `controls --out traces/occam/run10-controls`.
+  This is the held-out estimate.
+- **Run 11** = `measure --questions occam/questions/held-out-1.txt --out
+  traces/occam/run11`. This is set 1 again under prompt 5, read beside run 9.
+  It shows what the prompt moved on the questions it was written from, and it
+  is **not** a held-out estimate.
+
+**Predictions for run 10** (one question is 10 points; a miss by one is
+reported as such):
+1. Fragments (quote conclusions of 4 words or fewer): **at most 2**. Asking
+   for shorter answers risks bringing them back.
+2. Attribution cuts: **at most 2**.
+3. Refused by the support check: **at most 15%** of quote arguments.
+4. Abstentions: **at most 2 of 10**.
+5. ≥2 distinct readable web hosts in **at least 8 of 10**; every fill note
+   adds up.
+6. Quote answers: **at least 5 of 10**.
+7. Answer length: quote answers average **at most 22 words** (run 9: 31.4;
+   run 8: 24.8). The predicate is words in the answer's conclusion.
+8. Cover pairs judged `covers` in both orders: **at least 2** across the run
+   (run 9: 0 of 14 judged).
+9. `established`: **1 to 5 of 10.** **0** would say the strict covers check,
+   not the prompt, is what holds answers back. That is reported as the
+   finding, and prompt tuning stops there: what corroboration should require
+   becomes a design question for the user.
+10. Every `established` answer is read by hand: the covering sentence, its
+    host and page, and whether the pages copy or paraphrase each other (#225).
+    Every answer to a cause question is also read for **partial** answers: a
+    one-claim answer that leaves out a cause the same sources give equal
+    weight. These are counted and reported. A partial answer is not false,
+    but it is the cost this prompt could carry.
+11. Controls as in Amendment 9, and every artifact replays with no key.
+
+**Run 11** registers no pass mark, since its questions are seen. It is
+reported per question beside run 9, with the same counts as predictions 1–9.
+
+**Kill criteria:** those of Amendment 7. An `established` answer that is false
+on reading, or whose covering sentence does not state it, means **STOP**,
+reported before anything else. Spend is read from kie.ai's balance before and
+after each command.
