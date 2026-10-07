@@ -1388,20 +1388,19 @@ reading, and each covering sentence states it.
 
 **Where the other eight stopped.**
 - **3 inference answers:** q01, q05, q06.
-- **3 vetoed on a number** the answer kept and no other source stated:
-  - **q07** (Everest, 28 words) kept "(left)" and "the 29,035-foot summit". The
-    prompt asked to drop an extra figure, and the model did not.
-  - **q08** (Eiffel Tower) answered "completed in just over two years, on
-    March 31, 1889". Two sources state only 1889 or "the end of March 1889",
-    so those pairs were vetoed on 31. The third (pariscityvision.com) does
-    state March 31st, 1889, but the judge found it does not state "just over
-    two years" (see the next item).
-  - **q09** (ozone) quoted "97 to 99 percent" in a second answer candidate.
-- **Judged not covered, and correctly** (q03, q04, q08, q09):
+- **q07 (Everest, 28 words): every pair vetoed on a number.** The answer
+  kept "(left)" and "the 29,035-foot summit", and no other source states
+  29,035. The prompt asked to drop an extra figure, and the model did not.
+- **q08 (Eiffel Tower)** answered "completed in just over two years, on March
+  31, 1889". Two sources state only 1889 or "the end of March 1889", so those
+  pairs were vetoed on 31. The third, pariscityvision.com, states March 31st,
+  1889, but was judged not to state "just over two years".
+- **Judged not covered, and correctly** (q03, q04, q09):
   - "Thunder is created when lightning passes through the air" does not state
     that thunder is a *sound*.
-  - "absorbs much of the ultraviolet" does not state *most*.
-  - pariscityvision does not state "just over two years".
+  - For q09 (ozone), "absorbs much of the ultraviolet" does not state *most*.
+    Its other answer candidate, "absorbs 97 to 99 percent…", was vetoed on
+    the figures.
   - q04's leap-year sources word the reason differently.
 
   I read all 40 judge replies. None was a misreading.
