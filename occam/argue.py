@@ -186,8 +186,13 @@ def argue_prompt(question: str, snapshots: Sequence[Snapshot],
         "- If one passage states the answer, including the reason when the question "
         "asks why, the answer is that quote step itself. Use an inference only when "
         "the answer has to be put together from several steps.\n"
-        "- When more than one source states the same point, quote each of them as a "
-        "step of its own.\n"
+        "- The answer's conclusion makes one claim: the shortest unbroken run of its "
+        "quote that answers what was asked. Leave out clauses that add what the "
+        "question did not ask for (a definition, a second cause, an extra date or "
+        "figure), as long as what is left still reads as a sentence on its own.\n"
+        "- Read every source, not only the first. When more than one source states "
+        "the answer's point, even in other words, quote each of them as a step of "
+        "its own.\n"
         "- If the sources do not answer the question, return "
         '{"answer": null, "steps": []}. Do not use outside knowledge.\n',
         f"QUESTION: {question}\n",

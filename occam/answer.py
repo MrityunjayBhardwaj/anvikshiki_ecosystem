@@ -113,9 +113,12 @@ class Params(BaseModel):
     # "the Egyptian scripts.", which asserts nothing the support check can
     # accept; and (#218) a reported finding keeps who found it, since the
     # support check rightly refuses "X" cut out of "the inquiry found that X".
+    # 5 (#228): the answer's conclusion makes one claim, since the covers check
+    # needs another source to state every claim in it; and every source is
+    # read, so a point more than one states is quoted from each.
     # An artifact without the field was argued under 1, and shows no counter
     # that 2 introduced.
-    argue_prompt: int = 4
+    argue_prompt: int = 5
     # Which counters the answer shows, so adding one does not change what an
     # older artifact replays to. 2 (#179): `question_number_unquoted`. 3
     # (#181): both premise counters say what they could read in the question.
