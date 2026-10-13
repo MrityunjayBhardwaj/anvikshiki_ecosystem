@@ -1526,3 +1526,32 @@ the checks, to be addressed in a later amendment with its own held-out set.
 **Reading.** Statuses, abstentions and spend come from the stored artifacts
 and kie.ai's balance. Predictions 8 and 9 are readings. Each is reported with
 the conclusions listed, so it can be checked.
+
+**Change before any run, 2026-10-13: the model is `kie/gemini-3-pro`.**
+`kie/gemini-3.1-pro` now refuses every prompt containing an ampersand. It
+answers HTTP 200 with `{'code': 500, 'msg': 'The server is currently being
+maintained…'}`:
+- "A & B" fails, and so does "Richmond, VA: R.T. Hill & Co.".
+- The same line with "and" passes.
+- Sending the character as the JSON escape `&` fails too.
+
+Wikipedia's "Flat Earth" article has an "&" in its references, so the argue
+prompt for q03 could never pass. Each refusal took about 70 s because the
+client retries a 5xx three times with pauses. The first two launches failed
+on q01's argue call in both arms. No artifact was written, and about 5
+credits were spent on the attempts and the diagnosis. The aborted attempts'
+logs and balances are kept as `traces/occam/run1{2,3}-*-attempt{1,2}.*`.
+
+Replacing "&" in the sources would change the text that quotes are checked
+against, so the model is changed instead:
+- `kie/gemini-3-pro`, the same family one version earlier, on the same
+  gateway and the same search tool, accepts "&".
+- On the flat-Earth prompt it argued in 39 s with 2 of 2 quotes verified,
+  and its web search returned 8 URLs.
+- OpenRouter serves `google/gemini-3.1-pro-preview`, but that account has no
+  credit left.
+
+Both arms use the same model, so the comparison between runs 12 and 13 is
+intact. Comparisons with runs 5–11 now cross a model change and are not
+claimed. The commands above run with `--model kie/gemini-3-pro`. The
+predictions are unchanged.
