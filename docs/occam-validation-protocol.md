@@ -1445,3 +1445,84 @@ figures the model does not drop.
   report.
 - Controls: **1.60** (→ 9013.85).
 - Run 11: **119.13** (→ 8894.72), against 119.08 reported.
+
+## Amendment 12 — 2026-10-13: runs 12 and 13, fact-check articles on claims set 1 (#230)
+
+Added before any live call on these questions or with fact-check sources.
+Nothing above is changed.
+
+**Why.** #190 measured Google Fact Check Tools on the 30 registered questions:
+a review states the answer for only 5, each as a side effect of debunking a
+conspiracy claim. But the service covers claim-style questions well. A claim
+is also the first kind of question where an outside reference exists: a
+professional fact-checker's published rating.
+
+**The change: a fact-check source** (#230, commit aa525cd). `claims:search`
+names review articles. Each is fetched, snapshotted and quoted by Occam like
+any web page, after the web pages, under fill rule 2, on hosts not already
+held. The rating stays in the search reply, which is kept for audit, and no
+model prompt or check reads it. `Params.factcheck_sources` records how many
+were asked for. No check changes: `rules 4`, argue prompt 5, and the support,
+covers and reason checks are as in runs 10 and 11.
+
+**Claims set 1** is `occam/questions/claims-1.txt`, committed with this
+amendment. I drafted it and the user approved it before any call. It has 20
+yes/no questions, each the proposition of a review that `claims:search`
+returns for the question as written. The answer each review supports is in
+`claims-1.labels.json`, read from its rating by hand: **15 no, 5 yes**.
+Fact-checkers mostly review false claims, so the skew is the population's,
+and agreement is reported separately for each label. Nothing in `occam/`
+reads the labels.
+
+**Two arms, same model, same day, run one after the other:**
+
+    python -m occam measure --questions occam/questions/claims-1.txt \
+        --model kie/gemini-3.1-pro --web 3 --factcheck 0 --out traces/occam/run12
+    python -m occam measure --questions occam/questions/claims-1.txt \
+        --model kie/gemini-3.1-pro --web 3 --factcheck 3 --out traces/occam/run13
+
+Run 12 is the arm without fact-checks, so any difference in run 13 is
+attributable to the fact-check pages. The two arms do not hold the same web
+pages, because search results vary between calls. So the comparison is
+between arms, not question by question.
+
+**Two predictions from reading the checks before any run:**
+
+- **The covers veto compares the exact set of negation words.** `cover_veto`
+  vetoes "Vaccines do not cause autism." against "There is no evidence that
+  vaccines cause autism." (`negation differs: no, not`) before any judge
+  reads them. A "no" answer is usually phrased with a different negation from
+  its covering source, so "no" claims should rarely be covered.
+- **Six questions trigger the reason check** (`asks_for_a_cause`: "Does X
+  cause Y?"). The check was written for "why" questions. A "no" answer gives
+  no reason, so it should stay at `hypothesis`.
+
+Neither is changed before these runs. If they hold, they are findings about
+the checks, to be addressed in a later amendment with its own held-out set.
+
+**Predictions.** Each arm has 20 questions.
+
+1. **Gathering (run 13).** At least one readable fact-check page for 13–20 of
+   20 questions. Of the fact-check URLs fetched, 15–50% are unreadable (#190
+   found 5 of 13).
+2. **Established, run 12:** 2–8 of 20.
+3. **Established, run 13:** at least run 12's count, and at most 5 more.
+4. **The negation veto.** In each arm, at most 3 of the 15 "no"-labelled
+   questions are established, and the established rate on "yes" questions is
+   at least the rate on "no" questions.
+5. **The reason check.** In each arm, at most 1 of the 6 cause-shaped
+   questions is established.
+6. **No established answer disagrees with its label**, in either arm. A
+   miss here is the most serious result possible: the mechanism would have
+   certified a claim that a fact-checker rejected. If it happens, it is
+   reported first.
+7. **Abstentions:** at most 3 per arm.
+8. **Agreement, read by me.** Of the answers given, at least 85% per arm
+   agree with the label, judged on the conclusion alone and reported per label.
+9. **Fact-check pages are used (run 13).** In at least 8 of 20, a fact-check
+   page holds a verified quote in the argue output.
+10. **Spend:** 180–320 credits per arm.
+
+**Reading.** Statuses, abstentions and spend come from the stored artifacts
+and kie.ai's balance. Predictions 8 and 9 are readings. Each is reported with
+the conclusions listed, so it can be checked.
