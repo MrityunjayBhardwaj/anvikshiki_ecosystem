@@ -1555,3 +1555,16 @@ Both arms use the same model, so the comparison between runs 12 and 13 is
 intact. Comparisons with runs 5–11 now cross a model change and are not
 claimed. The commands above run with `--model kie/gemini-3-pro`. The
 predictions are unchanged.
+
+**Change before the counted runs, 2026-10-22: both arms run again, fresh, on
+one day.** The first launch on `kie/gemini-3-pro` began on 2026-10-13 and stopped
+when the session running it ended. Run 12 had written 19 of its 20 questions and
+run 13 had not started. Resuming would put the two arms nine days apart, and the
+web results they draw on would differ by more than a single day's drift, which
+breaks "same model, same day". So both arms run again from the start, one after
+the other, with the commands above. The partial run is kept as
+`traces/occam/run12-attempt3/`, with its log and opening balance, and is not
+scored. Its interim statuses were read while it ran. The questions, labels and
+predictions are unchanged, so reading them changes nothing that is scored. It
+spent about 302 credits on 19 questions: the balance went from 8873.98 to 8572.10.
+`--resume` is used only to recover from a failure within the same day.
