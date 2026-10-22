@@ -1568,3 +1568,24 @@ scored. Its interim statuses were read while it ran. The questions, labels and
 predictions are unchanged, so reading them changes nothing that is scored. It
 spent about 302 credits on 19 questions: the balance went from 8873.98 to 8572.10.
 `--resume` is used only to recover from a failure within the same day.
+
+**Change before the counted runs, 2026-10-22 evening: "back to back" replaces
+"same day".** One arm takes about nine hours: the partial run 12 wrote 19
+questions between 14:53 and 23:32 on 2026-10-13. So the two arms together take
+about 17 hours and cannot share a calendar day, whenever they start. What the
+rule protects is that both arms see the web at nearly the same time, so run 13
+starts as soon as run 12 ends. Both start from the beginning at about 21:00 IST
+on 2026-10-22.
+
+On 2026-10-22, kie/gemini-3-pro failed about half its calls during the day. Each
+failure was a `524 '2 times retry fail'` or a `500 'Network error'` within 3–9 s,
+including on two-line prompts. The probe is `traces/occam/probe_kie.py`: ten
+single-attempt calls. Its log is `traces/occam/probe_kie.log`, which shows a run of
+0–9/10 every half hour from 12:59, then 10/10 at 20:55 and 8/10 at 20:57.
+Three morning launches each lost the question in progress. The two questions
+they finished are kept as `traces/occam/run12-attempt4/` and are not scored.
+
+The runner is `traces/occam/run_both_12_13.sh`. After a failed call, it resumes up
+to 30 times, five minutes apart. A failed call records nothing, and `--resume`
+only skips questions already written, so a resume changes nothing that is scored.
+Every resume is listed with the results.
