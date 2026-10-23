@@ -124,3 +124,28 @@ def test_an_empty_question_file_is_refused_before_any_model(tmp_path, no_model):
     qs = tmp_path / "empty.txt"
     qs.write_text("# nothing\n\n")
     assert main(["measure", "--questions", str(qs), "--out", str(tmp_path / "new")]) == 2
+
+
+def test_a_pass_that_stops_on_a_failed_call_says_what_it_spent(monkeypatch, tmp_path, capsys):
+    """#233: the calls for the question in progress were billed, so a stopped
+    pass reports its spend; silence would read as nothing spent."""
+    import occam.__main__ as cli
+    from occam.model import ScriptedModel
+    from occam.tests.test_answer import AGREE, NO_ATTACKS, ask
+    ans, art = ask(AGREE, NO_ATTACKS)
+    model = ScriptedModel([], name="scripted-xyz")
+    model.credits = 0.0
+    monkeypatch.setattr(om, "make_model", lambda spec: model)
+
+    def run(q, m, **kw):
+        m.credits += 2.5                                    # billed, whether or not it ends
+        if m.credits > 5:
+            raise RuntimeError("kie/x: unexpected response {'code': 524}")
+        return ans, art.model_copy(update={"question": q})
+    monkeypatch.setattr(cli, "run", run)
+    with pytest.raises(RuntimeError):
+        main(["measure", "--web", "0", "--out", str(tmp_path / "run")])
+    err = capsys.readouterr().err
+    assert ("pass stopped at q03: spent 7.5 kie.ai credits, as the provider counted them, "
+            "over 2 question(s) written and q03's calls, which were discarded") in err
+    assert sorted(p.name for p in (tmp_path / "run").iterdir()) == ["q01.json", "q02.json"]

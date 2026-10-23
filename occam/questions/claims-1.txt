@@ -1,0 +1,25 @@
+# Claims set 1 (#230), drafted 2026-10-13 and approved by the user before any
+# run on it. Never used to write or tune a rule. Each is a yes/no question
+# whose proposition a published fact-check reviewed; the answer that review
+# supports is in claims-1.labels.json, a label for reading the results only.
+# Fifteen are labelled no and five yes: fact-checkers mostly review false claims.
+Do vaccines cause autism?
+Does 5G spread COVID-19?
+Is the Earth flat?
+Were the Moon landings faked?
+Do humans use only 10 percent of their brains?
+Is the Great Wall of China visible from the Moon?
+Does cracking your knuckles cause arthritis?
+Was the 1918 flu pandemic caused by vaccines?
+Did HAARP cause the northern lights in May 2024?
+Does sugar make children hyperactive?
+Is the HPV vaccine linked to infertility?
+Does shaving make hair grow back thicker?
+Do bulls get angry at the colour red?
+Is Pluto still a planet?
+Did HAARP cause earthquakes?
+Is the ozone layer recovering?
+Is there an undersea volcano off the coast of Oregon that may erupt soon?
+Can you count seconds to tell how far away lightning is?
+Did the 1918 flu become known as the Spanish flu because of wartime censorship?
+Does smoking cause lung cancer?
