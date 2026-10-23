@@ -1637,9 +1637,12 @@ is 3: the fact-check arm established fewer answers, not more.**
   q05, q16 and q20 each ended on "rests on a single source" with different
   wording and different web pages. In q16, for example, the answer became "Ozone levels
   stabilized by the mid-1990s and began to recover in the 2000s", with numbers
-  that no other source matched. The two arms do not hold the same web pages,
-  and with 20 questions a difference of one established answer is within what
-  that variation produces. **This run does not show that fact-check pages
+  that no other source matched. The two arms do not hold the same web pages.
+  The unscored partial attempt (`run12-attempt3`, 2026-10-13) gives one
+  measure of how much that moves the count. It used run 12's settings and
+  established 2 of its 19 questions, against run 12's 4 of 20, so the same
+  arm differed by two. That is one comparison, not an interval, and it is not
+  used to score any prediction. **This run does not show that fact-check pages
   raise the established count. It does show that they can carry an answer to
   `established` on their own.**
 
