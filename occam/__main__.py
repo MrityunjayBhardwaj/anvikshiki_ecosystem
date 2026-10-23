@@ -522,19 +522,32 @@ def main(argv: list[str] | None = None) -> int:
         pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
         claimed = abstained = 0
         statuses: dict[str, int] = {}
+        written = 0
         for i, q in enumerate(questions, 1):
             path = outdir / f"q{i:02d}.json"
+            try:
+                if path not in kept:
+                    answer, artifact = run(q, model,
+                                           params=Params(judge_same=not args.no_judge_same,
+                                                         web_sources=args.web,
+                                                         factcheck_sources=args.factcheck),
+                                           web_search=getattr(model, "web_search", None)
+                                           if args.web else None,
+                                           factcheck_search=fc_search)
+                    path.write_text(stored_run(answer, artifact))
+                    written += 1
+            except BaseException:
+                # A pass that stops still spent what it spent (#233): the calls
+                # for the question in progress were billed, and a resume asks
+                # them again. Said on every exit, so it never reads as nothing.
+                if hasattr(model, "credits"):
+                    print(f"pass stopped at q{i:02d}: spent {model.credits:g} kie.ai credits, as "
+                          f"the provider counted them, over {written} question(s) written and "
+                          f"q{i:02d}'s calls, which were discarded", file=sys.stderr, flush=True)
+                raise
             if path in kept:
                 answer = Answer.model_validate(kept[path]["answer"])
                 print(f"q{i:02d} kept from an earlier pass ({kept[path]['artifact']['as_of']})")
-            else:
-                answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same,
-                                                               web_sources=args.web,
-                                                               factcheck_sources=args.factcheck),
-                                       web_search=getattr(model, "web_search", None)
-                                       if args.web else None,
-                                       factcheck_search=fc_search)
-                path.write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
                 pooled[v] += int(c[f"{v}_frac"].n)
@@ -544,7 +557,8 @@ def main(argv: list[str] | None = None) -> int:
             key = "abstained" if answer.abstained else answer.status.value
             statuses[key] = statuses.get(key, 0) + 1
             print(f"q{i:02d} [{key:11}] verified {c['verified_frac'].n:g} of {c['verified_frac'].of}"
-                  f", absent {c['absent_frac'].n:g}  {answer.conclusion or answer.abstain_reason}"[:200])
+                  f", absent {c['absent_frac'].n:g}  {answer.conclusion or answer.abstain_reason}"[:200],
+                  flush=True)
         print(f"\npooled over {claimed} quotes claimed: verified {pooled['ok']}, absent "
               f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
               f"{pooled['unresolvable']}")
