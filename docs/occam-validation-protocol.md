@@ -1589,3 +1589,84 @@ The runner is `traces/occam/run_both_12_13.sh`. After a failed call, it resumes 
 to 30 times, five minutes apart. A failed call records nothing, and `--resume`
 only skips questions already written, so a resume changes nothing that is scored.
 Every resume is listed with the results.
+
+### Results — runs 12 and 13 (2026-10-22/23)
+
+Run 12, without fact-checks, ran from 20:57 on 2026-10-22 to 02:39 on 2026-10-23.
+Run 13, with up to three fact-check pages, began at 03:12 and ended at 18:23.
+Both were on `kie/gemini-3-pro`, at commit `e130853`. The scoring is
+`scripts/score_claims.py`, and its full output is kept as
+`traces/occam/score-run12-13.txt`. Every one of the 40 answers replays byte for
+byte, and none abstained.
+
+**Seven of the ten predictions hold. Three fail, and the one that matters most
+is 3: the fact-check arm established fewer answers, not more.**
+
+| # | Prediction | Run 12 | Run 13 | |
+|---|---|---|---|---|
+| 1 | readable fact-check page for 13–20 of 20; 15–50% of fetched unreadable | — | 18 of 20; 28 of 63 unreadable (44%) | holds |
+| 2 | run 12 establishes 2–8 | 4 | — | holds |
+| 3 | run 13 establishes ≥ run 12, ≤ run 12 + 5 | 4 | **3** | **fails** |
+| 4 | ≤ 3 "no" established; "yes" rate ≥ "no" rate | 2/15; 2/5 ≥ 2/15 | 3/15; **0/5 < 3/15** | **fails in run 13** |
+| 5 | ≤ 1 of 6 cause-shaped established | 1 (q20) | 0 | holds |
+| 6 | no established answer disagrees with its label | 0 of 4 | 0 of 3 | holds |
+| 7 | ≤ 3 abstentions | 0 | 0 | holds |
+| 8 | ≥ 85% of answers agree with the label, per label | 15/15 no, 5/5 yes | 15/15 no, 5/5 yes | holds |
+| 9 | a fact-check page holds a verified quote in ≥ 8 of 20 | — | 16 of 20 | holds |
+| 10 | 180–320 credits per arm | 221.81 | **357.31** | **fails** |
+
+**Established answers:**
+- Run 12: q05 (we use our entire brain), q14 (Pluto reclassified), q16 (the
+  ozone hole is recovering) and q20 (smoking is the number one cause of lung
+  cancer).
+- Run 13: q03 (the Earth is not flat), q13 (red does not make bulls angry) and
+  q14.
+- All seven agree with their label. On reading, all 40 conclusions agree with
+  their label.
+
+**What the fact-check pages did.**
+- **q03 was established on fact-check pages alone.** The answer "the Earth is
+  not flat" is quoted from fullfact.org and science.feedback.org, which are two
+  hosts, both reached through the fact-check search. In run 12, the same
+  question stopped at an inference step.
+- **In q13, snopes.com is among the hosts** stating the answer, alongside
+  wtamu.edu, ripleys.com and livescience.com.
+- **Fact-check pages also added pairs for the negation veto to rule out.** It
+  vetoed 67 of 121 cover pairs in run 13, against 35 of 102 in run 12.
+- **The three answers run 13 lost are not traceable to the fact-check pages.**
+  q05, q16 and q20 each ended on "rests on a single source" with different
+  wording and different web pages. In q16, for example, the answer became "Ozone levels
+  stabilized by the mid-1990s and began to recover in the 2000s", with numbers
+  that no other source matched. The two arms do not hold the same web pages,
+  and with 20 questions a difference of one established answer is within what
+  that variation produces. **This run does not show that fact-check pages
+  raise the established count. It does show that they can carry an answer to
+  `established` on their own.**
+
+**The two predicted weak spots hold.**
+- **The negation veto** ruled out 35 of 102 cover pairs in run 12 and 67 of
+  121 in run 13. "No" answers were established anyway when both sources used
+  the same word ("not flat", "not flat"). The rule therefore rewards matching
+  wording, not agreement.
+- **The reason check** held q01, q07 and q15 in run 12 and q01 and q07 in run
+  13. In each case the judge said the quote "does not give the reason asked
+  for" on a yes/no question.
+
+**Why prediction 10 failed is not measured.** Run 13 needed 16 passes. Fifteen
+stopped on a failed call: 10 × `524`, 4 × `500 Network error` and 1 ×
+`RemoteDisconnected`. The calls made for the question in progress were billed
+and then discarded on resume. The provider's own count is printed only by a
+pass that completes, so the waste cannot be separated from the 357.31.
+
+**Passes.**
+- Run 12 needed 8 passes. Seven stopped: 4 × `524`, 2 × `500` and 1 × "No
+  space left on device", which was raised when opening q09.json. Nothing was
+  written by that pass, and a later pass wrote q09 whole.
+- All 40 files parse.
+
+**What follows.**
+1. The negation veto should compare polarity, not the set of negation words.
+2. The reason check should not fire on yes/no questions.
+3. Both changes need a fresh claims set, because this one has now been seen.
+4. kie/gemini-3-pro's gateway failure rate makes per-call retries the limiting
+   factor in a run's cost.
