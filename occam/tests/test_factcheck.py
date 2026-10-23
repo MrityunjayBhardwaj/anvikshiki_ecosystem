@@ -106,6 +106,14 @@ def test_a_host_the_web_search_holds_is_not_fetched_again():
     assert [s.urls[0] for s in snaps[2:]] == [WEB_URL, FC_OTHER]
 
 
+def test_under_fill_rule_1_a_host_the_web_search_holds_is_not_fetched_again():
+    get = api([[claim(WEB_URL, FC_OTHER)]])
+    snaps, _, _ = gather("q", at=AS_OF, n=2, http_get=get, web_search=search([WEB_URL]),
+                         n_web=1, factcheck_search=factcheck_search(KEY, http_get=get),
+                         n_factcheck=1, web_fill=1)
+    assert [s.urls[0] for s in snaps[2:]] == [WEB_URL, FC_OTHER]
+
+
 def test_a_blocked_search_is_a_note_without_the_key():
     get = api([], status=403)
     snaps, notes, _ = gather("q", at=AS_OF, n=2, http_get=get,

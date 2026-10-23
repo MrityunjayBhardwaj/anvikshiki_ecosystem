@@ -231,7 +231,10 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
     if not kept:
         notes.append(f"{what} returned no pages beyond Wikipedia for {question!r}")
     if fill < 2:
-        return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]
+        # `taken` binds under both rules (#234): only the web search, which
+        # passes none, ever ran under rule 1 before it existed.
+        return [fetch(u, at=at, http_get=http_get)
+                for u in [u for u in kept if host(u) not in taken][:n]]
     snaps: list[Snapshot] = []
     held: list[str] = []
     same_host = unfetched = 0
