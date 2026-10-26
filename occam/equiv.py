@@ -25,7 +25,8 @@ counts. The model answers one narrow question per pair — same, different or
 cannot tell — in a fresh call that sees that pair and nothing else (#174),
 asked in both orders. It never sets a status.
 
-    veto          a negation word on one side only; or numbers that differ
+    veto          a negation on one side only (set 3; sets 1-2 vetoed any
+                  difference in negation words); or numbers that differ
                   (claim lens) or conflict — neither side's numbers contained
                   in the other's (question lens, where numbers the question
                   itself contains are context, not answer). Opposites without a
@@ -71,10 +72,17 @@ EQUIV_VERDICTS = ("same", "different", "cannot_tell")
 # and set 1 vetoed it exactly as it vetoed "did not grow" (#192). Which set a
 # run used is `Params.veto_words`: the stored judge replies are read in order
 # over the pairs no veto ruled out, so a run must replay under its own set.
+#
+# Sets 1 and 2 veto any difference in the words, so "don't cause" was set
+# against "no link" though both deny (#237). Set 3 holds set 2's words and
+# compares polarity instead: a pair is vetoed only when one side carries a
+# negation and the other none (`negation_veto`).
 NEGATIONS_BY_SET = {
     1: frozenset({"not", "no", "never", "none", "neither", "nor", "without", "cannot"}),
     2: frozenset({"not", "no", "never", "none", "neither", "nor", "cannot"}),
 }
+NEGATIONS_BY_SET[3] = NEGATIONS_BY_SET[2]
+POLARITY_FROM = 3
 NEGATIONS = NEGATIONS_BY_SET[2]
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _WORD = re.compile(r"[a-z]+(?:['’][a-z]+)?")
@@ -94,8 +102,25 @@ def _negations(s: str, words: frozenset[str]) -> set[str]:
     return out
 
 
+def negation_veto(a: str, b: str, words: frozenset[str], polarity: bool) -> str:
+    """The negation half of both vetoes (this one and occam.covers'). By
+    words: any difference in the negation words. By polarity (#235, #237):
+    a negation on one side only. Polarity is "carries a negation word", not
+    the parity of their count: "not flat and not a disc" denies once in each
+    clause, and parity would set it against "not flat". So a double negation
+    reaches the judge, which must agree in both orders; a veto only rules
+    pairs out, never in."""
+    ga, gb = _negations(a, words), _negations(b, words)
+    if polarity:
+        if bool(ga) != bool(gb):
+            return f"negation on one side only: {', '.join(sorted(ga | gb))}"
+    elif ga != gb:
+        return f"negation differs: {', '.join(sorted(ga ^ gb))}"
+    return ""
+
+
 def veto(a: str, b: str, lens: Lens, question: str,
-         negations: frozenset[str] = NEGATIONS) -> str:
+         negations: frozenset[str] = NEGATIONS, polarity: bool = False) -> str:
     """Why the pair cannot be the same, decided without a model; "" if nothing
     rules it out."""
     na, nb = _numbers(a), _numbers(b)
@@ -106,10 +131,7 @@ def veto(a: str, b: str, lens: Lens, question: str,
             return f"numbers conflict: {', '.join(sorted(na ^ nb))}"
     elif na != nb:
         return f"numbers differ: {', '.join(sorted(na ^ nb))}"
-    ga, gb = _negations(a, negations), _negations(b, negations)
-    if ga != gb:
-        return f"negation differs: {', '.join(sorted(ga ^ gb))}"
-    return ""
+    return negation_veto(a, b, negations, polarity)
 
 
 class Pair(BaseModel):
@@ -132,7 +154,8 @@ def candidate_pairs(argued: ArgueResult, question: str, *,
     Question lens: distinct surviving answer conclusions. Claim lens: distinct
     conclusions of quotes that state them word for word — the only arguments
     that can reach an established ceiling, and so the only ones corroboration
-    reads. `veto_words` names the negation set (see NEGATIONS_BY_SET)."""
+    reads. `veto_words` names the negation set and, from POLARITY_FROM, that
+    it is compared by polarity (see NEGATIONS_BY_SET)."""
     by = argued.by_id()
     wording: dict[str, str] = {}
     for a in sorted(argued.arguments, key=lambda x: x.id):
@@ -146,7 +169,8 @@ def candidate_pairs(argued: ArgueResult, question: str, *,
             pairs.append(Pair(id=f"P{len(pairs):04d}", lens=lens, a=x, b=y,
                               text_a=wording[x], text_b=wording[y],
                               veto=veto(wording[x], wording[y], lens, question,
-                                        NEGATIONS_BY_SET[veto_words])))
+                                        NEGATIONS_BY_SET[veto_words],
+                                        veto_words >= POLARITY_FROM)))
     return tuple(pairs)
 
 

@@ -173,9 +173,10 @@ def test_occam_tests_are_actually_collected():
 
 
 def test_the_one_regex_exception_is_used_only_to_refuse():
-    """equiv.py may match words only inside `veto`, and a veto can only keep
-    a pair apart. If either stops holding, the exception is no longer the
-    one that was granted."""
+    """equiv.py may match words only inside `veto` and its negation half
+    `negation_veto` (#237), which occam.covers' veto shares, and a veto can
+    only keep a pair apart. If either stops holding, the exception is no
+    longer the one that was granted."""
     import ast
     src = (REPO / "occam" / "equiv.py").read_text()
     tree = ast.parse(src)
@@ -183,10 +184,18 @@ def test_the_one_regex_exception_is_used_only_to_refuse():
     for fn in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
         used = {n.id for n in ast.walk(fn) if isinstance(n, ast.Name)} & readers
         if used:
-            assert fn.name in {"veto", "_numbers", "_negations"}, (
+            assert fn.name in {"veto", "negation_veto", "_numbers", "_negations"}, (
                 f"{fn.name} uses {sorted(used)}: word matching outside the veto")
 
     from occam.equiv import Pair, Verdict
     vetoed = Pair(id="P0000", lens="claim", a="x", b="y", text_a="x", text_b="y",
                   veto="numbers differ: 50")
     assert not Verdict(pair=vetoed, forward="same", backward="same").same
+
+    from occam.covers import CoverPair, covered_by
+    from occam.equiv import negation_veto
+    assert negation_veto("It did not grow.", "It grew.", frozenset({"not"}), True) != ""
+    refused = CoverPair(answer="x", source="y", text_answer="x", text_source="y",
+                        veto="negation on one side only: not")
+    covers = '{"verdict": "covers"}'
+    assert covered_by([refused], [("x", "y", 0, covers), ("x", "y", 1, covers)]) == {}
