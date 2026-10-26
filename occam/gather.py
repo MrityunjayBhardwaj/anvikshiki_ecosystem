@@ -199,7 +199,8 @@ WEB_OVERASK = 3
 
 def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
                http_get: HttpGet, notes: list[str], raw: list[str],
-               fill: int = 1) -> list[Snapshot]:
+               fill: int = 1, what: str = "web search",
+               taken: Sequence[str] = ()) -> list[Snapshot]:
     """Pages a web search found, fetched and snapshotted by us (#209).
 
     The search only discovers: what is kept is the URLs, and each page is
@@ -213,20 +214,27 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
     n readable pages on n different hosts are held. A second page on a host
     already held adds no corroboration and is not fetched. Every page fetched
     is kept, readable or not, so each failure stays on the record, and one
-    note counts what happened to every URL named."""
+    note counts what happened to every URL named.
+
+    `what` names the search in the notes, and `taken` lists hosts an earlier
+    search already holds, which this one does not fetch again: the fact-check
+    search (#230) follows the web search and must not count a host twice."""
     try:
         found, reply = web_search(question, n * WEB_OVERASK if fill >= 2 else n)
     except Exception as e:  # noqa: BLE001 — could not look is a note, never silence
-        notes.append(f"web search failed: {type(e).__name__}: {e}")
+        notes.append(f"{what} failed: {type(e).__name__}: {e}")
         return []
     raw.append(reply)
     kept = [u for u in found if not _excluded(u)]
     if len(kept) < len(found):
-        notes.append(f"web search: skipped {len(found) - len(kept)} Wikipedia or mirror page(s)")
+        notes.append(f"{what}: skipped {len(found) - len(kept)} Wikipedia or mirror page(s)")
     if not kept:
-        notes.append(f"web search returned no pages beyond Wikipedia for {question!r}")
+        notes.append(f"{what} returned no pages beyond Wikipedia for {question!r}")
     if fill < 2:
-        return [fetch(u, at=at, http_get=http_get) for u in kept[:n]]
+        # `taken` binds under both rules (#234): only the web search, which
+        # passes none, ever ran under rule 1 before it existed.
+        return [fetch(u, at=at, http_get=http_get)
+                for u in [u for u in kept if host(u) not in taken][:n]]
     snaps: list[Snapshot] = []
     held: list[str] = []
     same_host = unfetched = 0
@@ -235,7 +243,7 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
         if len(held) == n:
             unfetched += 1
             continue
-        if host(u) in held:
+        if host(u) in held or host(u) in taken:
             same_host += 1
             continue
         s = fetch(u, at=at, http_get=http_get)
@@ -246,7 +254,7 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
             why[s.empty_reason] = why.get(s.empty_reason, 0) + 1
     if kept:
         failed = "".join(f", {c} {r}" for r, c in sorted(why.items()))
-        notes.append(f"web search: named {len(kept)}; readable on distinct hosts "
+        notes.append(f"{what}: named {len(kept)}; readable on distinct hosts "
                      f"{len(held)} of {n} wanted{failed}; skipped {same_host} on a host "
                      f"already held; not fetched {unfetched}")
     return snaps
@@ -255,6 +263,7 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
 def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
            n: int = 3, http_get: HttpGet = urllib_get, model: Optional["Model"] = None,
            web_search: Optional[WebSearch] = None, n_web: int = 0, web_fill: int = 1,
+           factcheck_search: Optional[WebSearch] = None, n_factcheck: int = 0,
            ) -> tuple[list[Snapshot], list[str], list[str]]:
     """Snapshots for a question, notes on anything that degraded, and the
     model's raw replies — its search queries, then the web search — for audit.
@@ -263,8 +272,10 @@ def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
     model, if given, proposes search queries and each query's top pages are
     taken, deduplicated by title, up to `n`; without a model the question
     itself is the query. Then, with `web_search` and `n_web`, up to `n_web`
-    web pages follow Wikipedia's, under fill rule `web_fill` (_web_pages). A
-    search that returns nothing is a note, not silence.
+    web pages follow Wikipedia's, under fill rule `web_fill` (_web_pages).
+    Then, with `factcheck_search` and `n_factcheck`, up to `n_factcheck`
+    fact-check articles (occam.factcheck), filled the same way on hosts not
+    already held. A search that returns nothing is a note, not silence.
     """
     notes: list[str] = []
     if urls:
@@ -296,4 +307,9 @@ def gather(question: str, *, at: datetime, urls: Optional[Sequence[str]] = None,
     if web_search is not None and n_web > 0:
         snaps += _web_pages(question, n_web, web_search, at=at, http_get=http_get,
                             notes=notes, raw=raw, fill=web_fill)
+    if factcheck_search is not None and n_factcheck > 0:
+        held = [host(x.urls[0]) for x in snaps if x.text.strip()]
+        snaps += _web_pages(question, n_factcheck, factcheck_search, at=at, http_get=http_get,
+                            notes=notes, raw=raw, fill=web_fill, what="fact-check search",
+                            taken=held)
     return snaps, notes, raw

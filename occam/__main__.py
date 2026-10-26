@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -223,6 +224,21 @@ def _what_if(artifact: Artifact, answer: Answer, drops: list[str], rejects: list
     return 0
 
 
+def _factcheck_search(n: int) -> tuple[object, bool]:
+    """The fact-check search for `--factcheck n`, or None for 0. The second
+    value is False when n asks for one and no key is set: refused before any
+    model is built, since a run without it would record "none found" for
+    what was never searched."""
+    if n <= 0:
+        return None, True
+    key = os.environ.get("GOOGLE_FACTCHECK_API_KEY", "").strip()
+    if not key:
+        print("--factcheck needs GOOGLE_FACTCHECK_API_KEY in the environment", file=sys.stderr)
+        return None, False
+    from .factcheck import factcheck_search
+    return factcheck_search(key), True
+
+
 def _refuse_overwrite(paths: list[Path]) -> bool:
     """True (and says so) if any artifact would be written over. Checked before
     a model is built: a registered run's artifacts are gitignored, so one
@@ -327,6 +343,9 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--sources", type=int, default=3)
     ask.add_argument("--web", type=int, default=3,
                      help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
+    ask.add_argument("--factcheck", type=int, default=0,
+                     help="fact-check articles found by Google Fact Check Tools after the web "
+                          "pages (#230); needs GOOGLE_FACTCHECK_API_KEY. 0 for none")
     ask.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     ask.add_argument("--out")
     ask.add_argument("--calibration")
@@ -367,6 +386,9 @@ def main(argv: list[str] | None = None) -> int:
                          "refused if a kept one was made by another model")
     ms.add_argument("--web", type=int, default=3,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
+    ms.add_argument("--factcheck", type=int, default=0,
+                    help="fact-check articles found by Google Fact Check Tools after the web "
+                         "pages (#230); needs GOOGLE_FACTCHECK_API_KEY. 0 for none")
     ms.add_argument("--questions", metavar="FILE",
                     help="one question per line (blank and #-lines skipped) instead of the "
                          "built-in ten, e.g. a held-out set (#226)")
@@ -476,6 +498,9 @@ def main(argv: list[str] | None = None) -> int:
         paths = [outdir / f"q{i:02d}.json" for i in range(1, len(questions) + 1)]
         if not args.resume and _refuse_overwrite(paths):
             return 2
+        fc_search, ok = _factcheck_search(args.factcheck)
+        if not ok:
+            return 2
         model = make_model(args.model)
         # A resumed run keeps what it wrote and never writes over it. Every kept
         # question must come from this model: one run, one instrument.
@@ -497,17 +522,32 @@ def main(argv: list[str] | None = None) -> int:
         pooled = {"ok": 0, "markup": 0, "punctuation": 0, "absent": 0, "unresolvable": 0}
         claimed = abstained = 0
         statuses: dict[str, int] = {}
+        written = 0
         for i, q in enumerate(questions, 1):
             path = outdir / f"q{i:02d}.json"
+            try:
+                if path not in kept:
+                    answer, artifact = run(q, model,
+                                           params=Params(judge_same=not args.no_judge_same,
+                                                         web_sources=args.web,
+                                                         factcheck_sources=args.factcheck),
+                                           web_search=getattr(model, "web_search", None)
+                                           if args.web else None,
+                                           factcheck_search=fc_search)
+                    path.write_text(stored_run(answer, artifact))
+                    written += 1
+            except BaseException:
+                # A pass that stops still spent what it spent (#233): the calls
+                # for the question in progress were billed, and a resume asks
+                # them again. Said on every exit, so it never reads as nothing.
+                if hasattr(model, "credits"):
+                    print(f"pass stopped at q{i:02d}: spent {model.credits:g} kie.ai credits, as "
+                          f"the provider counted them, over {written} question(s) written and "
+                          f"q{i:02d}'s calls, which were discarded", file=sys.stderr, flush=True)
+                raise
             if path in kept:
                 answer = Answer.model_validate(kept[path]["answer"])
                 print(f"q{i:02d} kept from an earlier pass ({kept[path]['artifact']['as_of']})")
-            else:
-                answer, artifact = run(q, model, params=Params(judge_same=not args.no_judge_same,
-                                                               web_sources=args.web),
-                                       web_search=getattr(model, "web_search", None)
-                                       if args.web else None)
-                path.write_text(stored_run(answer, artifact))
             c = answer.counters
             for v in ("absent", "punctuation", "unresolvable"):
                 pooled[v] += int(c[f"{v}_frac"].n)
@@ -517,7 +557,8 @@ def main(argv: list[str] | None = None) -> int:
             key = "abstained" if answer.abstained else answer.status.value
             statuses[key] = statuses.get(key, 0) + 1
             print(f"q{i:02d} [{key:11}] verified {c['verified_frac'].n:g} of {c['verified_frac'].of}"
-                  f", absent {c['absent_frac'].n:g}  {answer.conclusion or answer.abstain_reason}"[:200])
+                  f", absent {c['absent_frac'].n:g}  {answer.conclusion or answer.abstain_reason}"[:200],
+                  flush=True)
         print(f"\npooled over {claimed} quotes claimed: verified {pooled['ok']}, absent "
               f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
               f"{pooled['unresolvable']}")
@@ -551,14 +592,19 @@ def main(argv: list[str] | None = None) -> int:
         out = Path(args.out or f"traces/occam/{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.json")
         if _refuse_overwrite([out]):
             return 2
+        fc_search, ok = _factcheck_search(args.factcheck)
+        if not ok:
+            return 2
         model = make_model(args.model)
         answer, artifact = run(args.question, model, urls=args.url,
                                n_sources=args.sources,
                                params=Params(k_argue=args.k, k_attack=args.k,
                                              judge_same=not args.no_judge_same,
-                                             web_sources=args.web),
+                                             web_sources=args.web,
+                                             factcheck_sources=args.factcheck),
                                calibration=cal,
-                               web_search=getattr(model, "web_search", None) if args.web else None)
+                               web_search=getattr(model, "web_search", None) if args.web else None,
+                               factcheck_search=fc_search)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))
         _show(answer, artifact)

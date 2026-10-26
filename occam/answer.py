@@ -151,6 +151,13 @@ class Params(BaseModel):
     # was given, so it records what happened, not what was hoped for. Replay
     # reads the stored snapshots and never searches.
     web_sources: int = 0
+    # How many fact-check articles were asked for after the web pages (#230):
+    # found by Google Fact Check Tools (occam.factcheck), then fetched and
+    # quoted like any page, on hosts not already held. The service's rating is
+    # never read by anything that decides. 0 — as in every artifact made
+    # before it — means none. Set by `run` from what it was given; replay
+    # reads the stored snapshots and never searches.
+    factcheck_sources: int = 0
     # Whether a quote answering a question that asks for a cause must show it
     # gives that reason (occam.reason). 2 (#194): its words carry a causal link
     # and a fresh judge call says so, or it stays at hypothesis. 3 (#213): a
@@ -312,20 +319,26 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         n_sources: int = 3, params: Optional[Params] = None,
         as_of: Optional[datetime] = None, http_get: HttpGet = urllib_get,
         calibration: Optional[Calibration] = None,
-        web_search: Optional[WebSearch] = None) -> tuple[Answer, Artifact]:
+        web_search: Optional[WebSearch] = None,
+        factcheck_search: Optional[WebSearch] = None) -> tuple[Answer, Artifact]:
     """The whole pipeline. The clock is read once, here, and persisted.
 
     With `web_search`, `params.web_sources` web pages are gathered beside
-    Wikipedia's (#209); without it, none are, and the params say 0."""
+    Wikipedia's (#209); without it, none are, and the params say 0. The same
+    holds for `factcheck_search` and `params.factcheck_sources` (#230)."""
     params = (params or Params()).model_copy(update={"model": model.name})
     if web_search is None or urls:
         params = params.model_copy(update={"web_sources": 0})
+    if factcheck_search is None or urls:
+        params = params.model_copy(update={"factcheck_sources": 0})
     as_of = as_of or datetime.now(timezone.utc)
     start = len(getattr(model, "served", ()))
     snaps, notes, gather_replies = gather(question, at=as_of, urls=urls, n=n_sources,
                                           http_get=http_get, model=model,
                                           web_search=web_search, n_web=params.web_sources,
-                                          web_fill=params.web_fill)
+                                          web_fill=params.web_fill,
+                                          factcheck_search=factcheck_search,
+                                          n_factcheck=params.factcheck_sources)
     readable = [s for s in snaps if s.text.strip()]
     argue_replies: list[str] = []
     support_replies: list[str] = []

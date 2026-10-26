@@ -1445,3 +1445,231 @@ figures the model does not drop.
   report.
 - Controls: **1.60** (→ 9013.85).
 - Run 11: **119.13** (→ 8894.72), against 119.08 reported.
+
+## Amendment 12 — 2026-10-13: runs 12 and 13, fact-check articles on claims set 1 (#230)
+
+Added before any live call on these questions or with fact-check sources.
+Nothing above is changed.
+
+**Why.** #190 measured Google Fact Check Tools on the 30 registered questions:
+a review states the answer for only 5, each as a side effect of debunking a
+conspiracy claim. But the service covers claim-style questions well. A claim
+is also the first kind of question where an outside reference exists: a
+professional fact-checker's published rating.
+
+**The change: a fact-check source** (#230, commit aa525cd). `claims:search`
+names review articles. Each is fetched, snapshotted and quoted by Occam like
+any web page, after the web pages, under fill rule 2, on hosts not already
+held. The rating stays in the search reply, which is kept for audit, and no
+model prompt or check reads it. `Params.factcheck_sources` records how many
+were asked for. No check changes: `rules 4`, argue prompt 5, and the support,
+covers and reason checks are as in runs 10 and 11.
+
+**Claims set 1** is `occam/questions/claims-1.txt`, committed with this
+amendment. I drafted it and the user approved it before any call. It has 20
+yes/no questions, each the proposition of a review that `claims:search`
+returns for the question as written. The answer each review supports is in
+`claims-1.labels.json`, read from its rating by hand: **15 no, 5 yes**.
+Fact-checkers mostly review false claims, so the skew is the population's,
+and agreement is reported separately for each label. Nothing in `occam/`
+reads the labels.
+
+**Two arms, same model, same day, run one after the other:**
+
+    python -m occam measure --questions occam/questions/claims-1.txt \
+        --model kie/gemini-3.1-pro --web 3 --factcheck 0 --out traces/occam/run12
+    python -m occam measure --questions occam/questions/claims-1.txt \
+        --model kie/gemini-3.1-pro --web 3 --factcheck 3 --out traces/occam/run13
+
+Run 12 is the arm without fact-checks, so any difference in run 13 is
+attributable to the fact-check pages. The two arms do not hold the same web
+pages, because search results vary between calls. So the comparison is
+between arms, not question by question.
+
+**Two predictions from reading the checks before any run:**
+
+- **The covers veto compares the exact set of negation words.** `cover_veto`
+  vetoes "Vaccines do not cause autism." against "There is no evidence that
+  vaccines cause autism." (`negation differs: no, not`) before any judge
+  reads them. A "no" answer is usually phrased with a different negation from
+  its covering source, so "no" claims should rarely be covered.
+- **Six questions trigger the reason check** (`asks_for_a_cause`: "Does X
+  cause Y?"). The check was written for "why" questions. A "no" answer gives
+  no reason, so it should stay at `hypothesis`.
+
+Neither is changed before these runs. If they hold, they are findings about
+the checks, to be addressed in a later amendment with its own held-out set.
+
+**Predictions.** Each arm has 20 questions.
+
+1. **Gathering (run 13).** At least one readable fact-check page for 13–20 of
+   20 questions. Of the fact-check URLs fetched, 15–50% are unreadable (#190
+   found 5 of 13).
+2. **Established, run 12:** 2–8 of 20.
+3. **Established, run 13:** at least run 12's count, and at most 5 more.
+4. **The negation veto.** In each arm, at most 3 of the 15 "no"-labelled
+   questions are established, and the established rate on "yes" questions is
+   at least the rate on "no" questions.
+5. **The reason check.** In each arm, at most 1 of the 6 cause-shaped
+   questions is established.
+6. **No established answer disagrees with its label**, in either arm. A
+   miss here is the most serious result possible: the mechanism would have
+   certified a claim that a fact-checker rejected. If it happens, it is
+   reported first.
+7. **Abstentions:** at most 3 per arm.
+8. **Agreement, read by me.** Of the answers given, at least 85% per arm
+   agree with the label, judged on the conclusion alone and reported per label.
+9. **Fact-check pages are used (run 13).** In at least 8 of 20, a fact-check
+   page holds a verified quote in the argue output.
+10. **Spend:** 180–320 credits per arm.
+
+**Reading.** Statuses, abstentions and spend come from the stored artifacts
+and kie.ai's balance. Predictions 8 and 9 are readings. Each is reported with
+the conclusions listed, so it can be checked.
+
+**Change before any run, 2026-10-13: the model is `kie/gemini-3-pro`.**
+`kie/gemini-3.1-pro` now refuses every prompt containing an ampersand. It
+answers HTTP 200 with `{'code': 500, 'msg': 'The server is currently being
+maintained…'}`:
+- "A & B" fails, and so does "Richmond, VA: R.T. Hill & Co.".
+- The same line with "and" passes.
+- Sending the character as the JSON escape `&` fails too.
+
+Wikipedia's "Flat Earth" article has an "&" in its references, so the argue
+prompt for q03 could never pass. Each refusal took about 70 s because the
+client retries a 5xx three times with pauses. The first two launches failed
+on q01's argue call in both arms. No artifact was written, and about 5
+credits were spent on the attempts and the diagnosis. The aborted attempts'
+logs and balances are kept as `traces/occam/run1{2,3}-*-attempt{1,2}.*`.
+
+Replacing "&" in the sources would change the text that quotes are checked
+against, so the model is changed instead:
+- `kie/gemini-3-pro`, the same family one version earlier, on the same
+  gateway and the same search tool, accepts "&".
+- On the flat-Earth prompt it argued in 39 s with 2 of 2 quotes verified,
+  and its web search returned 8 URLs.
+- OpenRouter serves `google/gemini-3.1-pro-preview`, but that account has no
+  credit left.
+
+Both arms use the same model, so the comparison between runs 12 and 13 is
+intact. Comparisons with runs 5–11 now cross a model change and are not
+claimed. The commands above run with `--model kie/gemini-3-pro`. The
+predictions are unchanged.
+
+**Change before the counted runs, 2026-10-22: both arms run again, fresh, on
+one day.** The first launch on `kie/gemini-3-pro` began on 2026-10-13 and stopped
+when the session running it ended. Run 12 had written 19 of its 20 questions and
+run 13 had not started. Resuming would put the two arms nine days apart, and the
+web results they draw on would differ by more than a single day's drift, which
+breaks "same model, same day". So both arms run again from the start, one after
+the other, with the commands above. The partial run is kept as
+`traces/occam/run12-attempt3/`, with its log and opening balance, and is not
+scored. Its interim statuses were read while it ran. The questions, labels and
+predictions are unchanged, so reading them changes nothing that is scored. It
+spent about 302 credits on 19 questions: the balance went from 8873.98 to 8572.10.
+`--resume` is used only to recover from a failure within the same day.
+
+**Change before the counted runs, 2026-10-22 evening: "back to back" replaces
+"same day".** One arm takes about nine hours: the partial run 12 wrote 19
+questions between 14:53 and 23:32 on 2026-10-13. So the two arms together take
+about 17 hours and cannot share a calendar day, whenever they start. What the
+rule protects is that both arms see the web at nearly the same time, so run 13
+starts as soon as run 12 ends. Both start from the beginning at about 21:00 IST
+on 2026-10-22.
+
+On 2026-10-22, kie/gemini-3-pro failed about half its calls during the day. Each
+failure was a `524 '2 times retry fail'` or a `500 'Network error'` within 3–9 s,
+including on two-line prompts. The probe is `traces/occam/probe_kie.py`: ten
+single-attempt calls. Its log is `traces/occam/probe_kie.log`, which shows a run of
+0–9/10 every half hour from 12:59, then 10/10 at 20:55 and 8/10 at 20:57.
+Three morning launches each lost the question in progress. The two questions
+they finished are kept as `traces/occam/run12-attempt4/` and are not scored.
+
+The runner is `traces/occam/run_both_12_13.sh`. After a failed call, it resumes up
+to 30 times, five minutes apart. A failed call records nothing, and `--resume`
+only skips questions already written, so a resume changes nothing that is scored.
+Every resume is listed with the results.
+
+### Results — runs 12 and 13 (2026-10-22/23)
+
+Run 12, without fact-checks, ran from 20:57 on 2026-10-22 to 02:39 on 2026-10-23.
+Run 13, with up to three fact-check pages, began at 03:12 and ended at 18:23.
+Both were on `kie/gemini-3-pro`, at commit `e130853`. The scoring is
+`scripts/score_claims.py`, and its full output is kept as
+`traces/occam/score-run12-13.txt`. Every one of the 40 answers replays byte for
+byte, and none abstained.
+
+**Seven of the ten predictions hold. Three fail, and the one that matters most
+is 3: the fact-check arm established fewer answers, not more.**
+
+| # | Prediction | Run 12 | Run 13 | |
+|---|---|---|---|---|
+| 1 | readable fact-check page for 13–20 of 20; 15–50% of fetched unreadable | — | 18 of 20; 28 of 63 unreadable (44%) | holds |
+| 2 | run 12 establishes 2–8 | 4 | — | holds |
+| 3 | run 13 establishes ≥ run 12, ≤ run 12 + 5 | 4 | **3** | **fails** |
+| 4 | ≤ 3 "no" established; "yes" rate ≥ "no" rate | 2/15; 2/5 ≥ 2/15 | 3/15; **0/5 < 3/15** | **fails in run 13** |
+| 5 | ≤ 1 of 6 cause-shaped established | 1 (q20) | 0 | holds |
+| 6 | no established answer disagrees with its label | 0 of 4 | 0 of 3 | holds |
+| 7 | ≤ 3 abstentions | 0 | 0 | holds |
+| 8 | ≥ 85% of answers agree with the label, per label | 15/15 no, 5/5 yes | 15/15 no, 5/5 yes | holds |
+| 9 | a fact-check page holds a verified quote in ≥ 8 of 20 | — | 16 of 20 | holds |
+| 10 | 180–320 credits per arm | 221.81 | **357.31** | **fails** |
+
+**Established answers:**
+- Run 12: q05 (we use our entire brain), q14 (Pluto reclassified), q16 (the
+  ozone hole is recovering) and q20 (smoking is the number one cause of lung
+  cancer).
+- Run 13: q03 (the Earth is not flat), q13 (red does not make bulls angry) and
+  q14.
+- All seven agree with their label. On reading, all 40 conclusions agree with
+  their label.
+
+**What the fact-check pages did.**
+- **q03 was established on fact-check pages alone.** The answer "the Earth is
+  not flat" is quoted from fullfact.org and science.feedback.org, which are two
+  hosts, both reached through the fact-check search. In run 12, the same
+  question stopped at an inference step.
+- **In q13, snopes.com is among the hosts** stating the answer, alongside
+  wtamu.edu, ripleys.com and livescience.com.
+- **Fact-check pages also added pairs for the negation veto to rule out.** It
+  vetoed 67 of 121 cover pairs in run 13, against 35 of 102 in run 12.
+- **The three answers run 13 lost are not traceable to the fact-check pages.**
+  q05, q16 and q20 each ended on "rests on a single source" with different
+  wording and different web pages. In q16, for example, the answer became "Ozone levels
+  stabilized by the mid-1990s and began to recover in the 2000s", with numbers
+  that no other source matched. The two arms do not hold the same web pages.
+  The unscored partial attempt (`run12-attempt3`, 2026-10-13) gives one
+  measure of how much that moves the count. It used run 12's settings and
+  established 2 of its 19 questions, against run 12's 4 of 20, so the same
+  arm differed by two. That is one comparison, not an interval, and it is not
+  used to score any prediction. **This run does not show that fact-check pages
+  raise the established count. It does show that they can carry an answer to
+  `established` on their own.**
+
+**The two predicted weak spots hold.**
+- **The negation veto** ruled out 35 of 102 cover pairs in run 12 and 67 of
+  121 in run 13. "No" answers were established anyway when both sources used
+  the same word ("not flat", "not flat"). The rule therefore rewards matching
+  wording, not agreement.
+- **The reason check** held q01, q07 and q15 in run 12 and q01 and q07 in run
+  13. In each case the judge said the quote "does not give the reason asked
+  for" on a yes/no question.
+
+**Why prediction 10 failed is not measured.** Run 13 needed 16 passes. Fifteen
+stopped on a failed call: 10 × `524`, 4 × `500 Network error` and 1 ×
+`RemoteDisconnected`. The calls made for the question in progress were billed
+and then discarded on resume. The provider's own count is printed only by a
+pass that completes, so the waste cannot be separated from the 357.31.
+
+**Passes.**
+- Run 12 needed 8 passes. Seven stopped: 4 × `524`, 2 × `500` and 1 × "No
+  space left on device", which was raised when opening q09.json. Nothing was
+  written by that pass, and a later pass wrote q09 whole.
+- All 40 files parse.
+
+**What follows.**
+1. The negation veto should compare polarity, not the set of negation words.
+2. The reason check should not fire on yes/no questions.
+3. Both changes need a fresh claims set, because this one has now been seen.
+4. kie/gemini-3-pro's gateway failure rate makes per-call retries the limiting
+   factor in a run's cost.

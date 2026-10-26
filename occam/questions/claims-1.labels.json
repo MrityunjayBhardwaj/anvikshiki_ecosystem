@@ -1,0 +1,187 @@
+{
+ "retrieved": "2026-10-13",
+ "search": "Google Fact Check Tools claims:search, query as written, languageCode=en, first page",
+ "rows": [
+  {
+   "question": "Do vaccines cause autism?",
+   "answer": "no",
+   "claim": "\"The claim 'vaccines do not cause autism' is not an evidence-based claim\"",
+   "publisher": "factcheck.afp.com",
+   "rating": "False",
+   "review": "https://factcheck.afp.com/doc.afp.com.84N6663",
+   "review_date": "2025-11-20T23:50:00Z"
+  },
+  {
+   "question": "Does 5G spread COVID-19?",
+   "answer": "no",
+   "claim": "5G WiFi networks could be responsible for the rapid spread of the new coronavirus.",
+   "publisher": "fullfact.org",
+   "rating": "This is not true. There is no evidence that 5G WiFi networks are linked to the new coronavirus.",
+   "review": "https://fullfact.org/health/5G-not-accelerating-coronavirus/",
+   "review_date": "2020-03-31T00:00:00Z"
+  },
+  {
+   "question": "Is the Earth flat?",
+   "answer": "no",
+   "claim": "The Earth is flat.",
+   "publisher": "fullfact.org",
+   "rating": "We have abundant evidence going back thousands of years that the Earth is roughly spherical.",
+   "review": "https://fullfact.org/online/earth-is-spherical-not-flat/",
+   "review_date": "2023-03-03T00:00:00Z"
+  },
+  {
+   "question": "Were the Moon landings faked?",
+   "answer": "no",
+   "claim": "\"No proof US landed on moon\"",
+   "publisher": "voanews.com",
+   "rating": "False",
+   "review": "https://www.voanews.com/a/fact-check-former-russian-space-chief-repeats-false-moon-landing-conspiracy-theory/7085470.html",
+   "review_date": "2023-05-09T17:46:33Z"
+  },
+  {
+   "question": "Do humans use only 10 percent of their brains?",
+   "answer": "no",
+   "claim": "Humans only use 10% of their brains.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/the-ten-percent-myth/",
+   "review_date": "2000-02-08T04:00:00Z"
+  },
+  {
+   "question": "Is the Great Wall of China visible from the Moon?",
+   "answer": "no",
+   "claim": "The Great Wall of China is the only man-made object visible from the moon.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/great-wall-from-moon/",
+   "review_date": "2001-11-11T21:05:06Z"
+  },
+  {
+   "question": "Does cracking your knuckles cause arthritis?",
+   "answer": "no",
+   "claim": "Cracking your knuckles will give you arthritis.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/cracking-knuckles-arthritis/",
+   "review_date": "2021-01-29T08:44:31Z"
+  },
+  {
+   "question": "Was the 1918 flu pandemic caused by vaccines?",
+   "answer": "no",
+   "claim": "Experimental bacterial meningitis vaccine caused the 1918 Spanish Flu outbreak",
+   "publisher": "factcheck.afp.com",
+   "rating": "False",
+   "review": "https://factcheck.afp.com/facebook-posts-falsely-claim-bacterial-meningitis-vaccine-not-h1n1-virus-caused-1918-spanish-flu",
+   "review_date": "2020-11-24T08:20:00Z"
+  },
+  {
+   "question": "Did HAARP cause the northern lights in May 2024?",
+   "answer": "no",
+   "claim": "May 2024 auroras were caused by experiments from High-frequency Active Auroral Research Program (HAARP) experiments",
+   "publisher": "science.feedback.org",
+   "rating": "Incorrect",
+   "review": "https://science.feedback.org/review/colorful-auroras-seen-may-2024-caused-by-mass-ejections-from-sun-not-haarp-experiments/",
+   "review_date": "2024-05-11T00:00:00Z"
+  },
+  {
+   "question": "Does sugar make children hyperactive?",
+   "answer": "no",
+   "claim": "Sugar makes kids hyperactive.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/sugar-hyperactivity-children/",
+   "review_date": "2024-04-03T11:00:04Z"
+  },
+  {
+   "question": "Is the HPV vaccine linked to infertility?",
+   "answer": "no",
+   "claim": "HPV vaccines cause infertility",
+   "publisher": "factcheck.afp.com",
+   "rating": "False",
+   "review": "https://factcheck.afp.com/doc.afp.com.78JV7NR",
+   "review_date": "2025-10-24T10:52:00Z"
+  },
+  {
+   "question": "Does shaving make hair grow back thicker?",
+   "answer": "no",
+   "claim": "Shaving makes your hair grow back thicker, faster, and fuller.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/thick-talk/",
+   "review_date": "2003-10-01T20:36:38Z"
+  },
+  {
+   "question": "Do bulls get angry at the colour red?",
+   "answer": "no",
+   "claim": "The color red triggers bulls, which is why they charge at a matador's red flag (muleta) in a bullfight.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/red-triggers-bulls/",
+   "review_date": "2024-06-17T19:00:04Z"
+  },
+  {
+   "question": "Is Pluto still a planet?",
+   "answer": "no",
+   "claim": "The International Astronomical Union (IAU) issued a press release stating that Pluto has been reclassified as a planet.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/pluto-officially-reclassified-planet/",
+   "review_date": "2018-01-29T00:46:53Z"
+  },
+  {
+   "question": "Did HAARP cause earthquakes?",
+   "answer": "no",
+   "claim": "HAARP lasers triggered Venezuela quakes",
+   "publisher": "factcheck.afp.com",
+   "rating": "False",
+   "review": "https://factcheck.afp.com/doc.afp.com.B8U969E",
+   "review_date": "2026-07-01T22:28:00Z"
+  },
+  {
+   "question": "Is the ozone layer recovering?",
+   "answer": "yes",
+   "claim": "The ozone layer is healing",
+   "publisher": "science.feedback.org",
+   "rating": "Mostly_Accurate",
+   "review": "https://science.feedback.org/review/the-antarctic-ozone-layer-is-recovering-but-the-independent-claim-fails-to-grasp-significance-of-study-it-relies-on/",
+   "review_date": "2020-03-26T00:00:00Z"
+  },
+  {
+   "question": "Is there an undersea volcano off the coast of Oregon that may erupt soon?",
+   "answer": "yes",
+   "claim": "Scientists say an undersea volcano the size of a city off the coast of Oregon may erupt soon.",
+   "publisher": "snopes.com",
+   "rating": "True",
+   "review": "https://www.snopes.com/fact-check/volcano-oregon-erupt/",
+   "review_date": "2025-07-18T14:25:23Z"
+  },
+  {
+   "question": "Can you count seconds to tell how far away lightning is?",
+   "answer": "yes",
+   "claim": "Can you count seconds to figure out how far away a lightning strike is?",
+   "publisher": "wusa9.com",
+   "rating": "True",
+   "review": "https://www.wusa9.com/article/news/verify/verify-lightnight-measuring-distance/65-5d40ef89-474d-4232-951b-aa664117d2cc",
+   "review_date": "2023-06-27T03:12:00Z"
+  },
+  {
+   "question": "Did the 1918 flu become known as the Spanish flu because of wartime censorship?",
+   "answer": "yes",
+   "claim": "The 1918 flu pandemic became known as the “Spanish flu” because wartime censors minimized reports of the illness while the Spanish press did not",
+   "publisher": "usatoday.com",
+   "rating": "True",
+   "review": "https://www.usatoday.com/story/news/factcheck/2020/03/23/fact-check-how-did-1918-pandemic-get-name-spanish-flu/2895617001/",
+   "review_date": "2020-03-23T00:00:00Z"
+  },
+  {
+   "question": "Does smoking cause lung cancer?",
+   "answer": "yes",
+   "claim": "Smoking doesn’t cause cancer.",
+   "publisher": "aap.com.au",
+   "rating": "False. Decades of scientific studies have established links between tobacco smoking and a range of cancers.",
+   "review": "https://www.aap.com.au/factcheck/science-stubs-out-claim-smoking-doesnt-cause-cancer/",
+   "review_date": "2025-02-07T03:55:12Z"
+  }
+ ],
+ "note": "The answer each review supports, read from its rating by hand. A label for reading results, never an input to Occam: nothing in occam/ reads this file."
+}
