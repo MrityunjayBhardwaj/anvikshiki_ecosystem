@@ -7,6 +7,8 @@ import json
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
+import pytest
+
 from occam.answer import Params, canonical, replay, run
 from occam.covers import CoverPair, cover_veto, covered_by, covers_prompt
 from occam.model import ScriptedModel
@@ -76,6 +78,41 @@ def test_a_negation_on_one_side_is_vetoed():
                       "The bridge did not collapse due to flutter.") == "negation differs: not"
 
 
+# Two denials worded differently, as runs 12 and 13 met them (#235).
+DENIAL = "Vaccines do not cause autism."
+DENIALS = ("The scientific consensus is that there is no link between the MMR vaccine and autism",
+           "Vaccines don't cause autism",
+           "Viruses cannot be transmitted by radio waves, and do not spread on them")
+
+
+@pytest.mark.parametrize("source", DENIALS)
+def test_under_rule_2_two_denials_in_different_words_are_vetoed(source):
+    assert cover_veto(DENIAL, source).startswith("negation differs: ")
+
+
+@pytest.mark.parametrize("source", DENIALS)
+def test_under_rule_3_two_denials_in_different_words_reach_the_judge(source):
+    assert cover_veto(DENIAL, source, 3) == ""
+
+
+@pytest.mark.parametrize("answer,source", [
+    (DENIAL, "Vaccines cause autism."),
+    ("Vaccines cause autism.", "Vaccines don't cause autism"),
+    ("The Great Wall cannot be seen from the Moon.", "The Great Wall can be seen from the Moon."),
+])
+def test_under_rule_3_a_negation_on_one_side_is_still_vetoed(answer, source):
+    assert cover_veto(answer, source, 3).startswith("negation on one side only: ")
+
+
+def test_under_rule_3_a_denial_in_each_of_two_clauses_is_not_set_against_one():
+    assert cover_veto("The Earth is not flat.", "The Earth is not flat and it is not a disc.", 3) == ""
+
+
+def test_under_rule_3_the_number_veto_is_unchanged():
+    assert cover_veto("Wegener did not propose it in 1912.", "Wegener did not propose it.", 3) == \
+        "the answer states a number the source does not: 1912"
+
+
 # ── reading the replies ────────────────────────────────────
 
 PAIR = CoverPair(answer="a", source="s", text_answer="A.", text_source="S.")
@@ -135,6 +172,37 @@ def test_the_adversarial_pair_is_vetoed_before_any_judge():
     assert art.cover_replies == () and ans.status == Status.HYPOTHESIS
     assert not any("state everything the ANSWER" in p for p in model.prompts)
 
+
+
+# run 13, q01: the answer and a second host's denial, in other words (#235)
+DENY_ANSWER = "Vaccines don't cause autism."
+DENY_SOURCE = "The scientific consensus is that there is no link between the MMR vaccine and autism."
+
+
+def test_two_denials_in_other_words_reach_the_judge_and_can_establish():
+    ans, art, model = ask([COVERS, COVERS], answer=DENY_ANSWER, source=DENY_SOURCE)
+    assert art.params.rules == 5 and art.params.covers_check == 3
+    assert ans.status == Status.ESTABLISHED, ans.status_bound_by
+    assert sum("state everything the ANSWER" in p for p in model.prompts) == 2
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_rules_4_the_same_denials_are_vetoed_before_any_judge():
+    """The control: runs 6-13's veto, on the same pages."""
+    ans, art, model = ask([], answer=DENY_ANSWER, source=DENY_SOURCE, rules=4)
+    assert art.cover_replies == () and ans.status == Status.HYPOTHESIS
+    assert not any("state everything the ANSWER" in p for p in model.prompts)
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_each_artifact_replays_under_its_own_veto():
+    """A rule-3 run read back under rule 2 loses the cover it was judged to
+    have: the veto is read from the artifact, not from the code's latest."""
+    ans, art, _ = ask([COVERS, COVERS], answer=DENY_ANSWER, source=DENY_SOURCE)
+    stored = json.loads(art.model_dump_json())
+    stored["params"]["covers_check"] = 2
+    assert replay(type(art).model_validate(stored)).status == Status.HYPOTHESIS
+    assert ans.status == Status.ESTABLISHED
 
 def test_covering_is_one_way():
     """The source said less than the answer: a judge saying `covers` for

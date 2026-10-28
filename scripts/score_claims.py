@@ -60,7 +60,8 @@ def score_one(path: Path) -> dict:
     named = fc_urls(art)
     fc_snaps = [s for s in snaps if set(s.urls) & set(named)]
     fc_ids = {s.id for s in fc_snaps}
-    pairs = cover_pairs(argued, hosts_of_snapshots(snaps)) if art.params.covers_check >= 2 else ()
+    pairs = (cover_pairs(argued, hosts_of_snapshots(snaps), art.params.covers_check)
+             if art.params.covers_check >= 2 else ())
     return {
         "q": path.stem, "question": art.question, "status": ans.status.value,
         "abstained": ans.abstained, "replay_ok": canonical(replay(art)) == stored_canonical(stored),

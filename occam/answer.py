@@ -67,7 +67,9 @@ RULES: dict[int, dict[str, int]] = {
     3: dict(counter_set=3, reason_wording=2, veto_words=2, shown_order=2, bound_ties=2,
             why_check=2, covers_check=1),          # run 5
     4: dict(counter_set=3, reason_wording=2, veto_words=2, shown_order=2, bound_ties=2,
-            why_check=3, covers_check=2),          # runs 6-8
+            why_check=3, covers_check=2),          # runs 6-13
+    5: dict(counter_set=3, reason_wording=2, veto_words=3, shown_order=2, bound_ties=2,
+            why_check=3, covers_check=3),          # #235, #237: both vetoes read polarity
 }
 LATEST_RULES = max(RULES)
 
@@ -129,9 +131,10 @@ class Params(BaseModel):
     # have none. An artifact without the field keeps the wording it was made with.
     reason_wording: int = RULES[LATEST_RULES]["reason_wording"]
     # Which negation words the same-answer veto reads (occam.equiv
-    # NEGATIONS_BY_SET). 2 (#192): "without" is not a negation. An artifact
-    # without the field was judged under 1, and its stored replies line up
-    # with set 1's pairs only.
+    # NEGATIONS_BY_SET). 2 (#192): "without" is not a negation. 3 (#237): set
+    # 2's words, compared by polarity, so two denials worded differently reach
+    # the judge. An artifact without the field was judged under 1, and its
+    # stored replies line up with set 1's pairs only.
     veto_words: int = RULES[LATEST_RULES]["veto_words"]
     # Which order picks the answer shown and orders the positions. 2 (#191):
     # contested above open — a contested answer has a coherent case for it,
@@ -167,8 +170,11 @@ class Params(BaseModel):
     why_check: int = RULES[LATEST_RULES]["why_check"]
     # Whether a second source can corroborate an answer by covering it — its
     # sentence stating every claim the answer states, judged one way
-    # (occam.covers, #212). 2: yes, beside the claim-lens groups. An artifact
-    # without the field was made before it and replays without it.
+    # (occam.covers, #212). 2: yes, beside the claim-lens groups. 3 (#235):
+    # its veto rules a pair out for a negation on one side only, not for a
+    # different negation word, so "do not cause" may be covered by "no link".
+    # An artifact without the field was made before it and replays without
+    # it; each run replays under its own veto.
     covers_check: int = RULES[LATEST_RULES]["covers_check"]
     # How web pages are filled (occam.gather._web_pages). 1: ask the search
     # for `web_sources` pages and fetch those. 2 (#216): ask for three times
@@ -358,7 +364,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                                            temperature=params.t_support,
                                            rule=params.why_check)
         if params.covers_check >= 2:
-            cover_replies = judge_covers(model, cover_pairs(argued, hosts_of_snapshots(snaps)),
+            cover_replies = judge_covers(model, cover_pairs(argued, hosts_of_snapshots(snaps),
+                                                            params.covers_check),
                                          temperature=params.t_same)
         attack_replies, _ = attack(model, question, argued, k=params.k_attack,
                                    temperature=params.t_attack)
@@ -406,7 +413,8 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
                                                   artifact.reason_replies,
                                                   artifact.params.why_check)
                                     if artifact.params.why_check >= 2 else None),
-                     covered_by=(covered_by(cover_pairs(argued, hosts_of_snapshots(snaps)),
+                     covered_by=(covered_by(cover_pairs(argued, hosts_of_snapshots(snaps),
+                                                        artifact.params.covers_check),
                                             artifact.cover_replies)
                                  if artifact.params.covers_check >= 2 else None))
     return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,

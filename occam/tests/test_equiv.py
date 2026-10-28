@@ -84,6 +84,26 @@ def test_nothing_vetoed_means_nothing_decided():
     assert veto("It rose.", "It fell.", "claim", "?") == ""       # the judge's job, not the veto's
 
 
+# run 13, q01 and q12: two denials worded differently (#237)
+@pytest.mark.parametrize("a,b", [
+    ("Vaccines don't cause autism", "there is no link between the MMR vaccine and autism"),
+    ("Shaving does not cause terminal hair to grow back thicker",
+     "there is no reason to believe that shaving will result in thicker regrowth"),
+])
+def test_two_denials_are_refused_by_words_and_reach_the_judge_by_polarity(a, b):
+    for lens in ("question", "claim"):
+        assert veto(a, b, lens, "?", NEGATIONS_BY_SET[2]).startswith("negation differs: ")
+        assert veto(a, b, lens, "?", NEGATIONS_BY_SET[3], polarity=True) == ""
+
+
+def test_by_polarity_a_negation_on_one_side_is_still_refused():
+    a = "The population did not grow."
+    assert veto(a, GREW, "claim", "", NEGATIONS_BY_SET[3], polarity=True) == \
+        "negation on one side only: not"
+    assert veto("Growth never stops.", "Growth stops.", "question", "?",
+                NEGATIONS_BY_SET[3], polarity=True) != ""
+
+
 # ── the judge: both orders, doubt keeps apart ─────────────────
 
 def pair(pid="P0000", lens="question", a="a", b="b", v=""):
@@ -236,6 +256,36 @@ def test_set_1_vetoes_it_and_an_artifact_without_the_field_replays_under_set_1()
     as_2 = Artifact.model_validate({**old, "params": {**old["params"], "veto_words": 2}})
     assert canonical(replay(as_2)) != canonical(ans)
 
+
+
+DENIALS = ["Growth alone does not make a business viable.",
+           "Growth alone cannot make a business viable.",
+           "No business is viable on growth alone."]
+
+
+def run_denials(veto_words, same_replies):
+    argue = [argue_reply([{**VIABLE, "conclusion": w}], "q1") for w in DENIALS]
+    model = ScriptedModel([QUERIES] + argue + [SUPPORT_ALL] + [attacks()] * 3 + same_replies)
+    return run("Is growth alone enough to make a business viable?", model,
+               params=Params(k_argue=3, k_attack=3, veto_words=veto_words),
+               as_of=AS_OF, http_get=wiki) + (model,)
+
+
+def test_under_set_3_three_denials_in_other_words_reach_the_judge_and_merge():
+    ans, art, model = run_denials(3, all_same(3))
+    assert model._replies == [] and ans.counters["same_question_vetoed"].n == 0
+    assert len(ans.positions) == 1 and ans.positions[0]["samples"] == 3
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_set_2_the_same_denials_are_refused_and_each_set_replays_as_its_own():
+    ans, art, model = run_denials(2, [])
+    assert ans.counters["same_question_vetoed"].n == 3 and len(ans.positions) == 3
+    assert canonical(replay(art)) == canonical(ans)
+    as_3 = Artifact.model_validate({**json.loads(art.model_dump_json()),
+                                    "params": {**json.loads(art.model_dump_json())["params"],
+                                               "veto_words": 3}})
+    assert canonical(replay(as_3)) != canonical(ans)
 
 def test_without_the_judge_nothing_new_appears():
     """Every artifact made before #172 carries judge_same=False: exact-wording
