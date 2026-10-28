@@ -70,6 +70,8 @@ RULES: dict[int, dict[str, int]] = {
             why_check=3, covers_check=2),          # runs 6-13
     5: dict(counter_set=3, reason_wording=2, veto_words=3, shown_order=2, bound_ties=2,
             why_check=3, covers_check=3),          # #235, #237: both vetoes read polarity
+    6: dict(counter_set=3, reason_wording=2, veto_words=4, shown_order=2, bound_ties=2,
+            why_check=3, covers_check=4),          # #239: a denial marker leaves it to the judge
 }
 LATEST_RULES = max(RULES)
 
@@ -133,8 +135,9 @@ class Params(BaseModel):
     # Which negation words the same-answer veto reads (occam.equiv
     # NEGATIONS_BY_SET). 2 (#192): "without" is not a negation. 3 (#237): set
     # 2's words, compared by polarity, so two denials worded differently reach
-    # the judge. An artifact without the field was judged under 1, and its
-    # stored replies line up with set 1's pairs only.
+    # the judge. 4 (#239): and a denial marker such as "myth" on either side
+    # leaves the pair to the judge. An artifact without the field was judged
+    # under 1, and its stored replies line up with set 1's pairs only.
     veto_words: int = RULES[LATEST_RULES]["veto_words"]
     # Which order picks the answer shown and orders the positions. 2 (#191):
     # contested above open — a contested answer has a coherent case for it,
@@ -173,6 +176,8 @@ class Params(BaseModel):
     # (occam.covers, #212). 2: yes, beside the claim-lens groups. 3 (#235):
     # its veto rules a pair out for a negation on one side only, not for a
     # different negation word, so "do not cause" may be covered by "no link".
+    # 4 (#239): not even that when either side denies by a marker such as
+    # "myth" ("the idea that X is a myth"), whose polarity no word list reads.
     # An artifact without the field was made before it and replays without
     # it; each run replays under its own veto.
     covers_check: int = RULES[LATEST_RULES]["covers_check"]

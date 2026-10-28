@@ -108,6 +108,36 @@ def test_under_rule_3_a_denial_in_each_of_two_clauses_is_not_set_against_one():
     assert cover_veto("The Earth is not flat.", "The Earth is not flat and it is not a disc.", 3) == ""
 
 
+# run 13, q13 and q01: a denial by a marker, against one by a negation (#239)
+MARKED = ("It is a common misconception that the color red is supposed to anger the bull",
+          "The idea that vaccines cause autism is a longstanding myth that has been debunked.",
+          "The claims attributing the auroras to HAARP are simply incorrect.")
+
+
+@pytest.mark.parametrize("source", MARKED)
+def test_under_rule_3_a_denial_by_a_marker_is_vetoed_and_under_rule_4_reaches_the_judge(source):
+    answer = "The color red does not make bulls angry."
+    assert cover_veto(answer, source, 3).startswith("negation on one side only: ")
+    assert cover_veto(answer, source, 4) == ""
+
+
+def test_under_rule_4_without_reaches_the_judge_though_it_is_no_negation():
+    a, s = "Cracking your knuckles does not cause arthritis.", "You can crack your knuckles without arthritis."
+    assert cover_veto(a, s, 3) != "" and cover_veto(a, s, 4) == ""
+
+
+def test_under_rule_4_a_marker_never_rules_a_pair_out():
+    """Run 12, q05: these two were judged the same in both orders. A marker
+    counted as a negation would have set them apart."""
+    a = "scientists believe that we use our entire brain every day."
+    s = "the idea that we use only a small part of our brain is a myth"
+    assert cover_veto(a, s, 4) == "" and cover_veto(s, a, 4) == ""
+
+
+def test_under_rule_4_a_negation_on_one_side_with_no_marker_is_still_vetoed():
+    assert cover_veto("Vaccines cause autism.", DENIAL, 4).startswith("negation on one side only: ")
+
+
 def test_under_rule_3_the_number_veto_is_unchanged():
     assert cover_veto("Wegener did not propose it in 1912.", "Wegener did not propose it.", 3) == \
         "the answer states a number the source does not: 1912"
@@ -180,8 +210,8 @@ DENY_SOURCE = "The scientific consensus is that there is no link between the MMR
 
 
 def test_two_denials_in_other_words_reach_the_judge_and_can_establish():
-    ans, art, model = ask([COVERS, COVERS], answer=DENY_ANSWER, source=DENY_SOURCE)
-    assert art.params.rules == 5 and art.params.covers_check == 3
+    ans, art, model = ask([COVERS, COVERS], answer=DENY_ANSWER, source=DENY_SOURCE, rules=5)
+    assert art.params.covers_check == 3
     assert ans.status == Status.ESTABLISHED, ans.status_bound_by
     assert sum("state everything the ANSWER" in p for p in model.prompts) == 2
     assert canonical(replay(art)) == canonical(ans)
@@ -194,6 +224,28 @@ def test_under_rules_4_the_same_denials_are_vetoed_before_any_judge():
     assert not any("state everything the ANSWER" in p for p in model.prompts)
     assert canonical(replay(art)) == canonical(ans)
 
+
+
+MYTH_SOURCE = "It is a common misconception that the color red is supposed to anger the bull."
+
+
+def test_a_denial_by_a_marker_reaches_the_judge_and_can_establish():
+    ans, art, model = ask([COVERS, COVERS], answer="The color red does not make bulls angry.",
+                          source=MYTH_SOURCE)
+    assert art.params.rules == 6 and art.params.covers_check == 4
+    assert ans.status == Status.ESTABLISHED, ans.status_bound_by
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_rules_5_the_same_marker_is_vetoed_before_any_judge():
+    ans, art, model = ask([], answer="The color red does not make bulls angry.",
+                          source=MYTH_SOURCE, rules=5)
+    assert art.cover_replies == () and ans.status == Status.HYPOTHESIS
+    assert canonical(replay(art)) == canonical(ans)
+    as_4 = json.loads(art.model_dump_json())
+    as_4["params"]["covers_check"] = 4
+    assert type(art).model_validate(as_4).params.covers_check == 4
+    assert canonical(replay(type(art).model_validate(as_4))) == canonical(ans)   # no reply: no cover
 
 def test_each_artifact_replays_under_its_own_veto():
     """A rule-3 run read back under rule 2 loses the cover it was judged to

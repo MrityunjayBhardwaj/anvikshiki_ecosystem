@@ -36,7 +36,9 @@ order only cancels a bias toward whichever comes first.
               rule 2 the negation test compared the *sets* of negation words,
               so "do not cause" was vetoed against "no link" (#235); rule 3
               compares polarity — whether each side carries any negation at
-              all — and leaves two denials worded differently to the judge.
+              all — and leaves two denials worded differently to the judge;
+              rule 4 (#239) also leaves to it any pair where a side denies
+              by a marker such as "myth", whose polarity no word list reads.
     covers    only if both orders say `covers`. Anything short of that — a
               veto, `does_not`, `cannot_tell`, a malformed or missing reply —
               does not cover. Doubt never lifts.
@@ -62,7 +64,7 @@ from typing import Mapping, Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from .argue import ArgueResult, norm_conclusion
-from .equiv import NEGATIONS, _numbers, negation_veto
+from .equiv import DENIAL_MARKERS, NEGATIONS, _numbers, negation_veto
 from .model import Model, extract_json
 from .snapshot import host
 from .spans import states
@@ -86,12 +88,14 @@ class CoverPair(BaseModel):
 def cover_veto(answer: str, source: str, rule: int = 2) -> str:
     """Why the source cannot cover the answer, decided without a model; ""
     if nothing rules it out. `rule` is `Params.covers_check`: 2 vetoes any
-    difference in negation words, 3 (#235) only a negation on one side
-    (occam.equiv.negation_veto)."""
+    difference in negation words, 3 (#235) only a negation on one side, and
+    4 (#239) not even that when either side carries a denial marker such as
+    "myth" (occam.equiv.negation_veto)."""
     missing = _numbers(answer) - _numbers(source)
     if missing:
         return f"the answer states a number the source does not: {', '.join(sorted(missing))}"
-    return negation_veto(answer, source, NEGATIONS, polarity=rule >= 3)
+    return negation_veto(answer, source, NEGATIONS, polarity=rule >= 3,
+                         markers=DENIAL_MARKERS if rule >= 4 else frozenset())
 
 
 def cover_pairs(argued: ArgueResult, hosts_of_snapshot: Mapping[str, frozenset[str]],

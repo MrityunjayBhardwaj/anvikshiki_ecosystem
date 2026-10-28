@@ -26,7 +26,9 @@ cannot tell — in a fresh call that sees that pair and nothing else (#174),
 asked in both orders. It never sets a status.
 
     veto          a negation on one side only (set 3; sets 1-2 vetoed any
-                  difference in negation words); or numbers that differ
+                  difference in negation words; from set 4, not when either
+                  side carries a denial marker such as "myth"); or numbers
+                  that differ
                   (claim lens) or conflict — neither side's numbers contained
                   in the other's (question lens, where numbers the question
                   itself contains are context, not answer). Opposites without a
@@ -84,6 +86,22 @@ NEGATIONS_BY_SET = {
 NEGATIONS_BY_SET[3] = NEGATIONS_BY_SET[2]
 POLARITY_FROM = 3
 NEGATIONS = NEGATIONS_BY_SET[2]
+
+# Words that deny a claim *inside* the statement rather than the statement
+# itself (#239): "the idea that vaccines cause autism is a myth". Which way
+# such a statement points depends on the claim it embeds, and a word list
+# cannot read that: "the idea that we use 10 percent of our brain is a myth"
+# agrees with "we use our entire brain", and run 12 judged them same. So from
+# set 4 a marker on either side means polarity cannot be told, and the
+# negation veto does not fire: the judge decides. A marker only ever lets a
+# pair through, never rules one out, so "without" is safe here though it
+# is not a negation (#192).
+NEGATIONS_BY_SET[4] = NEGATIONS_BY_SET[2]
+MARKERS_FROM = 4
+DENIAL_MARKERS = frozenset({
+    "myth", "myths", "misconception", "misconceptions", "debunk", "debunks", "debunked",
+    "debunking", "incorrect", "false", "falsely", "untrue", "unfounded", "baseless",
+    "disproven", "disproved", "refuted", "without"})
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 _WORD = re.compile(r"[a-z]+(?:['’][a-z]+)?")
 
@@ -102,14 +120,18 @@ def _negations(s: str, words: frozenset[str]) -> set[str]:
     return out
 
 
-def negation_veto(a: str, b: str, words: frozenset[str], polarity: bool) -> str:
+def negation_veto(a: str, b: str, words: frozenset[str], polarity: bool,
+                  markers: frozenset[str] = frozenset()) -> str:
     """The negation half of both vetoes (this one and occam.covers'). By
     words: any difference in the negation words. By polarity (#235, #237):
     a negation on one side only. Polarity is "carries a negation word", not
     the parity of their count: "not flat and not a disc" denies once in each
     clause, and parity would set it against "not flat". So a double negation
     reaches the judge, which must agree in both orders; a veto only rules
-    pairs out, never in."""
+    pairs out, never in. A denial marker (`markers`) on either side means
+    polarity cannot be told, so nothing is ruled out (#239)."""
+    if markers and (_negations(a, markers) or _negations(b, markers)):
+        return ""
     ga, gb = _negations(a, words), _negations(b, words)
     if polarity:
         if bool(ga) != bool(gb):
@@ -120,7 +142,8 @@ def negation_veto(a: str, b: str, words: frozenset[str], polarity: bool) -> str:
 
 
 def veto(a: str, b: str, lens: Lens, question: str,
-         negations: frozenset[str] = NEGATIONS, polarity: bool = False) -> str:
+         negations: frozenset[str] = NEGATIONS, polarity: bool = False,
+         markers: frozenset[str] = frozenset()) -> str:
     """Why the pair cannot be the same, decided without a model; "" if nothing
     rules it out."""
     na, nb = _numbers(a), _numbers(b)
@@ -131,7 +154,7 @@ def veto(a: str, b: str, lens: Lens, question: str,
             return f"numbers conflict: {', '.join(sorted(na ^ nb))}"
     elif na != nb:
         return f"numbers differ: {', '.join(sorted(na ^ nb))}"
-    return negation_veto(a, b, negations, polarity)
+    return negation_veto(a, b, negations, polarity, markers)
 
 
 class Pair(BaseModel):
@@ -154,8 +177,9 @@ def candidate_pairs(argued: ArgueResult, question: str, *,
     Question lens: distinct surviving answer conclusions. Claim lens: distinct
     conclusions of quotes that state them word for word — the only arguments
     that can reach an established ceiling, and so the only ones corroboration
-    reads. `veto_words` names the negation set and, from POLARITY_FROM, that
-    it is compared by polarity (see NEGATIONS_BY_SET)."""
+    reads. `veto_words` names the negation set; from POLARITY_FROM it is
+    compared by polarity, and from MARKERS_FROM a denial marker leaves the
+    pair to the judge (see NEGATIONS_BY_SET)."""
     by = argued.by_id()
     wording: dict[str, str] = {}
     for a in sorted(argued.arguments, key=lambda x: x.id):
@@ -170,7 +194,9 @@ def candidate_pairs(argued: ArgueResult, question: str, *,
                               text_a=wording[x], text_b=wording[y],
                               veto=veto(wording[x], wording[y], lens, question,
                                         NEGATIONS_BY_SET[veto_words],
-                                        veto_words >= POLARITY_FROM)))
+                                        veto_words >= POLARITY_FROM,
+                                        DENIAL_MARKERS if veto_words >= MARKERS_FROM
+                                        else frozenset())))
     return tuple(pairs)
 
 

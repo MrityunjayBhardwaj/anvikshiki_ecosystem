@@ -9,7 +9,7 @@ import json
 import pytest
 
 from occam.answer import Artifact, Params, canonical, replay, run
-from occam.equiv import (NEGATIONS_BY_SET, EquivResult, Pair, Verdict, equiv_from_replies,
+from occam.equiv import (DENIAL_MARKERS, NEGATIONS_BY_SET, EquivResult, Pair, Verdict, equiv_from_replies,
                          judge_same, veto)
 from occam.model import ScriptedModel
 from occam.status import derive
@@ -94,6 +94,18 @@ def test_two_denials_are_refused_by_words_and_reach_the_judge_by_polarity(a, b):
     for lens in ("question", "claim"):
         assert veto(a, b, lens, "?", NEGATIONS_BY_SET[2]).startswith("negation differs: ")
         assert veto(a, b, lens, "?", NEGATIONS_BY_SET[3], polarity=True) == ""
+
+
+def test_from_set_4_a_denial_marker_on_either_side_leaves_the_pair_to_the_judge():
+    """#239. Run 12 q05's pair, judged same in both orders, stays unvetoed."""
+    q = "Do we only use 10% of our brain?"
+    a = "scientists believe that we use our entire brain every day."
+    b = "the idea that we use 10 percent of our brain is 100 percent a myth"
+    assert veto(a, b, "question", q, NEGATIONS_BY_SET[4], True, DENIAL_MARKERS) == ""
+    red = ("The color red does not make bulls angry.",
+           "It is a common misconception that the color red angers bulls.")
+    assert veto(*red, "claim", "", NEGATIONS_BY_SET[3], True) != ""
+    assert veto(*red, "claim", "", NEGATIONS_BY_SET[4], True, DENIAL_MARKERS) == ""
 
 
 def test_by_polarity_a_negation_on_one_side_is_still_refused():
@@ -286,6 +298,30 @@ def test_under_set_2_the_same_denials_are_refused_and_each_set_replays_as_its_ow
                                     "params": {**json.loads(art.model_dump_json())["params"],
                                                "veto_words": 3}})
     assert canonical(replay(as_3)) != canonical(ans)
+
+
+def run_marked(veto_words, same_replies):
+    words = ["Growth alone does not make a business viable.",
+             "That growth alone makes a business viable is a myth.",
+             "That growth alone makes a business viable is a misconception."]
+    argue = [argue_reply([{**VIABLE, "conclusion": w}], "q1") for w in words]
+    model = ScriptedModel([QUERIES] + argue + [SUPPORT_ALL] + [attacks()] * 3 + same_replies)
+    return run("Is growth alone enough to make a business viable?", model,
+               params=Params(k_argue=3, k_attack=3, veto_words=veto_words),
+               as_of=AS_OF, http_get=wiki) + (model,)
+
+
+def test_under_set_4_denials_by_a_marker_reach_the_judge_and_merge():
+    ans, art, model = run_marked(4, all_same(3))
+    assert model._replies == [] and ans.counters["same_question_vetoed"].n == 0
+    assert len(ans.positions) == 1
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_set_3_a_marker_against_a_negation_is_refused():
+    ans, art, model = run_marked(3, all_same(1))
+    assert model._replies == [] and ans.counters["same_question_vetoed"].n == 2
+    assert canonical(replay(art)) == canonical(ans)
 
 def test_without_the_judge_nothing_new_appears():
     """Every artifact made before #172 carries judge_same=False: exact-wording
