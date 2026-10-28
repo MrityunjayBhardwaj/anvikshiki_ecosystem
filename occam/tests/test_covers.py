@@ -134,8 +134,12 @@ def test_under_rule_4_a_marker_never_rules_a_pair_out():
     assert cover_veto(a, s, 4) == "" and cover_veto(s, a, 4) == ""
 
 
-def test_under_rule_4_a_negation_on_one_side_with_no_marker_is_still_vetoed():
-    assert cover_veto("Vaccines cause autism.", DENIAL, 4).startswith("negation on one side only: ")
+@pytest.mark.parametrize("denial", [DENIAL, "Vaccines don't cause autism",
+                                    "Vaccines won’t cause autism."])
+def test_under_rule_4_a_negation_on_one_side_with_no_marker_is_still_vetoed(denial):
+    """#241: a contraction is a negation, never a marker."""
+    for a, s in (("Vaccines cause autism.", denial), (denial, "Vaccines cause autism.")):
+        assert cover_veto(a, s, 4).startswith("negation on one side only: ")
 
 
 def test_under_rule_3_the_number_veto_is_unchanged():

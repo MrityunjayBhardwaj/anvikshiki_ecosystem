@@ -129,8 +129,9 @@ def negation_veto(a: str, b: str, words: frozenset[str], polarity: bool,
     clause, and parity would set it against "not flat". So a double negation
     reaches the judge, which must agree in both orders; a veto only rules
     pairs out, never in. A denial marker (`markers`) on either side means
-    polarity cannot be told, so nothing is ruled out (#239)."""
-    if markers and (_negations(a, markers) or _negations(b, markers)):
+    polarity cannot be told, so nothing is ruled out (#239). Markers are
+    whole words: `_negations` would read every contraction as one (#241)."""
+    if markers and markers & set(_WORD.findall(f"{a} {b}".casefold())):
         return ""
     ga, gb = _negations(a, words), _negations(b, words)
     if polarity:

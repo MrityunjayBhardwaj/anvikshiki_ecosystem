@@ -108,6 +108,14 @@ def test_from_set_4_a_denial_marker_on_either_side_leaves_the_pair_to_the_judge(
     assert veto(*red, "claim", "", NEGATIONS_BY_SET[4], True, DENIAL_MARKERS) == ""
 
 
+
+@pytest.mark.parametrize("lens", ["question", "claim"])
+def test_from_set_4_a_contraction_is_a_negation_never_a_marker(lens):
+    """#241"""
+    assert veto("Vaccines cause autism.", "Vaccines don't cause autism", lens, "?",
+                NEGATIONS_BY_SET[4], True, DENIAL_MARKERS) == "negation on one side only: n't"
+
+
 def test_by_polarity_a_negation_on_one_side_is_still_refused():
     a = "The population did not grow."
     assert veto(a, GREW, "claim", "", NEGATIONS_BY_SET[3], polarity=True) == \
