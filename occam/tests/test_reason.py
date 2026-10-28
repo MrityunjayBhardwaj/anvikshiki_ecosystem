@@ -187,3 +187,64 @@ def test_a_run_made_under_rule_2_replays_under_rule_2():
     assert art.params.why_check == 2 and art.reason_replies == (("A0000", GIVES),)
     assert ans.status == Status.ESTABLISHED
     assert canonical(replay(art)) == canonical(ans)
+
+
+# ── #236: a yes/no question asks whether, not why ─────────
+
+# The six claims set 1 questions the check held (Amendment 12), and every
+# other cause-shaped question in the stored runs, which must stay one.
+YES_NO = ("Do vaccines cause autism?", "Does cracking your knuckles cause arthritis?",
+          "Was the 1918 flu pandemic caused by vaccines?", "Did HAARP cause earthquakes?",
+          "Did HAARP cause the northern lights in May 2024?", "Does smoking cause lung cancer?")
+STILL_CAUSE = (WHY, "What caused the 1918 influenza pandemic?", "What causes earthquakes?",
+               "What is the main cause of the Aurora Borealis?",
+               "Why did the Tay Bridge collapse in 1879?", "Why do we have leap years?",
+               "What caused the extinction of the dinosaurs according to the leading hypothesis?")
+
+
+def test_from_rule_4_a_yes_no_question_does_not_ask_for_a_cause():
+    for q in YES_NO:
+        assert asks_for_a_cause(q, rule=3), q          # what runs 12 and 13 did
+        assert not asks_for_a_cause(q, rule=4), q
+    for q in STILL_CAUSE:
+        assert asks_for_a_cause(q, rule=4), q
+
+
+def test_an_auxiliary_led_question_with_a_wh_word_still_asks_for_a_cause():
+    for q in ("Can you explain what causes thunder?", "Does anyone know why the sky is blue?",
+              "Do scientists agree on how the extinction was caused?"):
+        assert asks_for_a_cause(q, rule=4), q
+    # Not led by an auxiliary, so the rule never reaches it:
+    assert asks_for_a_cause("Smoking causes lung cancer, doesn't it?", rule=4)
+    # Led by one with no wh-word, and no cause word at all, was never one:
+    assert not asks_for_a_cause("Is the sky blue?", rule=4)
+
+
+YES_NO_Q = "Does blue light cause the sky's colour?"
+
+
+def test_a_yes_no_answer_is_not_held_for_giving_no_reason_under_row_7():
+    ans, art, model = ask(YES_NO_Q, quotes(UNLINKED), [], sentence=UNLINKED)
+    assert art.params.rules == 7 and art.params.why_check == 4
+    assert ans.status == Status.ESTABLISHED, ans.status_bound_by
+    assert art.reason_replies == ()
+    assert not any("Does the STATEMENT give the reason" in p for p in model.prompts)
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_row_6_still_holds_it_and_replays_as_it_ran():
+    ans, art, _ = ask(YES_NO_Q, quotes(UNLINKED), [], sentence=UNLINKED,
+                      params=Params(k_argue=1, k_attack=1, web_sources=1, rules=6))
+    assert art.params.why_check == 3
+    assert ans.status == Status.HYPOTHESIS
+    assert ans.status_bound_by == (f"quote {ans.answer_id} answers a question asking for a "
+                                   f"cause, but its words state no causal link",)
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_row_7_a_linked_yes_no_answer_is_not_sent_to_the_judge():
+    """A linked quote is what the judge would be asked about: it must not be."""
+    ans, art, model = ask(YES_NO_Q, quotes(LINKED), [])
+    assert art.reason_replies == ()
+    assert not any("Does the STATEMENT give the reason" in p for p in model.prompts)
+    assert ans.status == Status.ESTABLISHED, ans.status_bound_by

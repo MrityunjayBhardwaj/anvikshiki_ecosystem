@@ -236,7 +236,7 @@ MYTH_SOURCE = "It is a common misconception that the color red is supposed to an
 def test_a_denial_by_a_marker_reaches_the_judge_and_can_establish():
     ans, art, model = ask([COVERS, COVERS], answer="The color red does not make bulls angry.",
                           source=MYTH_SOURCE)
-    assert art.params.rules == 6 and art.params.covers_check == 4
+    assert art.params.rules >= 6 and art.params.covers_check == 4
     assert ans.status == Status.ESTABLISHED, ans.status_bound_by
     assert canonical(replay(art)) == canonical(ans)
 

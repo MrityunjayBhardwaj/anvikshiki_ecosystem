@@ -20,7 +20,12 @@ keeps its status above hypothesis only if both hold:
     judge   a fresh call, shown the question and that one statement and
             nothing else, says it gives the reason the question asks for.
 
-Otherwise the status stage caps it at hypothesis and names why. Doubt never
+Otherwise the status stage caps it at hypothesis and names why.
+
+A yes/no question that mentions a cause — "Does smoking cause lung cancer?"
+— asks whether a claim holds, not why. Its answer affirms or denies the
+claim and gives no reason, so from reason rule 4 (#236) the check leaves it
+alone, like any other yes/no question. Doubt never
 lifts: a malformed reply, `cannot_tell`, or no reply at all keeps the cap.
 
 The judge sees the question, which the support judge must not (a question's
@@ -40,8 +45,8 @@ from typing import Mapping, Optional, Sequence
 from .argue import Argument, ArgueResult
 from .model import Model, extract_json
 
-__all__ = ["REASON_VERDICTS", "CAUSAL_LINKS", "asks_for_a_cause", "states_a_link",
-           "reason_candidates", "reason_prompt", "judge_reasons", "reason_bounds"]
+__all__ = ["REASON_VERDICTS", "CAUSAL_LINKS", "AUXILIARIES", "WH_WORDS", "asks_for_a_cause",
+           "states_a_link", "reason_candidates", "reason_prompt", "judge_reasons", "reason_bounds"]
 
 REASON_VERDICTS = ("gives_reason", "does_not", "cannot_tell")
 
@@ -74,9 +79,29 @@ def _words(text: str) -> list[str]:
 CAUSE_WORDS = frozenset({"why", "cause", "causes", "caused", "causing", "causal", "causation"})
 
 
-def asks_for_a_cause(question: str) -> bool:
-    """A question with "why", or a form of "cause", as a whole word."""
-    return any(w in CAUSE_WORDS for w in _words(question))
+# A question opening with one of these asks whether, not why (#236).
+AUXILIARIES = frozenset({"is", "are", "was", "were", "do", "does", "did", "can", "could",
+                         "will", "would", "should", "has", "have", "had", "may", "might",
+                         "must", "shall"})
+# Words that make an auxiliary-led question ask for something after all:
+# "Can you explain what causes thunder?" still asks for a cause.
+WH_WORDS = frozenset({"why", "what", "which", "how"})
+
+
+def asks_for_a_cause(question: str, rule: int = 3) -> bool:
+    """A question with "why", or a form of "cause", as a whole word.
+
+    From reason rule 4 (`Params.why_check`, #236), a yes/no question is not
+    one: it opens with an auxiliary ("Does smoking cause lung cancer?", "Was
+    the pandemic caused by vaccines?") and has no wh-word. Its answer affirms
+    or denies the claim; there is no reason to give, so the reason judge
+    could only ever say `does_not`."""
+    ws = _words(question)
+    if not any(w in CAUSE_WORDS for w in ws):
+        return False
+    if rule >= 4 and ws[0] in AUXILIARIES and not any(w in WH_WORDS for w in ws):
+        return False
+    return True
 
 
 # Where a causal "since" can stand: opening the text or a clause.
@@ -115,7 +140,7 @@ def reason_candidates(argued: ArgueResult, question: str, rule: int = 3) -> list
     """The quotes a reason judge is asked about: on a question that asks for a
     cause, every quote some sample gave as its answer whose words carry a link.
     In id order, one function for the live run and the replay."""
-    if not asks_for_a_cause(question):
+    if not asks_for_a_cause(question, rule):
         return []
     by = argued.by_id()
     ids = sorted({x for x in argued.answers if x and by[x].kind == "quote"})
@@ -155,7 +180,7 @@ def reason_bounds(argued: ArgueResult, question: str,
                   replies: Sequence[tuple[str, str]], rule: int = 3) -> dict[str, str]:
     """For each quote answer on a question asking for a cause that has not
     shown it gives the reason: the bound the status stage names. Deterministic."""
-    if not asks_for_a_cause(question):
+    if not asks_for_a_cause(question, rule):
         return {}
     stored: Mapping[str, str] = dict(replies)
     by = argued.by_id()
