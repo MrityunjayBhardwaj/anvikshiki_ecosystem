@@ -39,6 +39,11 @@ order only cancels a bias toward whichever comes first.
               all — and leaves two denials worded differently to the judge;
               rule 4 (#239) also leaves to it any pair where a side denies
               by a marker such as "myth", whose polarity no word list reads.
+              Rule 5 (#243) has no negation test at all: what was left of it
+              set a denial against a plain statement of the same fact ("not
+              flat" against "roughly spherical"), which no word list reads
+              either. Measured before it shipped, the judge kept all 18
+              hand-built opposites apart in both orders on its own.
     covers    only if both orders say `covers`. Anything short of that — a
               veto, `does_not`, `cannot_tell`, a malformed or missing reply —
               does not cover. Doubt never lifts.
@@ -88,12 +93,15 @@ class CoverPair(BaseModel):
 def cover_veto(answer: str, source: str, rule: int = 2) -> str:
     """Why the source cannot cover the answer, decided without a model; ""
     if nothing rules it out. `rule` is `Params.covers_check`: 2 vetoes any
-    difference in negation words, 3 (#235) only a negation on one side, and
+    difference in negation words, 3 (#235) only a negation on one side,
     4 (#239) not even that when either side carries a denial marker such as
-    "myth" (occam.equiv.negation_veto)."""
+    "myth" (occam.equiv.negation_veto), and 5 (#243) only a number: negation
+    is left to the judge."""
     missing = _numbers(answer) - _numbers(source)
     if missing:
         return f"the answer states a number the source does not: {', '.join(sorted(missing))}"
+    if rule >= 5:
+        return ""
     return negation_veto(answer, source, NEGATIONS, polarity=rule >= 3,
                          markers=DENIAL_MARKERS if rule >= 4 else frozenset())
 

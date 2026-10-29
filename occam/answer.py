@@ -74,6 +74,8 @@ RULES: dict[int, dict[str, int]] = {
             why_check=3, covers_check=4),          # #239: a denial marker leaves it to the judge
     7: dict(counter_set=3, reason_wording=2, veto_words=4, shown_order=2, bound_ties=2,
             why_check=4, covers_check=4),          # #236: a yes/no question asks whether, not why
+    8: dict(counter_set=3, reason_wording=2, veto_words=4, shown_order=2, bound_ties=2,
+            why_check=4, covers_check=5),          # #243: covers leaves negation to the judge
 }
 LATEST_RULES = max(RULES)
 
@@ -182,6 +184,9 @@ class Params(BaseModel):
     # different negation word, so "do not cause" may be covered by "no link".
     # 4 (#239): not even that when either side denies by a marker such as
     # "myth" ("the idea that X is a myth"), whose polarity no word list reads.
+    # 5 (#243): no negation veto at all, only the number veto; the judge,
+    # asked in both orders, decides whether a denial covers ("not flat" by
+    # "roughly spherical") or conflicts.
     # An artifact without the field was made before it and replays without
     # it; each run replays under its own veto.
     covers_check: int = RULES[LATEST_RULES]["covers_check"]
