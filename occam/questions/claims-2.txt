@@ -1,0 +1,26 @@
+# Claims set 2 (#244), drafted 2026-10-29 for Amendment 13, to be approved
+# by the user before any run on it. Never used to write or tune a rule. Each
+# is a yes/no question whose proposition a published fact-check reviewed;
+# the answer that review supports is in claims-2.labels.json, a label for
+# reading the results only. Fourteen are labelled no and six yes. None is in
+# claims set 1 or either held-out set.
+Do people swallow spiders in their sleep?
+Do microwaves make food radioactive?
+Does hydroxychloroquine cure COVID-19?
+Does ivermectin cure COVID-19?
+Do COVID-19 vaccines contain microchips?
+Do mRNA vaccines change your DNA?
+Do carrots improve your night vision?
+Does wearing a mask lower oxygen levels?
+Do wind turbines cause cancer?
+Does 5G cause cancer?
+Does sunscreen cause cancer?
+Did Bill Gates patent the coronavirus?
+Is MSG bad for your health?
+Can drinking bleach cure COVID-19?
+Are humans causing climate change?
+Are sea levels rising?
+Is Arctic sea ice shrinking?
+Is Greenland's ice sheet melting?
+Is Antarctica losing ice?
+Was Barack Obama born in Hawaii?
