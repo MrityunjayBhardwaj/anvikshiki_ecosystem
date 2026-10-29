@@ -46,7 +46,7 @@ def claims(query: str, *, key: str, pages: int = 1, http_get: HttpGet = urllib_g
         if token:
             params["pageToken"] = token
         try:
-            status, _, body = http_get(CLAIMS_SEARCH + "?" + urllib.parse.urlencode(params))
+            status, _, body = http_get(CLAIMS_SEARCH + "?" + urllib.parse.urlencode(params))[:3]
         except Exception as e:  # noqa: BLE001 — reported without the URL, which holds the key
             raise FactCheckError(f"fact-check search could not be reached ({type(e).__name__})") from None
         text = body.decode("utf-8", errors="replace")

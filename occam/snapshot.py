@@ -145,6 +145,16 @@ class Snapshot(BaseModel):
             "gave none — not that the page cannot change."
         ),
     )
+    named_url: Optional[str] = Field(
+        default=None,
+        description=(
+            "The address that was asked for, when the body was served from "
+            "another (a redirect, #231). Kept beside `urls`, never in it: every "
+            "address in `urls` is counted as a host the text was served from, "
+            "and a redirector such as Google's grounding link serves nothing. "
+            "None: the body came from the address asked for."
+        ),
+    )
     empty_reason: Optional[str] = Field(
         default=None,
         description=(
@@ -172,6 +182,11 @@ class Snapshot(BaseModel):
             )
         if not self.urls:
             raise ValueError("a snapshot with no URL cannot be re-fetched or disputed")
+        if self.named_url is not None and self.named_url in self.urls:
+            raise ValueError(
+                f"named_url {self.named_url!r} is also in urls; it is recorded "
+                f"only when the body came from somewhere else, and in urls it "
+                f"would be counted as a host that served it (#231)")
         if self.revision_url != revision_address(self.body, self.extractor):
             raise ValueError(
                 f"revision_url {self.revision_url!r} is not what the body says "
@@ -203,6 +218,7 @@ def capture(
     media_type: str = "",
     extractor: str = "",
     empty_reason: Optional[str] = None,
+    named_url: Optional[str] = None,
 ) -> Snapshot:
     """Build a snapshot, computing both addresses rather than accepting them.
 
@@ -221,6 +237,7 @@ def capture(
         extractor=extractor,
         empty_reason=empty_reason,
         revision_url=revision_address(body, extractor),
+        named_url=named_url,
     )
 
 

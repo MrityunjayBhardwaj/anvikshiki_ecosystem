@@ -33,7 +33,10 @@ __all__ = ["HttpGet", "WebSearch", "EXCLUDED_HOSTS", "gather", "fetch", "wikiped
            "html_to_text", "urllib_get"]
 
 # (url) -> (status, content_type, body). Raises on network failure.
-HttpGet = Callable[[str], tuple[int, str, bytes]]
+# (status, content type, body), or the same with a fourth item: the URL the
+# body was finally served from, when the getter followed redirects (#231).
+# A getter that gives no fourth item is taken to have read the URL it was given.
+HttpGet = Callable[[str], tuple]
 # (question, n) -> (urls found, raw reply kept for audit). OpenRouterModel.web_search.
 WebSearch = Callable[[str, int], tuple[list[str], str]]
 # Wikipedia is gathered on its own, and a mirror of it would count as a second
@@ -55,7 +58,7 @@ def urllib_get(url: str, timeout: float = 30.0) -> tuple[int, str, bytes]:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, r.headers.get("Content-Type", ""), r.read()
+            return r.status, r.headers.get("Content-Type", ""), r.read(), r.geturl()
     except urllib.error.HTTPError as e:
         return e.code, e.headers.get("Content-Type", "") if e.headers else "", e.read() or b""
 
@@ -104,13 +107,22 @@ def _failed(url: str, reason: str, at: datetime) -> Snapshot:
 
 
 def fetch(url: str, *, at: datetime, http_get: HttpGet = urllib_get) -> Snapshot:
-    """One URL, snapshotted. Never raises for a network or HTTP failure."""
+    """One URL, snapshotted. Never raises for a network or HTTP failure.
+
+    A page reached through redirects is recorded at the address it was served
+    from, and the address asked for is kept as `named_url` (#231): hosts are
+    counted from `urls`, and a search's redirect (Google's grounding links)
+    would credit every page behind it to Google and expire before a reader
+    could follow it."""
     try:
-        status, ctype, body = http_get(url)
+        got = http_get(url)
+        status, ctype, body = got[:3]
     except Exception as e:  # noqa: BLE001 — every failure becomes a recorded reason
         return _failed(url, f"fetch error: {type(e).__name__}: {e}", at)
     if status != 200:
         return _failed(url, f"HTTP {status}", at)
+    served = got[3] if len(got) > 3 and got[3] else url
+    named = url if served != url else None
     ctype = ctype.split(";")[0].strip().lower()
     if ctype in ("text/html", "application/xhtml+xml"):
         text = html_to_text(body.decode("utf-8", errors="replace"))
@@ -119,13 +131,15 @@ def fetch(url: str, *, at: datetime, http_get: HttpGet = urllib_get) -> Snapshot
         text = body.decode("utf-8", errors="replace")
         extractor = "utf-8/1"
     else:
-        return capture(url=url, body=body, text="", fetched_at=at, media_type=ctype,
-                       extractor="none", empty_reason=f"no text extractor for {ctype or 'unknown type'}")
+        return capture(url=served, body=body, text="", fetched_at=at, media_type=ctype,
+                       extractor="none", empty_reason=f"no text extractor for {ctype or 'unknown type'}",
+                       named_url=named)
     if not text.strip():
-        return capture(url=url, body=body, text="", fetched_at=at, media_type=ctype,
-                       extractor=extractor, empty_reason="page yielded no visible text")
-    return capture(url=url, body=body, text=text, fetched_at=at, media_type=ctype,
-                   extractor=extractor)
+        return capture(url=served, body=body, text="", fetched_at=at, media_type=ctype,
+                       extractor=extractor, empty_reason="page yielded no visible text",
+                       named_url=named)
+    return capture(url=served, body=body, text=text, fetched_at=at, media_type=ctype,
+                   extractor=extractor, named_url=named)
 
 
 def _wiki_page(title: str, *, at: datetime, http_get: HttpGet) -> Snapshot:
@@ -135,7 +149,7 @@ def _wiki_page(title: str, *, at: datetime, http_get: HttpGet) -> Snapshot:
         "rvprop": "ids|timestamp", "titles": title, "format": "json",
     })
     try:
-        status, _, body = http_get(api)
+        status, _, body = http_get(api)[:3]
     except Exception as e:  # noqa: BLE001
         return _failed(page_url, f"fetch error: {type(e).__name__}: {e}", at)
     if status != 200:
@@ -163,7 +177,7 @@ def wikipedia_search(query: str, n: int, *, http_get: HttpGet = urllib_get) -> l
         "srlimit": str(n), "format": "json",
     })
     try:
-        status, _, body = http_get(api)
+        status, _, body = http_get(api)[:3]
         if status != 200:
             return []
         return [hit["title"] for hit in json.loads(body)["query"]["search"]][:n]
@@ -212,7 +226,9 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
     reply carries no citations, so its URLs are the model's words, and in run
     6, 5 of 30 were dead. So ask for WEB_OVERASK × n and fetch in order until
     n readable pages on n different hosts are held. A second page on a host
-    already held adds no corroboration and is not fetched. Every page fetched
+    already held adds no corroboration and is not fetched. A page is held
+    under the host that served it (#231): one redirected onto Wikipedia, a
+    mirror or a host already held is dropped and counted. Every other page fetched
     is kept, readable or not, so each failure stays on the record, and one
     note counts what happened to every URL named.
 
@@ -237,7 +253,7 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
                 for u in [u for u in kept if host(u) not in taken][:n]]
     snaps: list[Snapshot] = []
     held: list[str] = []
-    same_host = unfetched = 0
+    same_host = unfetched = landed = 0
     why: dict[str, int] = {}
     for u in kept:
         if len(held) == n:
@@ -247,16 +263,23 @@ def _web_pages(question: str, n: int, web_search: WebSearch, *, at: datetime,
             same_host += 1
             continue
         s = fetch(u, at=at, http_get=http_get)
+        h = host(s.urls[0])
+        if s.named_url is not None and (_excluded(s.urls[0]) or h in held or h in taken):
+            # Only the URL the search named was checked above; the page came
+            # from somewhere else, which is held already or excluded (#231).
+            landed += 1
+            continue
         snaps.append(s)
         if s.text.strip():
-            held.append(host(u))
+            held.append(h)
         else:
             why[s.empty_reason] = why.get(s.empty_reason, 0) + 1
     if kept:
         failed = "".join(f", {c} {r}" for r, c in sorted(why.items()))
         notes.append(f"{what}: named {len(kept)}; readable on distinct hosts "
                      f"{len(held)} of {n} wanted{failed}; skipped {same_host} on a host "
-                     f"already held; not fetched {unfetched}")
+                     f"already held; redirected to a held or excluded host {landed}; "
+                     f"not fetched {unfetched}")
     return snaps
 
 
