@@ -72,6 +72,8 @@ RULES: dict[int, dict[str, int]] = {
             why_check=3, covers_check=3),          # #235, #237: both vetoes read polarity
     6: dict(counter_set=3, reason_wording=2, veto_words=4, shown_order=2, bound_ties=2,
             why_check=3, covers_check=4),          # #239: a denial marker leaves it to the judge
+    7: dict(counter_set=3, reason_wording=2, veto_words=4, shown_order=2, bound_ties=2,
+            why_check=4, covers_check=4),          # #236: a yes/no question asks whether, not why
 }
 LATEST_RULES = max(RULES)
 
@@ -168,8 +170,10 @@ class Params(BaseModel):
     # gives that reason (occam.reason). 2 (#194): its words carry a causal link
     # and a fresh judge call says so, or it stays at hypothesis. 3 (#213): a
     # "since" is a link only where it opens a clause, so "since the 1980s" is
-    # not. An artifact without the field was made before the check and
-    # replays without it; each run replays under its own link rule.
+    # not. 4 (#236): a yes/no question ("Does smoking cause lung cancer?")
+    # does not ask for a cause, so its answer is not held for giving no
+    # reason. An artifact without the field was made before the check and
+    # replays without it; each run replays under its own rule.
     why_check: int = RULES[LATEST_RULES]["why_check"]
     # Whether a second source can corroborate an answer by covering it — its
     # sentence stating every claim the answer states, judged one way

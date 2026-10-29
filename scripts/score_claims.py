@@ -67,7 +67,7 @@ def score_one(path: Path) -> dict:
         "abstained": ans.abstained, "replay_ok": canonical(replay(art)) == stored_canonical(stored),
         "conclusion": ans.conclusion, "bound": list(ans.status_bound_by),
         "hosts": sorted({host(s.urls[0]) for s in snaps if s.text.strip()}),
-        "cause": asks_for_a_cause(art.question),
+        "cause": asks_for_a_cause(art.question, art.params.why_check),
         "fc_named": len(named), "fc_fetched": len(fc_snaps),
         "fc_readable": sum(bool(s.text.strip()) for s in fc_snaps),
         "fc_quotes": sum(a.kind == "quote" and a.span is not None and a.span.snapshot_id in fc_ids
