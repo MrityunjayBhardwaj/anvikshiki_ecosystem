@@ -237,13 +237,15 @@ class StoredSnapshot(BaseModel):
     extractor: str
     empty_reason: Optional[str]
     revision_url: Optional[str] = None      # absent in artifacts before #169
+    named_url: Optional[str] = None         # absent in artifacts before #231
 
     @classmethod
     def of(cls, s: Snapshot) -> "StoredSnapshot":
         return cls(id=s.id, urls=s.urls, fetched_at=s.fetched_at, media_type=s.media_type,
                    body_b64=base64.b64encode(s.body).decode(), text=s.text,
                    text_sha256=s.text_sha256, extractor=s.extractor,
-                   empty_reason=s.empty_reason, revision_url=s.revision_url)
+                   empty_reason=s.empty_reason, revision_url=s.revision_url,
+                   named_url=s.named_url)
 
     def load(self) -> Snapshot:
         # Snapshot re-hashes body and text on construction, so a tampered
@@ -252,7 +254,7 @@ class StoredSnapshot(BaseModel):
                         media_type=self.media_type, body=base64.b64decode(self.body_b64),
                         text=self.text, text_sha256=self.text_sha256,
                         extractor=self.extractor, empty_reason=self.empty_reason,
-                        revision_url=self.revision_url)
+                        revision_url=self.revision_url, named_url=self.named_url)
 
 
 class Artifact(BaseModel):
@@ -689,6 +691,8 @@ def _cited_snapshot(s: Snapshot) -> dict[str, Any]:
     # the reader by the CLI, not hidden.
     if s.revision_url is not None:
         out["revision_url"] = s.revision_url
+    if s.named_url is not None:   # likewise, #231
+        out["named_url"] = s.named_url
     return out
 
 

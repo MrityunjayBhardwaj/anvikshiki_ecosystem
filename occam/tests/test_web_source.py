@@ -114,7 +114,8 @@ def test_rule_2_asks_for_three_times_as_many_and_fills_past_dead_links():
     assert [s.urls[0] for s in snaps] == found[:4]                # failures stay on the record
     assert [bool(s.text) for s in snaps] == [False, True, False, True]
     assert ("web search: named 6; readable on distinct hosts 2 of 2 wanted, 1 HTTP 403, "
-            "1 HTTP 404; skipped 0 on a host already held; not fetched 2") in notes
+            "1 HTTP 404; skipped 0 on a host already held; redirected to a held or "
+            "excluded host 0; not fetched 2") in notes
 
 
 def test_rule_2_does_not_fetch_a_second_page_on_a_host_already_held():
@@ -136,7 +137,7 @@ def test_rule_2_with_too_few_readable_says_so():
     assert len(snaps) == 2 and not any(s.text for s in snaps)
     assert notes[-1] == ("web search: named 2; readable on distinct hosts 0 of 3 wanted, "
                          "1 HTTP 403, 1 HTTP 404; skipped 0 on a host already held; "
-                         "not fetched 0")
+                         "redirected to a held or excluded host 0; not fetched 0")
 
 
 def test_rule_1_is_unchanged_whatever_loads():
@@ -215,3 +216,92 @@ def test_an_artifact_made_before_web_sources_reads_as_wikipedia_only():
     stored = json.loads(art.model_dump_json())
     del stored["params"]["web_sources"]
     assert type(art).model_validate(stored).params.web_sources == 0
+
+
+# ── a page reached through a redirect (#231) ───────────────
+
+REDIRECT = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/"
+
+
+def redirecting_get():
+    """A Google grounding link is served by the page it points at, named after
+    the redirect prefix; every other URL as counted_get serves it."""
+    inner = counted_get()
+
+    def get(url):
+        if url.startswith(REDIRECT):
+            target = "https://" + url[len(REDIRECT):]
+            status, ctype, body = inner(target)[:3]
+            return status, ctype, body, target
+        return inner(url)
+    get.fetched = inner.fetched
+    return get
+
+
+def redirect_only(found, n_web, fill=2):
+    get = redirecting_get()
+    snaps, notes, _ = gather("q", at=AS_OF, urls=None, n=0, http_get=get,
+                             web_search=search(found), n_web=n_web, web_fill=fill)
+    return snaps, notes
+
+
+def test_a_redirected_page_is_recorded_at_the_host_that_served_it():
+    snaps, _ = redirect_only([REDIRECT + "a.live.test/1"], n_web=1)
+    assert snaps[0].urls == ("https://a.live.test/1",)
+    assert snaps[0].named_url == REDIRECT + "a.live.test/1"
+    assert SENTENCE in snaps[0].text
+
+
+def test_two_pages_behind_redirects_are_two_hosts_not_one():
+    # Before #231 both were held under Google's host, so the second was
+    # skipped as "a host already held" and corroboration was out of reach.
+    snaps, notes = redirect_only([REDIRECT + "a.live.test/1", REDIRECT + "b.live.test/1"], n_web=2)
+    assert [s.urls[0] for s in snaps] == ["https://a.live.test/1", "https://b.live.test/1"]
+    assert "readable on distinct hosts 2 of 2 wanted" in notes[-1]
+
+
+def test_a_redirect_onto_a_host_already_held_is_dropped_and_counted():
+    snaps, notes = redirect_only(["https://a.live.test/1", REDIRECT + "a.live.test/2",
+                                  "https://b.live.test/1"], n_web=2)
+    assert [s.urls[0] for s in snaps] == ["https://a.live.test/1", "https://b.live.test/1"]
+    assert "redirected to a held or excluded host 1" in notes[-1]
+
+
+def test_a_page_served_where_it_was_asked_names_nothing_else():
+    snaps, _ = redirect_only(["https://a.live.test/1"], n_web=1)
+    assert snaps[0].urls == ("https://a.live.test/1",) and snaps[0].named_url is None
+    # a getter that reports the address it was given is the same as one that does not
+    from occam.gather import fetch
+    same = fetch("https://a.live.test/1", at=AS_OF,
+                 http_get=lambda u: (*counted_get()(u), u))
+    assert same == snaps[0]
+
+
+def test_a_failed_redirect_is_recorded_at_the_address_asked_for():
+    snaps, _ = redirect_only([REDIRECT + "dead.test/a"], n_web=1)
+    assert snaps[0].urls == (REDIRECT + "dead.test/a",) and snaps[0].named_url is None
+    assert snaps[0].empty_reason == "HTTP 404"
+
+
+def test_the_named_url_never_counts_as_a_host():
+    from occam.covers import hosts_of_snapshots
+    snaps, _ = redirect_only([REDIRECT + "a.live.test/1"], n_web=1)
+    assert hosts_of_snapshots(snaps) == {snaps[0].id: frozenset({"a.live.test"})}
+
+
+def test_a_snapshot_cannot_name_an_address_it_also_counts():
+    import pytest
+    from occam.snapshot import capture
+    with pytest.raises(ValueError, match="named_url"):
+        capture(url="https://a.test/", body=b"x", text="x", fetched_at=AS_OF,
+                named_url="https://a.test/")
+
+
+def test_the_named_url_survives_a_stored_artifact_and_is_cited():
+    from occam.answer import StoredSnapshot, _cited_snapshot
+    snaps, _ = redirect_only([REDIRECT + "a.live.test/1"], n_web=1)
+    stored = StoredSnapshot.model_validate(json.loads(StoredSnapshot.of(snaps[0]).model_dump_json()))
+    assert stored.load() == snaps[0]
+    assert _cited_snapshot(snaps[0])["named_url"] == REDIRECT + "a.live.test/1"
+    plain, _ = redirect_only(["https://a.live.test/1"], n_web=1)
+    assert "named_url" not in _cited_snapshot(plain[0])   # old answers replay unchanged
