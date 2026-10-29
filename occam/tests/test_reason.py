@@ -225,7 +225,7 @@ YES_NO_Q = "Does blue light cause the sky's colour?"
 
 def test_a_yes_no_answer_is_not_held_for_giving_no_reason_under_row_7():
     ans, art, model = ask(YES_NO_Q, quotes(UNLINKED), [], sentence=UNLINKED)
-    assert art.params.rules == 7 and art.params.why_check == 4
+    assert art.params.rules >= 7 and art.params.why_check == 4
     assert ans.status == Status.ESTABLISHED, ans.status_bound_by
     assert art.reason_replies == ()
     assert not any("Does the STATEMENT give the reason" in p for p in model.prompts)

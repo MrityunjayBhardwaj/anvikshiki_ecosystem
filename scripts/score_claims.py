@@ -2,6 +2,11 @@
 """Score a claims-set run against its labels, for Amendment 12 (#230).
 
     python scripts/score_claims.py traces/occam/run12 traces/occam/run13
+    python scripts/score_claims.py --labels occam/questions/claims-2.labels.json traces/occam/run14
+
+The labels default to claims set 1's. A question with no label in the file
+stops the scoring: it would otherwise print as "?" and be read as unlabelled
+rather than as scored against the wrong set.
 
 Reads each stored question (the artifact and the answer it produced), replays
 it, and prints one row per question, then the counts Amendment 12's
@@ -82,10 +87,18 @@ def stored_canonical(stored: dict) -> str:
     return canonical(Answer.model_validate(stored["answer"]))
 
 
-def main(dirs: list[str]) -> int:
-    labels = {r["question"]: r for r in json.loads(LABELS.read_text())["rows"]}
-    for d in dirs:
+def main(argv: list[str]) -> int:
+    path = LABELS
+    if argv[:1] == ["--labels"]:
+        path, argv = Path(argv[1]), argv[2:]
+    labels = {r["question"]: r for r in json.loads(path.read_text())["rows"]}
+    for d in argv:
         rows = [score_one(p) for p in sorted(Path(d).glob("q*.json"))]
+        unlabelled = [r["question"] for r in rows if r["question"] not in labels]
+        if unlabelled:
+            print(f"{d}: {len(unlabelled)} questions have no label in {path}, e.g. "
+                  f"{unlabelled[0]!r}", file=sys.stderr)
+            return 2
         print(f"\n{d}: {len(rows)} questions")
         for r in rows:
             lab = labels.get(r["question"], {}).get("answer", "?")

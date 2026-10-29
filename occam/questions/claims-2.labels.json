@@ -1,0 +1,186 @@
+{
+ "retrieved": "2026-10-29",
+ "search": "Google Fact Check Tools claims:search, query as written, languageCode=en, first page",
+ "rows": [
+  {
+   "question": "Do people swallow spiders in their sleep?",
+   "answer": "no",
+   "claim": "The average person swallows eight spiders per year.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/swallow-spiders/",
+   "review_date": "2001-04-22T17:00:00Z"
+  },
+  {
+   "question": "Do microwaves make food radioactive?",
+   "answer": "no",
+   "claim": "Microwave oven makes the food radioactive.",
+   "publisher": "factly.in",
+   "rating": "FALSE",
+   "review": "https://factly.in/microwave-ovens-do-not-make-the-food-radioactive-japans-government-is-not-disposing-of-them/",
+   "review_date": "2020-01-21T00:00:00Z"
+  },
+  {
+   "question": "Does hydroxychloroquine cure COVID-19?",
+   "answer": "no",
+   "claim": "Hydroxychloroquine cures Covid-19",
+   "publisher": "factcheck.afp.com",
+   "rating": "FALSE",
+   "review": "https://factcheck.afp.com/korean-social-media-posts-falsely-claim-hydroxychloroquine-cures-covid-19-after-south-korea-sees",
+   "review_date": "2021-01-06T04:00:00Z"
+  },
+  {
+   "question": "Does ivermectin cure COVID-19?",
+   "answer": "no",
+   "claim": "Evidence that ivermectin works to treat COVID-19 is “powerful” and “overwhelming.”",
+   "publisher": "factcheck.org",
+   "rating": "Unsupported",
+   "review": "https://www.factcheck.org/2022/03/scicheck-evidence-still-lacking-to-support-ivermectin-as-treatment-for-covid-19/",
+   "review_date": ""
+  },
+  {
+   "question": "Do COVID-19 vaccines contain microchips?",
+   "answer": "no",
+   "claim": "COVID-19 vaccines have a microchip that \"tracks the location of the patient.\"",
+   "publisher": "factcheck.org",
+   "rating": "False",
+   "review": "https://www.factcheck.org/2020/12/covid-19-vaccines-dont-have-patient-tracking-devices/",
+   "review_date": ""
+  },
+  {
+   "question": "Do mRNA vaccines change your DNA?",
+   "answer": "no",
+   "claim": "The Covid vaccine is an RNA vaccine. This will actually change your DNA.",
+   "publisher": "fullfact.org",
+   "rating": "Some of the Covid-19 vaccine candidates are RNA vaccines. These don’t alter your DNA, they comprise of mRNA that gives the body instructions on how to make the proteins on the surface of the virus.",
+   "review": "https://fullfact.org/online/rna-vaccine-covid/",
+   "review_date": "2020-11-30T00:00:00Z"
+  },
+  {
+   "question": "Do carrots improve your night vision?",
+   "answer": "no",
+   "claim": "Eating carrots results in significantly improved vision.",
+   "publisher": "snopes.com",
+   "rating": "False",
+   "review": "https://www.snopes.com/fact-check/does-eating-carrots-improve-vision/",
+   "review_date": "2005-04-21T02:27:00Z"
+  },
+  {
+   "question": "Does wearing a mask lower oxygen levels?",
+   "answer": "no",
+   "claim": "“Masks will kill quite a few people, it’s well known that they reduce blood oxygen levels and those with respiratory and cardiac disorders will die.”",
+   "publisher": "politifact.com",
+   "rating": "False",
+   "review": "https://politifact.com/factchecks/2020/dec/03/facebook-posts/masks-do-not-kill-people-and-do-not-reduce-blood-o/",
+   "review_date": ""
+  },
+  {
+   "question": "Do wind turbines cause cancer?",
+   "answer": "no",
+   "claim": "“The noise (from windmills) causes cancer.”",
+   "publisher": "politifact.com",
+   "rating": "Pants on Fire",
+   "review": "https://politifact.com/factchecks/2019/apr/08/donald-trump/republicans-dismiss-trumps-windmill-and-cancer-cla/",
+   "review_date": "2019-04-08T19:39:47Z"
+  },
+  {
+   "question": "Does 5G cause cancer?",
+   "answer": "no",
+   "claim": "5G Towers Cause Nosebleeds, Cancer In The Brain",
+   "publisher": "leadstories.com",
+   "rating": "No Proof",
+   "review": "https://leadstories.com/hoax-alert/2022/06/fact-check-no-proof-5g-causes-nosebleeds-cancer-in-the-brain-low-sperm-count-headaches-or-insomnia.html",
+   "review_date": "2022-06-23T21:24:00Z"
+  },
+  {
+   "question": "Does sunscreen cause cancer?",
+   "answer": "no",
+   "claim": "Using sunscreen raises the risk of skin cancer.",
+   "publisher": "fullfact.org",
+   "rating": "No it doesn’t. Sunscreen lowers the risk of skin cancer. But people who use more of it may well be exposed to more sunlight too.",
+   "review": "https://fullfact.org/health/sunscreen-skin-cancer-peoples-voice-uk-biobank/",
+   "review_date": "2026-06-30T00:00:00Z"
+  },
+  {
+   "question": "Did Bill Gates patent the coronavirus?",
+   "answer": "no",
+   "claim": "A patent for coronavirus was granted in 2018 to the Pirbright Institute UK, founded by Bill and Melinda Gates.",
+   "publisher": "fullfact.org",
+   "rating": "A patent for a different virus in the same family as the Wuhan virus was applied for by the Pirbright Institute, which receives part of its funding from the Bill and Melinda Gates Foundation.",
+   "review": "https://fullfact.org/online/wuhan-virus-patent-gates/",
+   "review_date": "2020-01-27T00:00:00Z"
+  },
+  {
+   "question": "Is MSG bad for your health?",
+   "answer": "no",
+   "claim": "MSG is a deadly brain toxin, causes neurological disorders and other health problems",
+   "publisher": "usatoday.com",
+   "rating": "False",
+   "review": "https://www.usatoday.com/story/news/factcheck/2021/06/25/fact-check-msg-safe-eat-doesnt-cause-neurological-disorders/5318758001/",
+   "review_date": "2021-06-25T22:41:26Z"
+  },
+  {
+   "question": "Can drinking bleach cure COVID-19?",
+   "answer": "no",
+   "claim": "\"MMS (chlorine dioxide), can be very effective in both preventing and eradicating the coronavirus.\"",
+   "publisher": "factcheck.org",
+   "rating": "False",
+   "review": "https://www.factcheck.org/2020/02/fake-coronavirus-cures-part-1-mms-is-industrial-bleach/",
+   "review_date": ""
+  },
+  {
+   "question": "Are humans causing climate change?",
+   "answer": "yes",
+   "claim": "No one has shown that human CO2 emissions drive global warming",
+   "publisher": "usatoday.com",
+   "rating": "False",
+   "review": "https://www.usatoday.com/story/news/factcheck/2023/12/20/humans-cause-global-warming-fact-check/71714659007/",
+   "review_date": "2023-12-20T21:00:17Z"
+  },
+  {
+   "question": "Are sea levels rising?",
+   "answer": "yes",
+   "claim": "Sea levels aren't rising.",
+   "publisher": "aap.com.au",
+   "rating": "False. Sea levels have risen 15-25cm since 1901.",
+   "review": "https://www.aap.com.au/factcheck/sea-level-rise-claim-contrary-to-wealth-of-scientific-evidence/",
+   "review_date": "2026-03-23T14:10:03Z"
+  },
+  {
+   "question": "Is Arctic sea ice shrinking?",
+   "answer": "yes",
+   "claim": "On average, the area of Arctic sea ice during summer and winter has never changed.",
+   "publisher": "aap.com.au",
+   "rating": "False. Satellite data shows the extent of Arctic sea ice has been steadily shrinking in both winter and summer for nearly 50 years.",
+   "review": "https://www.aap.com.au/factcheck/claim-says-arctic-sea-ice-isnt-changing-but-truth-is-the-polar-opposite/",
+   "review_date": "2025-06-04T09:40:04Z"
+  },
+  {
+   "question": "Is Greenland's ice sheet melting?",
+   "answer": "yes",
+   "claim": "Greenland's ice loss trend slowed over the last decade, ice mass now growing",
+   "publisher": "usatoday.com",
+   "rating": "False",
+   "review": "https://www.usatoday.com/story/news/factcheck/2021/12/30/fact-check-greenland-ice-sheets-melting-due-global-climate-change/9000729002/",
+   "review_date": "2021-12-30T22:51:43Z"
+  },
+  {
+   "question": "Is Antarctica losing ice?",
+   "answer": "yes",
+   "claim": "“The truth is, it is unclear if Antarctica is losing any ice on balance or if it’s currently experiencing a net gain.\"",
+   "publisher": "factcheck.org",
+   "rating": "False",
+   "review": "https://www.factcheck.org/2024/06/scicheck-antarctic-ice-loss-is-significant-contrary-to-claims/",
+   "review_date": ""
+  },
+  {
+   "question": "Was Barack Obama born in Hawaii?",
+   "answer": "yes",
+   "claim": "Image of Barack Obama's birth certificate shows he was born in Kenya",
+   "publisher": "usatoday.com",
+   "rating": "False",
+   "review": "https://www.usatoday.com/story/news/factcheck/2021/10/13/fact-check-obama-born-hawaii-not-kenya/5898722001/",
+   "review_date": "2021-10-13T23:34:55Z"
+  }
+ ]
+}

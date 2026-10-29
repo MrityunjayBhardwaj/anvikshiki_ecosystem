@@ -236,7 +236,7 @@ MYTH_SOURCE = "It is a common misconception that the color red is supposed to an
 def test_a_denial_by_a_marker_reaches_the_judge_and_can_establish():
     ans, art, model = ask([COVERS, COVERS], answer="The color red does not make bulls angry.",
                           source=MYTH_SOURCE)
-    assert art.params.rules >= 6 and art.params.covers_check == 4
+    assert art.params.rules >= 6 and art.params.covers_check >= 4
     assert ans.status == Status.ESTABLISHED, ans.status_bound_by
     assert canonical(replay(art)) == canonical(ans)
 
@@ -311,3 +311,54 @@ def test_one_text_on_two_hosts_keeps_both_hosts():
     from occam.covers import hosts_of_snapshots
     snaps = [S(id="x", urls=("https://a.test/1",)), S(id="x", urls=("https://b.test/1",))]
     assert hosts_of_snapshots(snaps) == {"x": frozenset({"a.test", "b.test"})}
+
+
+# ── #243: rule 5 leaves negation to the judge ─────────────
+
+# Run 13, q03: a denial and a plain statement of the same fact, which the
+# probe's judge covered in both orders.
+NOT_FLAT = "The shape of the Earth is not flat."
+SPHERICAL = "Earth is massive enough that the pull of gravity maintains its roughly spherical shape."
+
+
+@pytest.mark.parametrize("answer, source", [
+    (NOT_FLAT, SPHERICAL),
+    ("Vaccines cause autism.", DENIAL),            # opposites: now the judge's to refuse
+    (DENIAL, "Vaccines cause autism."),
+    ("Vaccines cause autism.", "Vaccines don't cause autism"),
+])
+def test_under_rule_5_no_pair_is_vetoed_for_negation(answer, source):
+    assert cover_veto(answer, source, 4).startswith("negation on one side only: ")
+    assert cover_veto(answer, source, 5) == ""
+
+
+def test_under_rule_5_the_number_veto_still_rules_a_pair_out():
+    assert cover_veto("Wegener did not propose it in 1912.", "Wegener did not propose it.", 5) == \
+        "the answer states a number the source does not: 1912"
+    assert cover_veto("Water boils at 50 degrees Celsius at sea level.",
+                      "Water boils at 100 degrees Celsius at sea level.", 5) != ""
+
+
+def test_under_row_8_a_denial_covered_by_a_plain_statement_establishes():
+    ans, art, model = ask([COVERS, COVERS], answer=NOT_FLAT, source=SPHERICAL)
+    assert art.params.rules == 8 and art.params.covers_check == 5
+    assert ans.status == Status.ESTABLISHED, ans.status_bound_by
+    assert sum("state everything the ANSWER" in p for p in model.prompts) == 2
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_row_8_opposites_reach_the_judge_and_its_refusal_keeps_them_apart():
+    """The case the veto used to stop before any model saw it."""
+    ans, art, model = ask([DOES_NOT, DOES_NOT], answer="Vaccines given to children cause autism.",
+                          source=DENIAL)
+    assert sum("state everything the ANSWER" in p for p in model.prompts) == 2
+    assert ans.status == Status.HYPOTHESIS
+    assert canonical(replay(art)) == canonical(ans)
+
+
+def test_under_row_7_the_same_denial_is_vetoed_and_replays_so():
+    ans, art, model = ask([], answer=NOT_FLAT, source=SPHERICAL, rules=7)
+    assert art.params.covers_check == 4 and art.cover_replies == ()
+    assert ans.status == Status.HYPOTHESIS
+    assert not any("state everything the ANSWER" in p for p in model.prompts)
+    assert canonical(replay(art)) == canonical(ans)

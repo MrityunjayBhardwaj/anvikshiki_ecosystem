@@ -1673,3 +1673,92 @@ pass that completes, so the waste cannot be separated from the 357.31.
 3. Both changes need a fresh claims set, because this one has now been seen.
 4. kie/gemini-3-pro's gateway failure rate makes per-call retries the limiting
    factor in a run's cost.
+
+## Amendment 13 — 2026-10-29: run 14, rules row 8 on claims set 2 (#244)
+
+Added before any live call on these questions under rules rows 5–8. Nothing
+above is changed.
+
+**Why.** Runs 12 and 13 found two limits in the checks (Amendment 12, "What
+follows"). Both are now changed, each as a new rules row, so every stored
+artifact still replays under the row it ran with:
+
+- **Row 5 (#235, #237).** Both negation vetoes compare polarity, not the set of
+  negation words. "Do not cause" against "no link" reaches the judge.
+- **Row 6 (#239, #241).** A denial marker such as "myth", "debunked" or
+  "without" on either side leaves the pair to the judge. A contraction is
+  still a negation.
+- **Row 7 (#236).** A yes/no question about a cause ("Does X cause Y?") is not
+  held for giving no reason. It opens with an auxiliary and has no wh-word.
+- **Row 8 (#243).** The covers check keeps only its number veto. Whether a
+  denial is covered ("not flat" by "roughly spherical") or conflicts is the
+  judge's to say, in both orders.
+
+All four were measured on claims set 1, which is now seen. On
+`traces/occam/probe-cover-negation/`, the covers judge kept all 18
+hand-built opposites apart, with 36 of 36 replies `does_not`. It covered 6
+of the 20 blocked real pairs that were read as implied, and 0 of the 9 read
+as not. Replaying runs 12 and 13 with rows 7 and 8 and those replies,
+run 13 establishes 6 of 20 instead of 3, and run 12 stays at 4. The three
+new answers (Moon landings, Great Wall, knuckles) agree with their labels.
+That replay is on seen data, so it sets the expected range below. It is not
+evidence for it.
+
+**Claims set 2** is `occam/questions/claims-2.txt`, with
+`claims-2.labels.json`, committed with this amendment. It is drafted by the
+same method as set 1. It has 20 yes/no questions, each the proposition of a
+review that `claims:search` returns for the question as written. Each label
+was read by hand from the review's rating: **14 no and 6 yes**. None is in
+claims set 1 or either held-out set. Two topics cluster: 5 are about the
+climate (all labelled yes) and 4 are about COVID-19 treatments or vaccines.
+Four are yes/no questions about a cause ("Do wind turbines cause cancer?",
+"Does 5G cause cancer?", "Does sunscreen cause cancer?", "Are humans causing
+climate change?"), so row 7 is exercised. The user approves the set before
+any call.
+
+**One arm**, at the latest rules row (8), with run 13's settings:
+
+    python -m occam measure --questions occam/questions/claims-2.txt \
+        --model kie/gemini-3-pro --web 3 --factcheck 3 --out traces/occam/run14
+
+There is one arm because the question is whether the checks certify
+answers a fact-checker rejects, not whether fact-check pages help: run 13
+already showed they can carry an answer on their own. A row-6 arm on the
+same pages cannot be had by replay, because the same-answer replies are read
+by position (#201), so a run under one veto cannot be read under another.
+`kie/gemini-3-pro` is kept because `kie/gemini-3.1-pro` still refuses "&"
+(Amendment 12).
+
+**Predictions.** There are 20 questions.
+
+1. **No established answer disagrees with its label.** This is the kill
+   criterion. A miss means the mechanism certified a claim a fact-checker
+   rejected. If it happens, it is reported first, the answer's cover pairs
+   are read, and no further run uses row 8 until it is understood.
+2. **Established: 3–10 of 20.**
+3. **The reason check is never asked.** None of the 20 questions asks for a
+   cause under row 7, so every `reason_replies` is empty and no bound names
+   the reason check. This holds by construction, and it confirms the row
+   was in force.
+4. **The negation veto rules out no cover pair**, by construction under
+   row 8. At least one pair whose sides differ in polarity is covered in
+   both orders, and each such pair is listed and read.
+5. **Yes questions.** At least 1 of the 6 labelled yes is established. In
+   run 13, 0 of 5 were.
+6. **Abstentions:** at most 3.
+7. **Agreement, read by me.** Of the answers given, at least 85% per label
+   agree with the label, judged on the conclusion alone and listed.
+8. **Gathering.** At least one readable fact-check page for 13–20 of 20.
+9. **Fact-check pages are used.** In at least 8 of 20, a fact-check page
+   holds a verified quote in the argue output.
+10. **Spend:** 200–450 credits. Judge calls are about 0.04 credits each in
+    the #243 probe, so rows 5–8 add little. The range is wide because of
+    the gateway retries that drove run 13 to 357.
+
+**Reading.** Statuses, abstentions and the counts come from
+`scripts/score_claims.py --labels occam/questions/claims-2.labels.json
+traces/occam/run14` and the stored artifacts. Spend comes from kie.ai's
+balance before and after, beside the provider's own count. Predictions 4,
+7 and 9 are readings, each reported with the pairs or conclusions listed.
+The runner resumes after a failed call as in runs 12 and 13, and every
+resume is listed with the results.
