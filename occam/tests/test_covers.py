@@ -222,6 +222,55 @@ def test_the_display_says_one_host_when_one_counted(capsys):
     assert "sources counted toward corroboration: 1 host(s)" in out
 
 
+def test_a_quote_two_arguments_share_is_one_row_but_hosts_and_quotes_stay_apart(capsys):
+    """#250: two arguments quoting one sentence from one host are one thing
+    that host said. The same sentence on another host, or another sentence
+    on the same host, is not, and keeps its own row."""
+    from occam.__main__ import _counted
+    ans, art, _ = ask([COVERS, COVERS])
+    same = "Health authorities  consider it safe."
+    counted = {"decoy": ((("x.net", "B1", "Read for another argument."),), 1),
+               ans.answer_id: ((("h.com", "A1", same), ("h.com", "A2", " ".join(same.split())),
+                                ("h.com", "A3", "Another sentence."),
+                                ("k.org", "A4", same)), 2)}
+    _counted(art, ans, counted)
+    head, *rows = [x.strip() for x in capsys.readouterr().out.splitlines()]
+    assert head.startswith("sources counted toward corroboration: 2 host(s), 2 distinct")
+    assert rows == ['h.com A1, A2: "Health authorities consider it safe."',
+                    'h.com A3: "Another sentence."',
+                    'k.org A4: "Health authorities consider it safe."']
+
+
+def test_the_display_says_which_host_count_is_which(capsys):
+    """#250: '2 host(s)' beside 'n_hosts 1 of 1' reads as a contradiction
+    unless the line says the counter counts the cited page only."""
+    from occam.__main__ import _show
+    ans, art, _ = ask([COVERS, COVERS])
+    _show(ans, art)
+    out = capsys.readouterr().out
+    assert "n_hosts counter below counts the cited page only" in out
+    assert ans.counters["n_hosts"].n == 1        # the counter it explains
+
+
+def test_occam_replay_replays_once(tmp_path, monkeypatch, capsys):
+    """#250: the display reuses the command's replay instead of running a
+    second one for the counted sources."""
+    import occam.answer as A
+    from occam.__main__ import main
+    from occam.answer import replay_counted, stored_run
+    ans, art, _ = ask([COVERS, COVERS])
+    f = tmp_path / "a.json"
+    f.write_text(stored_run(ans, art))
+    calls = []
+    real = A._replayed
+    monkeypatch.setattr(A, "_replayed", lambda *a, **k: calls.append(1) or real(*a, **k))
+    monkeypatch.setattr("sys.argv", ["occam", "replay", str(f)])
+    assert main() == 0
+    assert len(calls) == 1
+    assert "sources counted toward corroboration: 2 host(s)" in capsys.readouterr().out
+    assert replay_counted(art)[1][ans.answer_id] == A.counted_sources(art, ans.answer_id)
+
+
 def test_one_order_saying_does_not_keeps_the_single_source():
     ans, _, _ = ask([COVERS, DOES_NOT])
     assert ans.status == Status.HYPOTHESIS

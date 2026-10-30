@@ -47,7 +47,7 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
            "canonical", "stored_run", "contradicted_quotes", "derivation_nodes",
            "support_verdicts", "question_details", "what_if", "WhatIfRefused",
-           "unread_judge_pairs", "counted_sources"]
+           "unread_judge_pairs", "counted_sources", "replay_counted"]
 
 ARTIFACT_VERSION = 1
 
@@ -410,18 +410,28 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     return _replayed(artifact, calibration)[0]
 
 
-def counted_sources(artifact: Artifact, answer_id: Optional[str]
-                    ) -> tuple[tuple[tuple[str, str, str], ...], int]:
+Counted = tuple[tuple[tuple[str, str, str], ...], int]
+
+
+def replay_counted(artifact: Artifact, calibration: Optional[Calibration] = None
+                   ) -> tuple[Answer, dict[str, Counted]]:
+    """`replay`, plus what corroboration counted for every argument, from one
+    replay, so a display needs no second one (#250). Calibration enters after
+    `derive`, so what was counted does not depend on it."""
+    answer, derived, argued = _replayed(artifact, calibration)
+    by = argued.by_id()
+    return answer, {aid: (tuple((h, q, by[q].span.quote) for h, q in pairs), n_texts)
+                    for aid, (pairs, n_texts) in derived.counted.items()}
+
+
+def counted_sources(artifact: Artifact, answer_id: Optional[str]) -> Counted:
     """What corroboration counted for one argument (#248): (host, quoting
     argument id, its quote) for each pair the single-source check was given,
     and how many distinct texts. Read from `derive`, never re-derived, so
     what a reader is shown is what the rule used."""
     if answer_id is None:
         return (), 0
-    _, derived, argued = _replayed(artifact, None)
-    by = argued.by_id()
-    pairs, n_texts = derived.counted.get(answer_id, ((), 0))
-    return tuple((h, aid, by[aid].span.quote) for h, aid in pairs), n_texts
+    return replay_counted(artifact)[1].get(answer_id, ((), 0))
 
 
 def _replayed(artifact: Artifact, calibration: Optional[Calibration]
