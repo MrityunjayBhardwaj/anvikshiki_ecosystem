@@ -207,7 +207,10 @@ class Argument:
     """A structured argument in the ASPIC+ framework.
 
     Premise arguments: top_rule=None, conclusion=predicate, sub_arguments=()
-    Rule arguments: top_rule=vyapti_id, sub_arguments=(sub_arg_ids...)
+    Rule arguments: top_rule=vyapti_id, sub_arguments=(sub_arg_ids...), all
+        of which the rule needs
+    Scope undercutters: top_rule=None, sub_arguments=(the best arguments for
+        the excluding fact), any one of which carries it
     """
     id: str
     conclusion: str                    # Predicate concluded
