@@ -42,7 +42,8 @@ from pathlib import Path
 from typing import Optional
 
 from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
-                     counted_sources, derivation_nodes, question_details, replay, run, stored_run,
+                     counted_sources, derivation_nodes, question_details, replay, replay_counted,
+                     run, stored_run,
                      support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
 from .status import MIN_HOSTS
@@ -140,21 +141,30 @@ def _question_details(a: Answer, art: Optional[Artifact]) -> None:
             "not carried by the answer"))
 
 
-def _counted(art: Artifact, a: Answer) -> None:
+def _counted(art: Artifact, a: Answer, counted: Optional[dict] = None) -> None:
     """The sources corroboration counted toward the answer (#248), every time,
     one and none included: "two independent sources" is a claim a reader can
-    only check by seeing which two, and whether one relays the other (#225)."""
-    quotes, n_texts = counted_sources(art, a.answer_id)
+    only check by seeing which two, and whether one relays the other (#225).
+    `counted` is what the caller's replay already found (#250); without it,
+    one more replay finds it."""
+    quotes, n_texts = (counted_sources(art, a.answer_id) if counted is None
+                       else counted.get(a.answer_id, ((), 0)))
     hosts = sorted({h for h, _, _ in quotes})
     print(f"   sources counted toward corroboration: {len(hosts)} host(s), "
-          f"{n_texts} distinct text(s) (needs {MIN_HOSTS} of each)")
+          f"{n_texts} distinct text(s) (needs {MIN_HOSTS} of each; the n_hosts "
+          f"counter below counts the cited page only)")
     for h in hosts:
+        # One row per distinct quote: two arguments quoting the same sentence
+        # are one thing the host said, not two (#250).
+        ids: dict[str, list[str]] = {}
         for _, aid, q in (x for x in quotes if x[0] == h):
-            q = " ".join(q.split())
-            print(f"      {h} {aid}: \"{q[:150]}{'…' if len(q) > 150 else ''}\"")
+            ids.setdefault(" ".join(q.split()), []).append(aid)
+        for q, aids in ids.items():
+            print(f"      {h} {', '.join(aids)}: \"{q[:150]}{'…' if len(q) > 150 else ''}\"")
 
 
-def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> None:
+def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False,
+          counted: Optional[dict] = None) -> None:
     print(f"\nQ: {a.question}")
     if blind:
         print(f"ABSTAINED — {a.abstain_reason}" if a.abstained else f"A: {a.conclusion}")
@@ -184,7 +194,7 @@ def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> Non
                 print(f"         defeated by {x['attacker']}: {x['why']}")
         _question_details(a, art)
         if art is not None:
-            _counted(art, a)
+            _counted(art, a, counted)
         _chain(a, None if art is None else support_verdicts(art), blind=False)
     if a.positions and "wordings" not in a.positions[0]:
         print("   positions grouped by exact wording (same-answer judge not run)")
@@ -630,20 +640,20 @@ def main(argv: list[str] | None = None) -> int:
 
     stored = json.loads(Path(args.file).read_text())
     artifact = Artifact.model_validate(stored["artifact"])
-    answer = replay(artifact, cal)
+    answer, counted = replay_counted(artifact, cal)
     if args.blind:
         _show(answer, artifact, blind=True)
         return 0
     if args.drop_attack or args.reject_quote:
         return _what_if(artifact, answer, args.drop_attack, args.reject_quote, cal)
     if cal is not None:
-        _show(answer, artifact)
+        _show(answer, artifact, counted=counted)
         print(_judged_when(artifact))
         print(_served(artifact))
         print("\n(calibrated replay: not compared with the stored answer)")
         return 0
     same = canonical(answer) == json.dumps(stored["answer"], sort_keys=True, ensure_ascii=False)
-    _show(answer, artifact)
+    _show(answer, artifact, counted=counted)
     print(_judged_when(artifact))
     print(_served(artifact))
     print(f"\nreplay {'MATCHES' if same else 'DIFFERS FROM'} the stored answer")
