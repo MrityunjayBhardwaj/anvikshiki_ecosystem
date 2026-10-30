@@ -187,6 +187,41 @@ def test_a_source_on_a_second_host_that_covers_the_answer_establishes_it():
     assert canonical(replay(art)) == canonical(ans)
 
 
+def test_the_display_names_the_covering_host_beside_the_cited_one(capsys):
+    """#248: the answer cites one page; the host that covered it must be shown too."""
+    from occam.__main__ import _show
+    ans, art, _ = ask([COVERS, COVERS])
+    _show(ans, art)
+    out = capsys.readouterr().out
+    line = next(x for x in out.splitlines() if "sources counted toward corroboration" in x)
+    assert "2 host(s), 2 distinct text(s)" in line
+    shown = out[out.index(line):out.index("derivation,")]
+    assert "en.wikipedia.org" in shown and SOURCE[:40] in shown and ANSWER[:40] in shown
+    assert len(ans.snapshots) == 1        # the cited page alone, which is why it is needed
+
+
+def test_counted_sources_are_read_for_the_argument_asked_about():
+    """Covering is one-way: the answer counts the covering host, the covering
+    quote counts only its own. Reading one argument's set for another would
+    show the reader a corroboration that argument never had."""
+    from occam.answer import counted_sources
+    ans, art, _ = ask([COVERS, COVERS])
+    mine, n = counted_sources(art, ans.answer_id)
+    source = next(aid for _, aid, q in mine if aid != ans.answer_id)
+    theirs, m = counted_sources(art, source)
+    assert (len({h for h, _, _ in mine}), n) == (2, 2)
+    assert (len({h for h, _, _ in theirs}), m) == (1, 1)
+    assert counted_sources(art, None) == ((), 0)
+
+
+def test_the_display_says_one_host_when_one_counted(capsys):
+    from occam.__main__ import _show
+    ans, art, _ = ask([COVERS, DOES_NOT])
+    _show(ans, art)
+    out = capsys.readouterr().out
+    assert "sources counted toward corroboration: 1 host(s)" in out
+
+
 def test_one_order_saying_does_not_keeps_the_single_source():
     ans, _, _ = ask([COVERS, DOES_NOT])
     assert ans.status == Status.HYPOTHESIS

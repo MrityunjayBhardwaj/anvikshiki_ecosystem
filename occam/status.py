@@ -124,6 +124,11 @@ class StatusResult(BaseModel):
     max_age_days: int
     solved: SolveResult
     statuses: dict[str, ArgStatus]
+    # What corroboration counted for each argument (#248): the (host, quoting
+    # argument id) pairs and the number of distinct texts, exactly as handed
+    # to the single-source check. For reading, never for deciding: it is not
+    # part of a stored answer, so adding it changed no replay.
+    counted: dict[str, tuple[tuple[tuple[str, str], ...], int]] = {}
 
 
 def _snapshot(a: Argument, store: SnapshotStore) -> Optional[Snapshot]:
@@ -231,6 +236,7 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
 
     hosts_of: dict[str, set[str]] = {}
     texts_of: dict[str, set[str]] = {}
+    quotes_of: dict[str, set[tuple[str, str]]] = {}
     for a in arguments:
         if (a.kind == "quote" and solved.grounded[a.id] == Label.IN
                 and ceil[a.id][0] == Status.ESTABLISHED):
@@ -238,17 +244,21 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             key = group(a.conclusion)
             hosts_of.setdefault(key, set()).update(host(u) for u in snap.urls)
             texts_of.setdefault(key, set()).add(snap.text_sha256)
+            quotes_of.setdefault(key, set()).update((host(u), a.id) for u in snap.urls)
 
-    def counted(conclusion: str) -> tuple[set[str], set[str]]:
+    def counted(conclusion: str) -> tuple[set[str], set[str], set[tuple[str, str]]]:
         # Its own group's hosts and texts, and those of every conclusion that
         # covers it (#212, occam.covers). Covering is one-way and does not
-        # chain: a source counts for the answer it covers, nothing else.
-        hosts, texts = set(hosts_of.get(group(conclusion), ())), \
-            set(texts_of.get(group(conclusion), ()))
+        # chain: a source counts for the answer it covers, nothing else. The
+        # third set names which quote brought each host (#248).
+        g = group(conclusion)
+        hosts, texts = set(hosts_of.get(g, ())), set(texts_of.get(g, ()))
+        quotes = set(quotes_of.get(g, ()))
         for s in sorted((covered_by or {}).get(norm_conclusion(conclusion), ())):
             hosts |= hosts_of.get(group(s), set())
             texts |= texts_of.get(group(s), set())
-        return hosts, texts
+            quotes |= quotes_of.get(group(s), set())
+        return hosts, texts, quotes
 
     def single_source(hosts: set[str], texts: set[str]) -> Optional[str]:
         # ≥2 hosts and ≥2 distinct texts together mean two different documents
@@ -258,9 +268,11 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             return f"rests on a single source ({', '.join(sorted(hosts))})"
         return None
 
+    basis: dict[str, tuple[tuple[tuple[str, str], ...], int]] = {}
     for a in arguments:
         st, bound = by_label[a.id]
-        hosts, texts = counted(a.conclusion)
+        hosts, texts, quotes = counted(a.conclusion)
+        basis[a.id] = (tuple(sorted(quotes)), len(texts))
         if st == Status.ESTABLISHED:
             why = single_source(hosts, texts)
             if why:
@@ -275,6 +287,8 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             # says so, and "single source" would be a guess.
             why = single_source(hosts | {host(u) for u in snap.urls},
                                 texts | {snap.text_sha256})
+            basis[a.id] = (tuple(sorted(quotes | {(host(u), a.id) for u in snap.urls})),
+                           len(texts | {snap.text_sha256}))
             if why and why not in bound:
                 by_label[a.id] = (st, bound + (why,))
 
@@ -304,4 +318,4 @@ def derive(arguments: Sequence[Argument], attacks: Sequence[Attack],
             ceiling=ceil[aid][0], status=st, status_bound_by=bound,
         )
     return StatusResult(as_of=as_of, max_age_days=max_age_days, solved=solved,
-                        statuses=statuses)
+                        statuses=statuses, counted=basis)
