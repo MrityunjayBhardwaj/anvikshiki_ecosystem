@@ -1762,3 +1762,124 @@ balance before and after, beside the provider's own count. Predictions 4,
 7 and 9 are readings, each reported with the pairs or conclusions listed.
 The runner resumes after a failed call as in runs 12 and 13, and every
 resume is listed with the results.
+
+### Results — run 14 (2026-10-29/30)
+
+Run 14 ran from 19:43 IST on 2026-10-29 to 14:08 IST on 2026-10-30, on
+`kie/gemini-3-pro`, at commit `dc527bc` (rules row 8). The scoring is the
+registered command, and its full output is kept as
+`traces/occam/score-run14.txt`. Every one of the 20 answers replays byte for
+byte, and none abstained.
+
+**The kill criterion holds: no established answer disagrees with its label.
+All ten predictions hold.** Prediction 2 holds only at its upper bound.
+
+| # | Prediction | Run 14 | |
+|---|---|---|---|
+| 1 | no established answer disagrees with its label | 0 of 10 | holds |
+| 2 | 3–10 of 20 established | 10 | holds, at the bound |
+| 3 | the reason check is never asked | `reason_replies` empty in 20 of 20; no bound names it | holds |
+| 4 | negation veto rules out no cover pair; ≥ 1 pair of differing polarity covered both ways | 0 of 160 vetoed for negation; 1 pair covered (below) | holds |
+| 5 | ≥ 1 of the 6 "yes" established | 5 of 6 | holds |
+| 6 | ≤ 3 abstentions | 0 | holds |
+| 7 | ≥ 85% of answers agree with the label, per label | 14/14 no, 6/6 yes | holds |
+| 8 | readable fact-check page for 13–20 of 20 | 19 of 20 | holds |
+| 9 | a fact-check page holds a verified quote in ≥ 8 of 20 | 19 of 20 | holds |
+| 10 | 200–450 credits | 303.87 | holds |
+
+All 20 artifacts record `rules` 8, `why_check` 4 and `covers_check` 5.
+
+**Established answers (10).** Every one of them agrees with its label:
+
+| Question | Label | Answer |
+|---|---|---|
+| q02 microwaves | no | Microwaves do not make food radioactive. |
+| q05 microchips | no | COVID-19 vaccines do not contain microchips. |
+| q08 masks | no | It is not true that masks reduce blood oxygen levels. |
+| q11 sunscreen | no | Sunscreen does not raise your risk of skin cancer. |
+| q13 MSG | no | MSG is generally recognized as safe to eat. |
+| q15 humans and climate | yes | The modern rise in global temperatures is driven by human activities. |
+| q16 sea level | yes | Global sea level is rising. |
+| q17 Arctic ice | yes | Arctic sea ice has been steadily shrinking. |
+| q18 Greenland | yes | Greenland's ice is melting. |
+| q19 Antarctica | yes | The Antarctic Ice Sheet is losing ice. |
+
+The answers above are abridged from `score-run14.txt`. **Prediction 7 was
+read on the conclusion alone, for all 20 answers.** The 10 hypotheses agree
+too:
+- q01: people do not regularly swallow spiders.
+- q03: there is no proof hydroxychloroquine cures COVID-19.
+- q04: ivermectin was not effective in ACTIV-6.
+- q06: mRNA vaccines do not interact with DNA.
+- q07: carrots do not help night vision without a deficiency.
+- q09: there is no evidence wind turbines cause cancer.
+- q10: claims that 5G causes cancer are unsupported.
+- q12: Bill Gates did not patent the coronavirus.
+- q14: there is no evidence bleach helps with COVID-19.
+- q20: Obama was born in Honolulu.
+
+Seven of these were held by "rests on a single source" and three by an
+inference step. q20 is a hypothesis only because one host stated it.
+
+**Prediction 4: the one covered pair of opposite polarity (q05).**
+
+- ANSWER: "COVID-19 vaccines do not contain microchips."
+- SOURCE: "The claim that the COVID-19 vaccines contain microchips is FALSE."
+
+The polarity rule reads a negation on one side only, because "FALSE" is not
+a negation word. The judge said `covers` in both orders, and on reading,
+that is right: the source denies the same claim. The number veto ruled out 19 of
+the 160 cover pairs, and the negation veto ruled out none.
+
+**Fact-checkers' sites carry most of the established answers.** Of the 10
+established answers, 9 count a fact-checker's host among those stating them or
+a source that covers them. The hosts are factly.in, ghanafact.com,
+factcheck.org, politifact.com, fullfact.org, science.feedback.org and
+aap.com.au. q13 (MSG) is the exception. These host lists count every quote
+with the answer's wording or a covering one, so they read wider than the
+corroboration rule, which counts only quotes still standing.
+
+**What row 8 did here: nothing measurable.** Replaying all 20 artifacts with
+`covers_check` set back to 4 changes no status and no conclusion. Only that
+field was changed, which is safe because the cover replies are keyed by
+content. The one pair above passes under row 4 as well, because "false" is a
+denial marker. So this run shows that rows 5–8 together certified nothing a
+fact-checker rejects. It does not show that row 8 alone established
+anything.
+
+**What this run does not show.**
+- **The "yes" result rests on one topic.** All five "yes" questions that were
+  established are about the climate (q15–q19). For each, between two and
+  five hosts state the answer in a short form: fact-checkers (aap.com.au,
+  factcheck.org, science.feedback.org), Wikipedia, science.nasa.gov or
+  sealevel.nasa.gov, nsidc.org and whoi.edu. The sixth, Obama's birthplace,
+  stopped at a single source. "5 of 6" is a result about well-documented
+  climate questions as much as about "yes" labels.
+- **"No" answers are established when the sources deny in the same short
+  form.** That held in 5 of 14 cases ("do not make food radioactive"). Longer,
+  hedged denials (q03, q04, q07) stayed single-source.
+- **Claims set 2 was drafted by the same author as the rules.** It was not
+  used to write or tune any rule, but it is not independent of that author's
+  sense of what a fact-check question looks like.
+- **Prediction 3 holds by construction.** It confirms that row 7 was in
+  force, not that it is right.
+
+**Spend: 303.87 credits** from kie.ai's balance (7932.59 → 7628.72). The
+provider counted 180.76 + 123.06 = 303.82 over the two passes. The 0.05
+difference is unexplained. The first pass's count includes q13's calls, which were billed and then
+discarded.
+
+**Passes.** There were 2:
+- **Pass 1** wrote q01–q12 and stopped in q13's same-answer judge on a `524`
+  from the gateway (`SOCKSHTTPSConnectionPool … Max retries exceeded`).
+- **Pass 2** began at 02:04 IST, kept q01–q12 and wrote q13–q20.
+
+All 20 files parse.
+
+**What follows.**
+1. Rows 5–8 are now measured on unseen claims, and no false certification
+   was found in 10 established answers. That is a small number. The bound it
+   gives on the false-certification rate is wide.
+2. The remaining single-source holds, 7 of 10 hypotheses, are what
+   independence (#220, #225) is about. Replaying runs 5–14 with hosts counted
+   by organisation changed no status (#220, comment of 2026-10-30).
