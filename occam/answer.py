@@ -47,7 +47,7 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
            "canonical", "stored_run", "contradicted_quotes", "derivation_nodes",
            "support_verdicts", "question_details", "what_if", "WhatIfRefused",
-           "unread_judge_pairs"]
+           "unread_judge_pairs", "counted_sources"]
 
 ARTIFACT_VERSION = 1
 
@@ -407,6 +407,25 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
     """Stages 4–7 from the artifact alone. Deterministic; no model.
 
     With a calibration, the answer also carries a conformal status set."""
+    return _replayed(artifact, calibration)[0]
+
+
+def counted_sources(artifact: Artifact, answer_id: Optional[str]
+                    ) -> tuple[tuple[tuple[str, str, str], ...], int]:
+    """What corroboration counted for one argument (#248): (host, quoting
+    argument id, its quote) for each pair the single-source check was given,
+    and how many distinct texts. Read from `derive`, never re-derived, so
+    what a reader is shown is what the rule used."""
+    if answer_id is None:
+        return (), 0
+    _, derived, argued = _replayed(artifact, None)
+    by = argued.by_id()
+    pairs, n_texts = derived.counted.get(answer_id, ((), 0))
+    return tuple((h, aid, by[aid].span.quote) for h, aid in pairs), n_texts
+
+
+def _replayed(artifact: Artifact, calibration: Optional[Calibration]
+              ) -> tuple[Answer, StatusResult, ArgueResult]:
     if artifact.version != ARTIFACT_VERSION:
         raise ValueError(f"artifact version {artifact.version}, expected {ARTIFACT_VERSION}")
     snaps, readable, raw, argued, judged = _argued(artifact)
@@ -433,8 +452,8 @@ def replay(artifact: Artifact, calibration: Optional[Calibration] = None) -> Ans
                                                         artifact.params.covers_check),
                                             artifact.cover_replies)
                                  if artifact.params.covers_check >= 2 else None))
-    return assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
-                    same, raw)
+    return (assemble(artifact, snaps, readable, argued, attacked, derived, calibration, judged,
+                     same, raw), derived, argued)
 
 
 def _argued(artifact: Artifact) -> tuple[list[Snapshot], list[Snapshot], ArgueResult,

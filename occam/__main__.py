@@ -42,9 +42,10 @@ from pathlib import Path
 from typing import Optional
 
 from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
-                     derivation_nodes, question_details, replay, run, stored_run,
+                     counted_sources, derivation_nodes, question_details, replay, run, stored_run,
                      support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
+from .status import MIN_HOSTS
 from .types import Status
 
 
@@ -139,6 +140,20 @@ def _question_details(a: Answer, art: Optional[Artifact]) -> None:
             "not carried by the answer"))
 
 
+def _counted(art: Artifact, a: Answer) -> None:
+    """The sources corroboration counted toward the answer (#248), every time,
+    one and none included: "two independent sources" is a claim a reader can
+    only check by seeing which two, and whether one relays the other (#225)."""
+    quotes, n_texts = counted_sources(art, a.answer_id)
+    hosts = sorted({h for h, _, _ in quotes})
+    print(f"   sources counted toward corroboration: {len(hosts)} host(s), "
+          f"{n_texts} distinct text(s) (needs {MIN_HOSTS} of each)")
+    for h in hosts:
+        for _, aid, q in (x for x in quotes if x[0] == h):
+            q = " ".join(q.split())
+            print(f"      {h} {aid}: \"{q[:150]}{'…' if len(q) > 150 else ''}\"")
+
+
 def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> None:
     print(f"\nQ: {a.question}")
     if blind:
@@ -168,6 +183,8 @@ def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False) -> Non
             for x in q["by"]:
                 print(f"         defeated by {x['attacker']}: {x['why']}")
         _question_details(a, art)
+        if art is not None:
+            _counted(art, a)
         _chain(a, None if art is None else support_verdicts(art), blind=False)
     if a.positions and "wordings" not in a.positions[0]:
         print("   positions grouped by exact wording (same-answer judge not run)")

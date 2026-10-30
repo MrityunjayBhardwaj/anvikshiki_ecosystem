@@ -366,6 +366,67 @@ def test_the_same_text_in_different_bytes_on_another_host_does_not_corroborate()
     assert r.statuses["Q"].status == Status.HYPOTHESIS
 
 
+# ── what corroboration counted, for reading (#248) ─────────
+
+def _hosts(r, aid):
+    return {h for h, _ in r.counted[aid][0]}
+
+
+def test_two_hosts_are_both_named_with_the_quote_that_brought_each():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store), LONG1)], [], store, as_of=NOW)
+    assert r.counted["Q"] == ((("e.com", "Q"), ("f.org", "R")), 2)
+    assert r.counted["R"] == r.counted["Q"]
+
+
+def test_one_source_is_named_as_one_and_matches_the_bound():
+    store, s = world()
+    r = derive([q("Q", s, LONG1), q("R", second(store, url="https://e.com/other"), LONG1)],
+               [], store, as_of=NOW)
+    assert r.counted["Q"] == ((("e.com", "Q"), ("e.com", "R")), 2)
+    assert r.statuses["Q"].status_bound_by == ("rests on a single source (e.com)",)
+
+
+def test_a_mirror_is_two_hosts_and_one_text():
+    store, s = world()
+    m = second(store, url="https://mirror.net/a", body=b"a", text=TEXT)
+    r = derive([q("Q", m, LONG1)], [], store, as_of=NOW)
+    assert r.counted["Q"] == ((("e.com", "Q"), ("mirror.net", "Q")), 1)
+
+
+def test_a_source_that_does_not_count_is_not_named():
+    """Undecided, defeated or weaker sources lend no host, so none is shown."""
+    store, s = world()
+    unjudged = q("R", second(store), LONG1).model_copy(update={"support": None})
+    r = derive([q("Q", s, LONG1), unjudged], [], store, as_of=NOW)
+    assert _hosts(r, "Q") == {"e.com"}
+
+
+def test_the_named_hosts_are_the_ones_the_single_source_check_read():
+    """The display must not be a second copy of the rule: across every
+    corroboration fixture, a single-source bound names exactly these hosts."""
+    store, s = world()
+    f = second(store)
+    same_site = second(store, url="https://e.com/other", body=b"c")
+    cases = [
+        [q("Q", s, LONG1)],
+        [q("Q", s, LONG1), q("R", f, LONG1)],
+        [q("Q", s, LONG1), q("Q2", same_site, LONG1), q("R", f, LONG2)],
+        [q("Q", s, LONG1), q("R", f, LONG1).model_copy(update={"support": None})],
+        [q("Q", s, LONG1).model_copy(update={"support": None})],
+    ]
+    seen = 0
+    for args in cases:
+        r = derive(args, [], store, as_of=NOW)
+        for aid, st in r.statuses.items():
+            for b in st.status_bound_by:
+                if b.startswith("rests on a single source ("):
+                    named = set(b[len("rests on a single source ("):-1].split(", "))
+                    assert named == _hosts(r, aid), (aid, b, r.counted[aid])
+                    seen += 1
+    assert seen >= 5
+
+
 # ── the question's premise (#179) ──────────────────────────
 
 def test_a_conclusion_carrying_an_unquoted_question_number_is_never_established():
