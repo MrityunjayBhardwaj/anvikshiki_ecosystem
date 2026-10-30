@@ -158,6 +158,58 @@ class ArgumentationFramework:
 
     # ── Epistemic Status Derivation ──
 
+    def supposed_under(self, arg_id: str) -> list[frozenset[str]]:
+        """What the question supposed that one argument rests on, as
+        alternatives: the argument holds given any one of the returned sets.
+
+        A supposed premise rests on itself. A rule argument needs every
+        sub-argument, so its alternatives are the unions across one choice
+        from each. An argument with no rule but with sub-arguments accrues
+        them (the scope undercutter is exactly as good as the best argument
+        for the excluding fact), so it holds given any one. Anything else —
+        a computed fact, a typed contestation — rests on no supposition.
+        Redundant sets are left in; `given` drops them, once.
+        """
+        arg = self.arguments[arg_id]
+        if arg_id in self.supposed:
+            return [frozenset([arg.conclusion])]
+        if not arg.sub_arguments:
+            return [frozenset()]
+        parts = [self.supposed_under(s) for s in arg.sub_arguments]
+        if arg.top_rule is None:
+            alts = [alt for part in parts for alt in part]
+        else:
+            alts = [frozenset()]
+            for part in parts:
+                alts = [a | b for a in alts for b in part]
+        return sorted(set(alts), key=lambda s: (len(s), sorted(s)))
+
+    def given(self, conclusion: str) -> list[frozenset[str]]:
+        """What a conclusion's status holds only given (#195).
+
+        A supposition is the condition a derivation holds under, not a link
+        in it, so it does not lower what follows — and a status that rests on
+        nothing but what the question supposed would read as a finding unless
+        it says so. The status is the join over the IN arguments, so it holds
+        unconditionally if one argument at that status rests on no
+        supposition, and then this is empty. Otherwise one set per distinct
+        set those arguments rest on, fewest first: the status holds given any
+        one of them. A set containing another is dropped, since holding
+        given {A} makes {A, B} redundant. Empty, too, when no argument is IN:
+        a contested or open conclusion asserts nothing to be conditional.
+        """
+        status, _, _ = self.get_epistemic_status(conclusion)
+        best = [
+            a for a in self.arguments.values()
+            if a.conclusion == conclusion
+            and self.labels.get(a.id) == Label.IN and a.status == status
+        ]
+        sets = {alt for a in best for alt in self.supposed_under(a.id)}
+        if not sets or frozenset() in sets:
+            return []
+        return sorted((s for s in sets if not any(t < s for t in sets)),
+                      key=lambda s: (len(s), sorted(s)))
+
     def get_epistemic_status(
         self, conclusion: str
     ) -> tuple[Optional[EpistemicStatus], ProvenanceTag, list[Argument]]:

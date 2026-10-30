@@ -33,7 +33,12 @@ class SynthesizeResponse(dspy.Signature):
     """Produce a calibrated response from argumentation results."""
     query: str = dspy.InputField()
     accepted_arguments: str = dspy.InputField(
-        desc="Formatted list of accepted conclusions with epistemic status")
+        desc=(
+            "Formatted list of accepted conclusions with epistemic status. A "
+            "conclusion marked 'holds only given what the question supposed' "
+            "is conditional on that supposition: state it as 'if X, then …', "
+            "never as a finding, and never treat the supposition itself as "
+            "established."))
     defeated_arguments: str = dspy.InputField(
         desc="Formatted list of defeated conclusions with hetvābhāsa types")
     uncertainty_report: str = dspy.InputField(
@@ -287,6 +292,23 @@ def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
     }
 
 
+def accepted_line(conclusion: str, info: dict) -> str:
+    """One accepted conclusion as the synthesizer reads it.
+
+    A status that rests on what the question supposed says so in the same
+    line (#195). Otherwise "resource_allocation_effective: established" reads
+    as a finding, when V02 derived it from a premise only the question
+    supplied — the false premise the engine then explained.
+    """
+    line = (f"- {conclusion}: {info['status'].value} "
+            f"(pramana={info['tag'].pramana_type.name}, "
+            f"sources={sorted(info['tag'].source_ids)})")
+    if info["given"]:
+        line += ("; holds only given what the question supposed: "
+                 + " or ".join(" and ".join(sorted(g)) for g in info["given"]))
+    return line
+
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -364,6 +386,7 @@ class AnvikshikiEngineV4(dspy.Module):
             if status is not None:
                 results[conc] = {
                     "status": status, "tag": tag, "arguments": args,
+                    "given": af.given(conc),
                 }
 
         # STEP 5: Extract provenance
@@ -375,6 +398,10 @@ class AnvikshikiEngineV4(dspy.Module):
                 "derivation_depth": info["tag"].derivation_depth,
                 "trust": info["tag"].trust_score,
                 "decay": info["tag"].decay_factor,
+                # What the status holds only given: the question's
+                # suppositions it rests on, one list per alternative (#195).
+                # Empty when it holds without any.
+                "given": [sorted(g) for g in info["given"]],
             }
 
         # STEP 6: Uncertainty decomposition
@@ -405,9 +432,7 @@ class AnvikshikiEngineV4(dspy.Module):
         framework_derived_nothing = not derivation["rule_backed"]
 
         accepted_str = "\n".join(
-            f"- {conc}: {info['status'].value} "
-            f"(pramana={info['tag'].pramana_type.name}, "
-            f"sources={sorted(info['tag'].source_ids)})"
+            accepted_line(conc, info)
             for conc, info in results.items()
             if info["status"] in (
                 EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
@@ -587,6 +612,7 @@ class AnvikshikiEngineV4(dspy.Module):
             if status is not None:
                 results[conc] = {
                     "status": status, "tag": tag, "arguments": args,
+                    "given": af.given(conc),
                 }
 
         provenance = {}
@@ -597,6 +623,10 @@ class AnvikshikiEngineV4(dspy.Module):
                 "derivation_depth": info["tag"].derivation_depth,
                 "trust": info["tag"].trust_score,
                 "decay": info["tag"].decay_factor,
+                # What the status holds only given: the question's
+                # suppositions it rests on, one list per alternative (#195).
+                # Empty when it holds without any.
+                "given": [sorted(g) for g in info["given"]],
             }
 
         uncertainty = {}
@@ -638,9 +668,7 @@ class AnvikshikiEngineV4(dspy.Module):
         framework_derived_nothing = not derivation["rule_backed"]
 
         accepted_str = "\n".join(
-            f"- {conc}: {info['status'].value} "
-            f"(pramana={info['tag'].pramana_type.name}, "
-            f"sources={sorted(info['tag'].source_ids)})"
+            accepted_line(conc, info)
             for conc, info in results.items()
             if info["status"] in (
                 EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,

@@ -800,7 +800,7 @@ This is the thesis's core contribution. Stage 4 implements the unified architect
 
 **Thesis (§7.2, line 729):** "Pratyakṣa (direct evidence) → Necessary premise Kₙ: Ground fact from data/observation."
 
-**Implementation:** Each query fact becomes an `Argument` with `pramana_type=SABDA`, `status=PROVISIONAL`, `top_rule=None`, `is_strict=False`. A query fact is not data or observation: it is what the question supposes, so it is an ordinary premise that can be attacked, not a necessary one (#195, #196). Rules reasoning from it keep their own grade; the supposition is the condition they hold under. Code: `compile_t2()` Step 1 and `QUESTION_STATUS` in `t2_compiler_v4.py`.
+**Implementation:** Each query fact becomes an `Argument` with `pramana_type=SABDA`, `status=PROVISIONAL`, `top_rule=None`, `is_strict=False`. A query fact is not data or observation: it is what the question supposes, so it is an ordinary premise that can be attacked, not a necessary one (#195, #196). Rules reasoning from it keep their own grade; the supposition is the condition they hold under, and the answer says so: `provenance[conc]["given"]` lists the suppositions a conclusion's status holds only given (empty when it holds without any), and the synthesizer is told to state such a conclusion as conditional. Code: `compile_t2()` Step 1 and `QUESTION_STATUS` in `t2_compiler_v4.py`; `ArgumentationFramework.given` in `argumentation.py`.
 
 **Step 4b: Rule-based arguments** → §6.2 ASPIC+ definition + §7.3 Provenance Tag
 
