@@ -1,7 +1,7 @@
 # tests/test_t2_compiler_v4.py
 import pytest
 from anvikshiki_v4.t2_compiler_v4 import compile_t2, load_knowledge_store, _build_rule_tag
-from anvikshiki_v4.schema_v4 import Label, PramanaType
+from anvikshiki_v4.schema_v4 import EpistemicStatus, Label, PramanaType
 
 
 @pytest.fixture
@@ -17,13 +17,16 @@ def test_basic_compilation(sample_ks):
 
 
 def test_premise_arguments(sample_ks):
-    """Query facts produce premise arguments with PRATYAKSA."""
+    """Query facts produce premise arguments graded as what the question
+    supposes (#196): testimony, provisional, attackable — not perception."""
     facts = [{"predicate": "concentrated_ownership", "confidence": 0.85}]
     af = compile_t2(sample_ks, facts)
     premise_args = [a for a in af.arguments.values() if a.top_rule is None
                     and a.conclusion == "concentrated_ownership"]
     assert len(premise_args) == 1
-    assert premise_args[0].tag.pramana_type == PramanaType.PRATYAKSA
+    assert premise_args[0].tag.pramana_type == PramanaType.SABDA
+    assert premise_args[0].status == EpistemicStatus.PROVISIONAL
+    assert premise_args[0].is_strict is False
     assert premise_args[0].tag.derivation_depth == 0
 
 

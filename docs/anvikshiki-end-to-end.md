@@ -139,7 +139,7 @@ A0001  value_creation            rule=V01   strict=False  label=in  b=0.855
        pramāṇa=ANUMANA     sources=[src_hbs_unit_economics, src_ries_2011, user_input]
 ```
 
-Two arguments. The first is the user's own statement — a **premise argument**, marked `strict` because the user asserted it, tagged `PRATYAKSA` because direct testimony about your own company is the strongest evidence channel available here.
+Two arguments. The first is the user's own statement — a **premise argument**. *(This trace predates #195/#196: a query fact now enters as `SABDA` at `provisional` and is not strict, because what a question supposes is someone's word, not an observation, and must be able to lose to what the knowledge base derives.)* At the time it was marked `strict` and tagged `PRATYAKSA`.
 
 The second is derived. It applies V01, so its rule is `V01` and it inherits `ANUMANA` — inference — because that's what a derived conclusion is. Notice what happened to the source list: it now carries **both** of V01's citations *and* the user's input. The provenance accumulated automatically along the derivation. Nobody wrote code to do that per-rule; it falls out of how tags compose.
 

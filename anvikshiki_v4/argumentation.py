@@ -26,6 +26,10 @@ class ArgumentationFramework:
     arguments: dict[str, Argument] = field(default_factory=dict)
     attacks: list[Attack] = field(default_factory=list)
     labels: dict[str, Label] = field(default_factory=dict)
+    # Ids of the premise arguments the question supplied. They are the
+    # conditions a query reasons under, not evidence for what follows from
+    # them; `t2_compiler_v4.QUESTION_STATUS` says why and how they are graded.
+    supposed: set[str] = field(default_factory=set)
 
     # Index structures for efficient lookup
     _attackers_of: dict[str, list[str]] = field(default_factory=dict)

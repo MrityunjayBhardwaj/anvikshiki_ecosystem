@@ -99,11 +99,15 @@ class TestBasicCompilation:
                         and not a.conclusion.startswith("_")]
         assert len(premise_args) == 3
 
-    def test_premise_tags_are_pratyaksa(self, business_ks, growing_startup_facts):
+    def test_premise_tags_are_not_perception(self, business_ks, growing_startup_facts):
+        """A query fact is what the question supposes (#196): testimony, not
+        perception, and never established on the question's word."""
         af = compile_t2(business_ks, growing_startup_facts)
-        for a in af.arguments.values():
-            if a.top_rule is None and not a.conclusion.startswith("_"):
-                assert a.tag.pramana_type == PramanaType.PRATYAKSA
+        premises = [a for a in af.arguments.values() if a.id in af.supposed]
+        assert len(premises) == len(growing_startup_facts)
+        for a in premises:
+            assert a.tag.pramana_type == PramanaType.SABDA
+            assert a.status == EpistemicStatus.PROVISIONAL
 
     def test_rule_arguments_derived(self, business_ks, growing_startup_facts):
         af = compile_t2(business_ks, growing_startup_facts)
@@ -155,12 +159,15 @@ class TestChainDerivation:
             args_by_conc[a.conclusion] = a
 
         # Weakest link: chaining cannot strengthen a conclusion, so status
-        # is non-increasing along premise → rule-derived → chain-derived.
-        # Not strictly decreasing — chaining through established rules
-        # legitimately holds a status, which is the whole point of the meet.
-        assert rank(args_by_conc["positive_unit_economics"].status) >= \
-               rank(args_by_conc["value_creation"].status) >= \
+        # is non-increasing along rule-derived → chain-derived. Not strictly
+        # decreasing — chaining through established rules legitimately holds
+        # a status, which is the whole point of the meet. The premise is not
+        # a link: it is what the question supposed, the condition the chain
+        # holds under (#195, #196), and it stays below what is reasoned from it.
+        assert rank(args_by_conc["value_creation"].status) >= \
                rank(args_by_conc["long_term_value"].status)
+        assert args_by_conc["positive_unit_economics"].status \
+            == EpistemicStatus.PROVISIONAL
 
     def test_independent_vyaptis_dont_fire_without_antecedents(self, business_ks):
         """V09 (disruption) shouldn't fire without its specific antecedents."""

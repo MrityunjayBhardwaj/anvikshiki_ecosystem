@@ -15,6 +15,7 @@ from .schema_v4 import (
 )
 from .lattice import (
     BOUND_ASSERTED,
+    join,
     meet,
     rank,
     status_breakdown,
@@ -39,6 +40,39 @@ PRAMANA_MAP = {
     CausalStatus.EMPIRICAL: PramanaType.ANUMANA,
     CausalStatus.REGULATORY: PramanaType.SABDA,
 }
+
+# What a fact taken from the question is worth as evidence.
+#
+# Every fact `compile_t2` receives was extracted from the question — it is the
+# only input on the query path — and the question is not an observation. "Why
+# does the Varenna Accord allocate meltwater by population?" supposes that it
+# does; "Is growth alone enough?" supposes growth for the sake of asking. Both
+# used to enter as PRATYAKSA at ESTABLISHED: perception, the strongest evidence
+# kind, at the top of L. So the engine reported a false premise as an
+# established finding, and every rule chained from it inherited that.
+#
+# SABDA, testimony, because that is what a question is: someone's words, taken
+# on their say-so. PROVISIONAL, because `EpistemicStatus` defines it as "from
+# ordinary premises only", and a supposition is the most ordinary premise there
+# is. Not strict, for the same reason: an ordinary premise can be attacked, so
+# a supposition the knowledge base contradicts is defeated rather than
+# outranking the derivation — the strict, perceived premise used to win every
+# such conflict by construction. Same discipline as `add_counter_argument`,
+# which will not let a typed contestation outrank curated knowledge by virtue
+# of having been typed.
+#
+# Context, not evidence: what a rule concludes *from* a supposition is graded
+# by the reasoning — the rule's own status and anything the knowledge base
+# derived on the way — and the supposition is the condition it holds under.
+# So `_derive_rule_arguments` leaves these premises out of the meet and the
+# tag. Folding them in would put every conclusion of every live query at
+# PROVISIONAL, since the question is the only input: a curated rule and a
+# generated one, an established rule and a working hypothesis, would grade
+# alike and stop resolving their conflicts. Whether a conclusion that rests on
+# nothing but the question should also be capped is a separate decision, and
+# this does not make it.
+QUESTION_PRAMANA = PramanaType.SABDA
+QUESTION_STATUS = EpistemicStatus.PROVISIONAL
 
 # Module-level defaults from centralized params (engine_params.py).
 # Functions accept an optional CompilerParams to override.
@@ -154,7 +188,7 @@ def compile_t2(
         arg_id = af.next_arg_id()
         tag = ProvenanceTag(
             source_ids=frozenset(fact.get("sources", [])),
-            pramana_type=PramanaType.PRATYAKSA,
+            pramana_type=QUESTION_PRAMANA,
             trust_score=1.0,
             decay_factor=1.0,
             derivation_depth=0,
@@ -167,16 +201,17 @@ def compile_t2(
             # attribute the constraint to a rule that does not exist.
             status_bound_by=(BOUND_ASSERTED,),
             premises=frozenset([fact["predicate"]]),
-            is_strict=True,
+            is_strict=False,
             tag=tag,
-            # A grounded query fact is direct evidence, and it enters L at
-            # the top. The grounder's confidence is deliberately NOT turned
-            # into a status here: cutting a float into categories is the
-            # defect being removed, and confidence belongs to the conformal
-            # feature vector (#23), where it gets a coverage guarantee
-            # instead of a threshold.
-            status=EpistemicStatus.ESTABLISHED,
+            # What the question supposes, not what anyone observed — see
+            # QUESTION_STATUS. The grounder's confidence is deliberately NOT
+            # turned into a status here either: cutting a float into
+            # categories is the defect being removed, and confidence belongs
+            # to the conformal feature vector (#23), where it gets a coverage
+            # guarantee instead of a threshold.
+            status=QUESTION_STATUS,
         ))
+        af.supposed.add(arg_id)
 
     # ── Steps 2-4: Forward chain with fixpoint ──
     for _ in range(params.max_fixpoint_iterations):
@@ -267,8 +302,15 @@ def _derive_rule_arguments(
 
         # All combinations, sorted by total belief (best first), capped
         combos = list(iter_product(*candidates_per_ant))
+        # A supposition weakens nothing reasoned under it (see below), so it
+        # ranks as the top of L here too, as it did when it entered there.
         combos.sort(
-            key=lambda c: sum(rank(a.status) for a in c), reverse=True
+            key=lambda c: sum(
+                rank(EpistemicStatus.ESTABLISHED) if a.id in af.supposed
+                else rank(a.status)
+                for a in c
+            ),
+            reverse=True,
         )
         combos = combos[:params.max_argument_combos_per_rule]
 
@@ -282,9 +324,15 @@ def _derive_rule_arguments(
                 continue
             existing_derivations.add(derivation_key)
 
+            # What the question supposed is the condition this derivation
+            # holds under, not a link in it (see QUESTION_STATUS), so it
+            # neither grades nor weakens the result. Its sources still travel.
+            reasoned = [s for s in combo if s.id not in af.supposed]
             combined_tag = rule_tag
-            for sub_arg in combo:
+            for sub_arg in reasoned:
                 combined_tag = ProvenanceTag.tensor(combined_tag, sub_arg.tag)
+            combined_tag = replace(combined_tag, source_ids=frozenset().union(
+                combined_tag.source_ids, *(s.tag.source_ids for s in combo)))
 
             # depth(a) = 1 + max{ depth(s) : s ∈ sub_args(a) }
             #
@@ -317,7 +365,7 @@ def _derive_rule_arguments(
             # derivation through a generated rule cannot exceed that rule's
             # ceiling however strong its premises are.
             breakdown = status_breakdown(v)
-            sub_statuses = [sub_arg.status for sub_arg in combo]
+            sub_statuses = [sub_arg.status for sub_arg in reasoned]
             combined_status = meet([breakdown.effective] + sub_statuses)
 
             # What is actually holding this argument down. The rule's own
@@ -326,7 +374,7 @@ def _derive_rule_arguments(
             # reader at something whose removal would change nothing.
             if any(rank(st) < rank(breakdown.effective) for st in sub_statuses):
                 bound_by = tuple(
-                    f"sub:{sub_arg.id}" for sub_arg in combo
+                    f"sub:{sub_arg.id}" for sub_arg in reasoned
                     if rank(sub_arg.status) == rank(combined_status)
                 )
             else:
@@ -462,12 +510,34 @@ def _derive_attacks(
                 if any(arg.conclusion == target_conclusion
                        for arg in af.arguments.values()):
                     continue
+                # The undercutter is exactly as good as the fact that
+                # excluded the rule, and no better. It used to enter as
+                # PRATYAKSA at ESTABLISHED whatever that fact was — and the
+                # fact is almost always one the question supplied, so this
+                # was a second door through which the question's word reached
+                # the top of L. Accrued over every argument for the fact, as
+                # `get_epistemic_status` accrues a conclusion: the best one
+                # carries it.
+                excluding = [
+                    arg for arg in af.arguments.values()
+                    if predicate_name(arg.conclusion) == excl_name
+                    and predicate_entity(arg.conclusion) == entity
+                ]
+                scope_status = join(a.status for a in excluding)
+                scope_tag = excluding[0].tag
+                for a in excluding[1:]:
+                    scope_tag = ProvenanceTag.oplus(scope_tag, a.tag)
                 scope_arg_id = af.next_arg_id()
                 af.add_argument(Argument(
                     id=scope_arg_id,
                     conclusion=target_conclusion,
                     top_rule=None,
-                    status_bound_by=(BOUND_ASSERTED,),
+                    # Not a rule bound: the status is the excluding fact's,
+                    # so that fact is what holds it where it is.
+                    status_bound_by=tuple(
+                        f"sub:{a.id}" for a in excluding
+                        if rank(a.status) == rank(scope_status)
+                    ),
                     # The fact that excluded the rule, as observed rather than
                     # as the base declares it. With one undercutter per entity
                     # the bare name would read identically on all of them, and
@@ -475,14 +545,8 @@ def _derive_attacks(
                     # check.
                     premises=frozenset([with_entity(excl_name, entity)]),
                     is_strict=True,
-                    tag=ProvenanceTag(
-                        pramana_type=PramanaType.PRATYAKSA,
-                        trust_score=1.0, decay_factor=1.0,
-                    ),
-                    # The scope exclusion is present in the framework as an
-                    # observed fact about this query, not as a claim under
-                    # dispute — it enters at the top of L, as the premises do.
-                    status=EpistemicStatus.ESTABLISHED,
+                    tag=scope_tag,
+                    status=scope_status,
                 ))
                 # Attack every argument this rule derived for this entity
                 for rule_arg in rule_args:

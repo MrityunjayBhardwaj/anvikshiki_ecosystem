@@ -50,7 +50,7 @@ for conc in {"long_horizon_possible"}:
     print(f"  inference: {uq['inference']['explanation']}")
 With the sample YAML, this would show:
 
-concentrated_ownership → IN (premise fact, strict, PRATYAKSA)
+concentrated_ownership → IN (premise the question supposes: attackable, SABDA, provisional)
 long_horizon_possible → IN (derived via V01, empirical ANUMANA)
 capability_building_possible → IN (derived via V02, chained)
 not_good_governance → IN (derived via V03 — contradicts V01's optimism)
