@@ -27,7 +27,7 @@ import yaml
 from anvikshiki_v4.t2_compiler_v4 import compile_t2, load_knowledge_store
 from anvikshiki_v4.schema import CausalStatus, DomainType
 from anvikshiki_v4.schema import EpistemicStatus as KBEpistemic
-from anvikshiki_v4.schema_v4 import PramanaType
+from anvikshiki_v4.schema_v4 import EpistemicStatus, PramanaType
 
 KB_PATH = Path(__file__).resolve().parents[1] / "data" / "copywriting_expert.yaml"
 
@@ -132,11 +132,15 @@ class TestCompilation:
                     if a.top_rule is None and not a.conclusion.startswith("_")]
         assert len(premises) == 10
 
-    def test_premise_tags_are_pratyaksa(self, copy_ks, full_facts):
+    def test_premise_tags_are_not_perception(self, copy_ks, full_facts):
+        """A query fact is what the question supposes (#196): testimony, not
+        perception, and never established on the question's word."""
         af = compile_t2(copy_ks, full_facts)
-        for a in af.arguments.values():
-            if a.top_rule is None and not a.conclusion.startswith("_"):
-                assert a.tag.pramana_type == PramanaType.PRATYAKSA
+        premises = [a for a in af.arguments.values() if a.id in af.supposed]
+        assert len(premises) == len(full_facts)
+        for a in premises:
+            assert a.tag.pramana_type == PramanaType.SABDA
+            assert a.status == EpistemicStatus.PROVISIONAL
 
     def test_every_authored_rule_can_fire(self, copy_ks, full_facts):
         """All nine, on a KB the engine has never seen and that was written

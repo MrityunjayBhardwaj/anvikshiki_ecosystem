@@ -494,6 +494,11 @@ def _meet_of_links(ks, af, arg) -> EpistemicStatus:
     Recomputed here from the knowledge base rather than read back off the
     argument, so this checks the compiler's answer against an independent
     walk of the same formula.
+
+    What the question supposed is a condition of the derivation, not a link
+    in it (#195, #196): it enters at PROVISIONAL and weakens nothing reasoned
+    under it, which is what keeps a curated rule and a working hypothesis
+    apart on a live query, where the question is the only input.
     """
     if arg.top_rule is None:
         return arg.status
@@ -512,6 +517,7 @@ def _meet_of_links(ks, af, arg) -> EpistemicStatus:
     links += [
         _meet_of_links(ks, af, af.arguments[sub])
         for sub in arg.sub_arguments
+        if sub not in af.supposed
     ]
     return meet(links)
 
