@@ -275,8 +275,6 @@ class KnowledgeStore(BaseModel):
         """
         patterned = [h for h in self.hetvabhasas.values()
                      if h.detection_pattern is not None]
-        if not patterned:
-            return self
         vocabulary: set[str] = set()
         for v in self.vyaptis.values():
             vocabulary.update(v.antecedents)

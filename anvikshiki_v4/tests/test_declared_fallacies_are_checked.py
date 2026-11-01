@@ -215,6 +215,25 @@ def test_any_absent_predicate_silences_it(small):
         small, af, labels)] == ["H01"]
 
 
+def test_an_internal_conclusion_is_not_a_finding():
+    """Arguments whose conclusion starts with `_` are the framework's own
+    bookkeeping, excluded the way every other advisory producer excludes
+    them. Pinned on a hand-built framework because no shipped base names
+    such a predicate in a rule."""
+    from types import SimpleNamespace
+
+    from anvikshiki_v4.schema_v4 import Label
+
+    ks = KnowledgeStore(
+        domain_type=DomainType.CRAFT,
+        vyaptis={"V01": _vyapti("V01", ["_internal"], "b")},
+        hetvabhasas={"H01": _fallacy("H01", ["_internal"])},
+    )
+    af = SimpleNamespace(arguments={
+        "A0": SimpleNamespace(conclusion="_internal(x)", top_rule=None)})
+    assert declared_fallacy_advisories(ks, af, {"A0": Label.IN}) == []
+
+
 def test_an_unlabelled_framework_raises(small):
     af = compile_t2(small, [{"predicate": "a(x)", "confidence": 1.0}])
     with pytest.raises(ValueError, match="unlabelled"):
@@ -237,6 +256,19 @@ def test_a_pattern_naming_an_unknown_predicate_is_refused(present, absent):
         KnowledgeStore(
             domain_type=DomainType.CRAFT,
             vyaptis={"V01": _vyapti("V01", ["a"], "b")},
+            hetvabhasas={"H01": _fallacy("H01", present, absent)},
+        )
+
+
+def test_scope_conditions_and_exclusions_are_vocabulary():
+    """A pattern may name what a rule declares as its scope, not only what it
+    reasons over: scope names reach the grounder's vocabulary too."""
+    v = _vyapti("V01", ["a"], "b").model_copy(update={
+        "scope_conditions": ["in_scope"], "scope_exclusions": ["excluded"],
+    })
+    for present, absent in [(["in_scope"], []), (["a"], ["excluded"])]:
+        KnowledgeStore(
+            domain_type=DomainType.CRAFT, vyaptis={"V01": v},
             hetvabhasas={"H01": _fallacy("H01", present, absent)},
         )
 
