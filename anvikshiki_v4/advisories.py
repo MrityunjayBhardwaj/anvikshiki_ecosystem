@@ -32,7 +32,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .predicate_contrariness import predicate_entity, predicate_name
 from .schema import KnowledgeStore
@@ -42,20 +42,29 @@ from .schema_v4 import Label
 class AdvisoryKind(str, Enum):
     """What the engine noticed.
 
-    Not a severity. All three are advisory by decision: they report a
-    condition on a rule that fired, and none of them suppresses the firing.
+    Not a severity. All are advisory by decision: they report a condition on
+    a rule that fired, or (FALLACY) a declared fallacy the answer's reasoning
+    matches, and none of them suppresses a firing or changes a label.
     """
 
     SCOPE_EXCLUSION = "scope_exclusion"
     DECAY = "decay"
     UNESTABLISHED_SCOPE = "unestablished_scope"
+    FALLACY = "fallacy"
 
 
 class Advisory(BaseModel):
-    """One finding about one rule."""
+    """One finding about one rule, or about one declared fallacy.
+
+    Exactly one of `vyapti_id` and `hetvabhasa_id` is set: a fallacy finding
+    is about the knowledge base's declared fallacy, not about any rule, and
+    putting its id in `vyapti_id` would make a caller grouping by rule
+    believe a rule called H01 exists.
+    """
 
     kind: AdvisoryKind
-    vyapti_id: str
+    vyapti_id: Optional[str] = None
+    hetvabhasa_id: Optional[str] = None
     message: str
     subject: Optional[str] = Field(
         default=None,
@@ -65,6 +74,19 @@ class Advisory(BaseModel):
             "right — a bare predicate — and not a missing value."
         ),
     )
+
+
+    @model_validator(mode="after")
+    def _about_exactly_one_thing(self) -> "Advisory":
+        is_fallacy = self.kind is AdvisoryKind.FALLACY
+        if is_fallacy and (self.hetvabhasa_id is None or self.vyapti_id is not None):
+            raise ValueError(
+                "a fallacy advisory names a hetvabhasa_id and no vyapti_id")
+        if not is_fallacy and (self.vyapti_id is None or self.hetvabhasa_id is not None):
+            raise ValueError(
+                f"a {self.kind.value} advisory names a vyapti_id and no "
+                "hetvabhasa_id")
+        return self
 
 
 def scope_exclusion_advisory(vyapti_id: str, subject: str) -> Advisory:
@@ -250,6 +272,80 @@ def unestablished_scope_advisories(
             ))
 
     return sorted(advisories, key=lambda a: (a.vyapti_id, a.subject or ""))
+
+
+def declared_fallacy_advisories(
+    knowledge_store: KnowledgeStore,
+    af,
+    labels: dict,
+) -> list[Advisory]:
+    """Declared fallacies whose pattern this answer's reasoning matches (#252).
+
+    A knowledge base declares its fallacies (`hetvabhasas`), and until this
+    function nothing on the answering path read them: H01 "The Revenue Vanity
+    Trap" could not fire on "Is growth alone enough to make a business
+    viable?", the question it was written for. Only fallacies that carry a
+    `detection_pattern` are checked; `detection_signature` is free text and
+    stays unread.
+
+    **Advisory, never an attack.** A match changes no label and no status.
+    The pattern says "this reasoning has the shape the base warns about", not
+    "this conclusion is wrong", and the framework's verdicts stay its own.
+
+    **Accepted means labelled IN**, premise or derivation, for any entity.
+    That deliberately includes what the question supposed: a question that
+    supposes growth and says nothing about unit economics is reasoning from
+    growth alone, which is the shape H01 names. An argument for an `absent`
+    predicate that is OUT or UNDEC does not count as establishing it.
+
+    Not `DatalogEngine.check_hetvabhasas`: that runs over the grounding
+    solver's fact table and returns `Violation`s, and the answering paths
+    build an argumentation framework, not that solver. The verdict a pattern
+    needs — accepted or not — exists only in the framework's labels.
+    """
+    if af.arguments and not labels:
+        raise ValueError(
+            "declared_fallacy_advisories called on an unlabelled framework: "
+            f"{len(af.arguments)} arguments and no labels. Call "
+            "af.compute_grounded() first. Without this guard every `present` "
+            "predicate would read as unaccepted and no fallacy could match."
+        )
+
+    accepted: dict[str, set[str]] = {}
+    for aid, arg in af.arguments.items():
+        if arg.conclusion.startswith("_") or labels.get(aid) != Label.IN:
+            continue
+        accepted.setdefault(predicate_name(arg.conclusion), set()).add(
+            arg.conclusion
+        )
+
+    advisories: list[Advisory] = []
+    for hid in sorted(knowledge_store.hetvabhasas):
+        h = knowledge_store.hetvabhasas[hid]
+        pattern = h.detection_pattern
+        if pattern is None:
+            continue
+        if not all(p in accepted for p in pattern.present):
+            continue
+        if any(p in accepted for p in pattern.absent):
+            continue
+
+        matched = sorted(c for p in pattern.present for c in accepted[p])
+        absent = (
+            f"; not established: {', '.join(pattern.absent)}"
+            if pattern.absent else ""
+        )
+        advisories.append(Advisory(
+            kind=AdvisoryKind.FALLACY,
+            hetvabhasa_id=h.id,
+            subject=", ".join(matched),
+            message=(
+                f"FALLACY: {h.id} '{h.name}' — {h.description}. "
+                f"Matched: {', '.join(matched)}{absent}. "
+                f"Correction: {h.correction_pattern}"
+            ),
+        ))
+    return advisories
 
 
 def as_wire(advisories: list[Advisory]) -> list[dict]:

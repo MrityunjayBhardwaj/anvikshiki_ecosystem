@@ -531,7 +531,7 @@ class TestTheWireForm:
             kind=AdvisoryKind.DECAY, vyapti_id="V01", message="DECAY: V01",
         )])
         assert wire == [{
-            "kind": "decay", "vyapti_id": "V01",
+            "kind": "decay", "vyapti_id": "V01", "hetvabhasa_id": None,
             "message": "DECAY: V01", "subject": None,
         }]
 
