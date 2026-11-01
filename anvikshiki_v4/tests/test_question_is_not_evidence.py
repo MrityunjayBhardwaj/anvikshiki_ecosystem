@@ -389,3 +389,57 @@ def test_an_undercutter_from_a_derived_exclusion_holds_given_what_that_rests_on(
                             for p in ("ex", "a", "c")])
     af.compute_grounded()
     assert af.given("inapplicable_V01") == [frozenset(["c"])]
+
+
+# ── the conditional is prepended, not requested (#256) ─────────
+#
+# `accepted_line` asks the synthesizer for "if X, then …"; the model may
+# comply. Like NO_DERIVATION_NOTICE, the notice is prepended to the response,
+# so the reader sees the condition whatever the model wrote.
+
+@pytest.mark.parametrize("path", ["forward", "forward_with_coverage"])
+def test_the_response_opens_with_what_the_conclusion_holds_given(ks, path):
+    """Varenna, on both paths, with a synthesizer that drops the 'if'."""
+    engine = AnvikshikiEngineV4(knowledge_store=ks,
+                                grounding_pipeline=_Grounding(VARENNA))
+    engine.synthesizer = lambda **kw: dspy.Prediction(
+        response="The allocation is effective.", sources_cited=[])
+    result = (engine.forward("q", retrieved_chunks=[]) if path == "forward"
+              else engine.forward_with_coverage("q"))
+    effective, constraint = VARENNA[1], VARENNA[0]
+    head, _, body = result.response.partition("\n\n")
+    assert head.startswith("Note: these conclusions hold only if what your "
+                           "question assumes is true")
+    assert f"- {effective}, if {constraint}" in head.splitlines()
+    assert not any(x.startswith(f"- {constraint},") for x in head.splitlines())
+    assert body == "The allocation is effective."
+
+
+def _info(status, given):
+    return {"status": status, "given": given}
+
+
+E, P = EpistemicStatus.ESTABLISHED, EpistemicStatus.PROVISIONAL
+
+
+@pytest.mark.parametrize("results, expected", [
+    pytest.param({"d": _info(E, [frozenset("s")])}, ["- d, if s"], id="derived"),
+    pytest.param({"d": _info(E, [frozenset("s"), frozenset("tu")])},
+                 ["- d, if s or t and u"], id="alternatives"),
+    pytest.param({"d": _info(E, [])}, None, id="free"),
+    pytest.param({"d": _info(P, [frozenset("s")])}, ["- d, if s"],
+                 id="provisional_derived"),
+    pytest.param({"s": _info(P, [frozenset("s")])}, None, id="supposition_itself"),
+    pytest.param({"d": _info(EpistemicStatus.OPEN, [frozenset("s")])}, None,
+                 id="not_shown"),
+    pytest.param({"s": _info(P, [frozenset("s")]), "d": _info(E, [frozenset("s")]),
+                  "f": _info(E, [])}, ["- d, if s"], id="mixed"),
+])
+def test_the_notice_names_only_derived_conclusions_resting_on_a_supposition(
+        results, expected):
+    from anvikshiki_v4.engine_v4 import supposition_notice
+    notice = supposition_notice(results)
+    if expected is None:
+        assert notice is None
+    else:
+        assert notice.splitlines()[1:] == expected

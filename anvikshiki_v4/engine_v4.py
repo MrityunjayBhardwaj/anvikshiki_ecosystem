@@ -60,6 +60,14 @@ class SynthesizeResponse(dspy.Signature):
         desc="Source IDs actually used in the response")
 
 
+# The statuses the synthesizer is shown as accepted. One set, so the
+# conditional notice can only name conclusions the reader was told about.
+SHOWN_STATUSES = frozenset({
+    EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
+    EpistemicStatus.PROVISIONAL,
+})
+
+
 NO_DERIVATION_NOTICE = (
     "Note: my knowledge base did not derive this. No rule fired, so nothing "
     "below is supported by the framework's own reasoning or its cited "
@@ -309,6 +317,31 @@ def accepted_line(conclusion: str, info: dict) -> str:
     return line
 
 
+def supposition_notice(results: dict) -> str | None:
+    """The conditional the reader must see, prepended rather than requested.
+
+    `accepted_line` tells the synthesizer which conclusions hold only given
+    what the question supposed, and its instructions ask for "if X, then …";
+    the model may comply (#256). This is the same move as
+    NO_DERIVATION_NOTICE: a guarantee that depends on the model complying is
+    not a guarantee. A supposition itself is left out — it holds given
+    itself, trivially — so this speaks only when the base derived something
+    from what the question assumed.
+    """
+    lines = [
+        f"- {conc}, if "
+        + " or ".join(" and ".join(sorted(g)) for g in info["given"])
+        for conc, info in results.items()
+        if info["status"] in SHOWN_STATUSES and info["given"]
+        and frozenset([conc]) not in info["given"]
+    ]
+    if not lines:
+        return None
+    return ("Note: these conclusions hold only if what your question assumes "
+            "is true; my knowledge base did not establish the assumption:\n"
+            + "\n".join(lines))
+
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -434,10 +467,7 @@ class AnvikshikiEngineV4(dspy.Module):
         accepted_str = "\n".join(
             accepted_line(conc, info)
             for conc, info in results.items()
-            if info["status"] in (
-                EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
-                EpistemicStatus.PROVISIONAL,
-            )
+            if info["status"] in SHOWN_STATUSES
         ) or "No accepted conclusions."
 
         defeated_str = "\n".join(
@@ -467,6 +497,9 @@ class AnvikshikiEngineV4(dspy.Module):
         # and this is the one sentence the reader most needs to be able to
         # rely on.
         response_text = response.response
+        notice = supposition_notice(results)
+        if notice:
+            response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 
@@ -670,10 +703,7 @@ class AnvikshikiEngineV4(dspy.Module):
         accepted_str = "\n".join(
             accepted_line(conc, info)
             for conc, info in results.items()
-            if info["status"] in (
-                EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
-                EpistemicStatus.PROVISIONAL,
-            )
+            if info["status"] in SHOWN_STATUSES
         ) or "No accepted conclusions."
 
         defeated_str = "\n".join(
@@ -703,6 +733,9 @@ class AnvikshikiEngineV4(dspy.Module):
         # guarantee — and this is the one sentence the reader most needs to be
         # able to rely on.
         response_text = response.response
+        notice = supposition_notice(results)
+        if notice:
+            response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 
