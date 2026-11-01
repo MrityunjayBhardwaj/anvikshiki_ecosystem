@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum, IntEnum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # `Provenance` lives in extraction_schema because extraction is what builds
 # these records, and nothing in extraction_schema imports this module, so this
@@ -166,6 +166,26 @@ class Vyapti(BaseModel):
     augmentation_metadata: Optional[AugmentationMetadata] = None
 
 
+class DetectionPattern(BaseModel):
+    """A fallacy's signature in a form the engine can evaluate (#252).
+
+    Matches an answer when every `present` predicate is an accepted conclusion
+    (any entity) and no `absent` predicate is. Names are bare predicate names
+    from the base's own vocabulary; `KnowledgeStore` refuses names it does not
+    know, because a misspelt `present` name would never fire and a misspelt
+    `absent` name would fire on every query that has the rest.
+    """
+
+    present: list[str] = Field(
+        min_length=1,
+        description=(
+            "Predicates that must all be accepted. At least one: a pattern "
+            "made only of absences would fire on every query that lacks them."
+        ),
+    )
+    absent: list[str] = Field(default_factory=list)
+
+
 class Hetvabhasa(BaseModel):
     """A reasoning fallacy — an integrity constraint."""
 
@@ -175,6 +195,9 @@ class Hetvabhasa(BaseModel):
     detection_signature: str
     correction_pattern: str
     common_contexts: list[str] = Field(default_factory=list)
+    # Optional: `detection_signature` above is free text nothing can match.
+    # A fallacy without a pattern is still loaded and still never checked.
+    detection_pattern: Optional[DetectionPattern] = None
 
 
 class ThresholdConcept(BaseModel):
@@ -239,3 +262,34 @@ class KnowledgeStore(BaseModel):
         default_factory=dict,
         description="Predicate alias → canonical name, for semantic coverage matching",
     )
+
+    @model_validator(mode="after")
+    def _detection_patterns_use_known_predicates(self) -> "KnowledgeStore":
+        """A fallacy pattern may name only predicates some rule mentions.
+
+        Absence is the dangerous direction: an `absent` name nothing can ever
+        conclude is absent on every query, so a typo there turns the pattern
+        into "fires whenever `present` holds" — silently, because nothing
+        else reads the name. The vocabulary is what the rules mention:
+        antecedents, consequents, scope conditions and exclusions.
+        """
+        patterned = [h for h in self.hetvabhasas.values()
+                     if h.detection_pattern is not None]
+        vocabulary: set[str] = set()
+        for v in self.vyaptis.values():
+            vocabulary.update(v.antecedents)
+            vocabulary.update(v.scope_conditions)
+            vocabulary.update(v.scope_exclusions)
+            if v.consequent:
+                vocabulary.add(v.consequent)
+        for h in patterned:
+            unknown = sorted(
+                {*h.detection_pattern.present, *h.detection_pattern.absent}
+                - vocabulary
+            )
+            if unknown:
+                raise ValueError(
+                    f"hetvabhasa {h.id} detection_pattern names predicates no "
+                    f"rule mentions: {unknown}"
+                )
+        return self

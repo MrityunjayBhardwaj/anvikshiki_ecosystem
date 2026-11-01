@@ -370,6 +370,14 @@ class DatalogEngine:
         """
         Run all hetvābhāsa checks against current derived facts.
         Returns list of violations.
+
+        Not on the answering path: nothing outside tests registers a check.
+        A knowledge base's declared fallacies are checked against the
+        argumentation framework instead, by
+        `advisories.declared_fallacy_advisories` — the accepted/not-accepted
+        verdict a pattern needs exists in the framework's labels, not in this
+        solver's fact table, and a match there is an advisory, not a
+        `Violation` (#252).
         """
         violations: list[Violation] = []
         for check in self.hetvabhasa_checks:

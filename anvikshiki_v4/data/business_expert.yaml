@@ -176,6 +176,12 @@ hetvabhasas:
     name: "The Revenue Vanity Trap"
     description: "Inferring business health from revenue growth alone, ignoring unit economics, cash flow, and margin structure"
     detection_signature: "revenue_growth_cited_without_unit_economics"
+    # Checked at query time: fires as an advisory when growth is accepted and
+    # positive unit economics is not. H02–H08 have no pattern: their
+    # signatures name nothing this base has a predicate for.
+    detection_pattern:
+      present: ["organizational_growth"]
+      absent: ["positive_unit_economics"]
     correction_pattern: "Require unit economic analysis alongside any revenue growth claim"
     common_contexts: ["startup_evaluation", "investor_pitches", "media_coverage"]
 

@@ -137,6 +137,8 @@ print(result.sources)            # ["src_chandler_1990", ...]
 print(result.extension_size)     # Number of IN arguments
 print(result.grounding_confidence)  # 0.0-1.0
 print(result.violations)         # Defeated arguments (hetvābhāsas)
+print(result.advisories)         # Findings that are not defeats: scope, decay,
+                                 # and declared fallacies the reasoning matches
 print(result.contestation)       # {"mode": "vada", "open_questions": [...]}
 
 # Drill into uncertainty per conclusion

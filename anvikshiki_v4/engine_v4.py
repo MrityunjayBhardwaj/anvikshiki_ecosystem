@@ -14,6 +14,7 @@ from .advisories import (
     Advisory,
     as_wire,
     decayed_rule_advisories,
+    declared_fallacy_advisories,
     unestablished_scope_advisories,
 )
 from .schema import KnowledgeStore
@@ -143,6 +144,7 @@ def collect_advisories(knowledge_store, af, labels, grounding) -> list[Advisory]
         list(grounding.advisories)
         + unestablished_scope_advisories(knowledge_store, af, labels)
         + decayed_rule_advisories(knowledge_store, af, labels)
+        + declared_fallacy_advisories(knowledge_store, af, labels)
     )
 
 
