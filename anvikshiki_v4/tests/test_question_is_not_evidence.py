@@ -273,3 +273,119 @@ def test_an_exclusion_the_base_also_derives_undercuts_at_the_derivations_grade()
     assert undercutter.status is EpistemicStatus.ESTABLISHED
     assert undercutter.tag.pramana_type is PramanaType.ANUMANA
     assert undercutter.status_bound_by == (f"sub:{derived_ex.id}",)
+
+
+# ── what a conclusion holds only given (#195) ──────────────────
+#
+# A supposition does not lower what follows from it, so "established" on a
+# conclusion V02 derived from a premise only the question supplied read as a
+# finding — the false premise the engine then explained. The status stands;
+# what it holds given is said beside it.
+
+def test_the_varenna_conclusion_holds_only_given_the_supposed_constraint(ks):
+    """#195 as reported: V02 derives `resource_allocation_effective` at
+    established from `binding_constraint_identified`, which nothing in the
+    base concludes."""
+    af = _af(ks, *VARENNA)
+    effective, constraint = VARENNA[1], VARENNA[0]
+    assert af.get_epistemic_status(effective)[0] is EpistemicStatus.ESTABLISHED
+    assert af.given(effective) == [frozenset([constraint])]
+    assert af.given(constraint) == [frozenset([constraint])]
+
+
+@pytest.mark.parametrize("path", ["forward", "forward_with_coverage"])
+def test_the_engine_says_what_the_status_holds_given_on_both_paths(ks, path):
+    """What the synthesizer reads and what a caller reads, on both paths."""
+    engine = AnvikshikiEngineV4(knowledge_store=ks,
+                                grounding_pipeline=_Grounding(VARENNA))
+    seen = {}
+
+    def synth(**kw):
+        seen.update(kw)
+        return dspy.Prediction(response="An answer.", sources_cited=[])
+
+    engine.synthesizer = synth
+    result = (engine.forward("q", retrieved_chunks=[]) if path == "forward"
+              else engine.forward_with_coverage("q"))
+    effective, constraint = VARENNA[1], VARENNA[0]
+    assert result.provenance[effective]["given"] == [[constraint]]
+    (line,) = [x for x in seen["accepted_arguments"].splitlines()
+               if x.startswith(f"- {effective}:")]
+    assert line.startswith(f"- {effective}: established")
+    assert line.endswith(f"; holds only given what the question supposed: {constraint}")
+
+
+def _hand_af():
+    """A framework built by hand, so every shape `given` must read is present
+    and nothing else: S1, S2 supposed; rules over them; one conclusion per
+    case. Statuses and labels are set, not computed."""
+    from anvikshiki_v4.argumentation import ArgumentationFramework
+    from anvikshiki_v4.schema_v4 import Argument, ProvenanceTag
+    E, H = EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS
+    tag = ProvenanceTag(pramana_type=PramanaType.ANUMANA, trust_score=1.0,
+                        decay_factor=1.0)
+    af = ArgumentationFramework()
+    rows = [  # id, conclusion, rule, subs, status, label
+        ("S1", "s1", None, (), EpistemicStatus.PROVISIONAL, Label.IN),
+        ("S2", "s2", None, (), EpistemicStatus.PROVISIONAL, Label.IN),
+        ("O1", "either", "R", ("S1",), E, Label.IN),
+        ("O2", "either", "R", ("S2",), E, Label.IN),
+        ("B1", "both", "R", ("S1", "S2"), E, Label.IN),
+        ("P1", "fewest", "R", ("S1",), E, Label.IN),
+        ("P2", "fewest", "R", ("S1", "S2"), E, Label.IN),
+        ("F1", "free", "R", ("S1",), E, Label.IN),
+        ("F2", "free", "R", (), E, Label.IN),
+        ("W1", "weaker_free", "R", ("S1",), E, Label.IN),
+        ("W2", "weaker_free", "R", (), H, Label.IN),
+        ("X1", "out_free", "R", ("S1",), E, Label.IN),
+        ("X2", "out_free", "R", (), E, Label.OUT),
+        ("D1", "defeated", "R", ("S1",), E, Label.OUT),
+        ("U1", "undercut", None, ("O1", "O2"), E, Label.IN),
+        ("U2", "undercut_redundant", None, ("O1", "B1"), E, Label.IN),
+        ("C1", "chained", "R", ("U1",), E, Label.IN),
+    ]
+    for aid, conc, rule, subs, status, label in rows:
+        af.add_argument(Argument(id=aid, conclusion=conc, top_rule=rule,
+                                 sub_arguments=subs, premises=frozenset([conc]),
+                                 tag=tag, status=status, status_bound_by=()))
+        af.labels[aid] = label
+    af.supposed |= {"S1", "S2"}
+    return af
+
+
+@pytest.mark.parametrize("conclusion, expected", [
+    ("either", [{"s1"}, {"s2"}]),      # two arguments: given either one
+    ("both", [{"s1", "s2"}]),          # one rule needing both: given both
+    ("fewest", [{"s1"}]),              # {s1, s2} is redundant beside {s1}
+    ("free", []),                      # one argument at the status needs none
+    ("weaker_free", [{"s1"}]),         # a weaker free argument does not lift it
+    ("out_free", [{"s1"}]),            # nor a defeated one
+    ("defeated", []),                  # nothing IN: nothing to be conditional
+    ("undercut", [{"s1"}, {"s2"}]),    # no rule: accrues, any one carries it
+    ("undercut_redundant", [{"s1"}]),  # accrual drops the superset too
+    ("chained", [{"s1"}, {"s2"}]),     # alternatives travel through a rule
+], ids=lambda x: x if isinstance(x, str) else None)
+def test_given_reads_every_shape(conclusion, expected):
+    assert _hand_af().given(conclusion) == [frozenset(s) for s in expected]
+
+
+def test_an_undercutter_says_what_supposed_exclusion_it_holds_given(ks):
+    """The scope undercutter takes its status from the excluding fact; it
+    must also say what that fact was supposed on, or it reads as a finding."""
+    af = _af(ks, "superior_information(acme)", "perfectly_commoditized_market(acme)")
+    assert af.given("inapplicable_V03(acme)") == [
+        frozenset(["perfectly_commoditized_market(acme)"])]
+
+
+def test_an_undercutter_from_a_derived_exclusion_holds_given_what_that_rests_on():
+    """When the base derives the exclusion, the undercutter rests on what the
+    derivation rests on — here the supposition `c` V02 reasoned from."""
+    from anvikshiki_v4.schema import EpistemicStatus as KB
+    store = _store(
+        _rule("V01", ["a"], "b", KB.ESTABLISHED, scope_exclusions=["ex"]),
+        _rule("V02", ["c"], "ex", KB.ESTABLISHED),
+    )
+    af = compile_t2(store, [{"predicate": p, "confidence": 1.0}
+                            for p in ("ex", "a", "c")])
+    af.compute_grounded()
+    assert af.given("inapplicable_V01") == [frozenset(["c"])]

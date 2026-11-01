@@ -527,17 +527,22 @@ def _derive_attacks(
                 scope_tag = excluding[0].tag
                 for a in excluding[1:]:
                     scope_tag = ProvenanceTag.oplus(scope_tag, a.tag)
+                best = tuple(a.id for a in excluding
+                             if rank(a.status) == rank(scope_status))
                 scope_arg_id = af.next_arg_id()
                 af.add_argument(Argument(
                     id=scope_arg_id,
                     conclusion=target_conclusion,
                     top_rule=None,
+                    # The arguments its status was taken from, so what rests
+                    # beneath it can be read back — `af.given` would otherwise
+                    # call it unconditional when the exclusion was only
+                    # supposed (#195). No rule, so they are accrued, not
+                    # conjoined: any one of them carries it.
+                    sub_arguments=best,
                     # Not a rule bound: the status is the excluding fact's,
                     # so that fact is what holds it where it is.
-                    status_bound_by=tuple(
-                        f"sub:{a.id}" for a in excluding
-                        if rank(a.status) == rank(scope_status)
-                    ),
+                    status_bound_by=tuple(f"sub:{aid}" for aid in best),
                     # The fact that excluded the rule, as observed rather than
                     # as the base declares it. With one undercutter per entity
                     # the bare name would read identically on all of them, and
