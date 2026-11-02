@@ -12,6 +12,7 @@ from typing import Optional
 import dspy
 from .advisories import (
     Advisory,
+    AdvisoryKind,
     as_wire,
     decayed_rule_advisories,
     declared_fallacy_advisories,
@@ -344,6 +345,25 @@ def supposition_notice(results: dict) -> str | None:
             + "\n".join(lines))
 
 
+
+def fallacy_notice(advisories: list[Advisory]) -> str | None:
+    """A declared fallacy the reasoning matched, prepended (#259).
+
+    `declared_fallacy_advisories` finds the match, but advisories have never
+    reached `SynthesizeResponse`, so the warning the base wrote for exactly
+    this reasoning was computed and dropped: live, H01 "The Revenue Vanity
+    Trap" was the only advisory on the growth question and the answer named
+    neither. Prepended like NO_DERIVATION_NOTICE, so it does not depend on
+    the model. Only FALLACY: the other kinds report a condition on one rule
+    and stay on `advisories` for callers.
+    """
+    lines = [f"- {a.message.removeprefix('FALLACY: ')}"
+             for a in advisories if a.kind is AdvisoryKind.FALLACY]
+    if not lines:
+        return None
+    return ("Warning: this reasoning has the shape of a fallacy my knowledge "
+            "base warns about:\n" + "\n".join(lines))
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -499,9 +519,9 @@ class AnvikshikiEngineV4(dspy.Module):
         # and this is the one sentence the reader most needs to be able to
         # rely on.
         response_text = response.response
-        notice = supposition_notice(results)
-        if notice:
-            response_text = f"{notice}\n\n{response_text}"
+        for notice in (fallacy_notice(advisories), supposition_notice(results)):
+            if notice:
+                response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 
@@ -735,9 +755,9 @@ class AnvikshikiEngineV4(dspy.Module):
         # guarantee — and this is the one sentence the reader most needs to be
         # able to rely on.
         response_text = response.response
-        notice = supposition_notice(results)
-        if notice:
-            response_text = f"{notice}\n\n{response_text}"
+        for notice in (fallacy_notice(advisories), supposition_notice(results)):
+            if notice:
+                response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 

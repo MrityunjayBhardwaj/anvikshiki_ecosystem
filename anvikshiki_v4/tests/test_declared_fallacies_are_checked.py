@@ -290,3 +290,46 @@ def test_a_fallacy_advisory_names_a_fallacy_and_no_rule():
                  hetvabhasa_id="H01", message="m")
     with pytest.raises(ValidationError):
         Advisory(kind=AdvisoryKind.DECAY, message="m")
+
+
+# ── the warning reaches the answer (#259) ──────────────────────
+#
+# Advisories never reach the synthesizer, so a matched fallacy was computed
+# and dropped. It is prepended to the response, like NO_DERIVATION_NOTICE.
+
+WARNING = "Warning: this reasoning has the shape of a fallacy"
+
+
+@BOTH_PATHS
+def test_the_answer_opens_with_the_matched_fallacy(business, path):
+    pred = _run(business, GROWTH, path)
+    h01 = business.hetvabhasas["H01"]
+    blocks = pred.response.split("\n\n")
+    (warning,) = [b for b in blocks if b.startswith(WARNING)]
+    (line,) = warning.splitlines()[1:]
+    assert line.startswith(f"- H01 '{h01.name}' — {h01.description}")
+    assert line.endswith(f"Correction: {h01.correction_pattern}")
+    assert blocks[-1] == "An answer."
+
+
+@BOTH_PATHS
+@pytest.mark.parametrize("silenced", ["unit_economics", "no_patterns"])
+def test_no_warning_when_no_fallacy_matched(business, path, silenced):
+    if silenced == "unit_economics":
+        pred = _run(business, GROWTH + ("positive_unit_economics(business)",), path)
+    else:
+        pred = _run(_without_patterns(business), GROWTH, path)
+    assert WARNING not in pred.response
+
+
+def test_the_warning_names_only_fallacies():
+    from anvikshiki_v4.advisories import (
+        AdvisoryKind, scope_exclusion_advisory)
+    from anvikshiki_v4.engine_v4 import fallacy_notice
+    other = scope_exclusion_advisory("V01", "x(a)")
+    assert fallacy_notice([]) is None
+    assert fallacy_notice([other]) is None
+    fallacy = Advisory(kind=AdvisoryKind.FALLACY, hetvabhasa_id="H09",
+                       message="FALLACY: H09 'N' — d. Correction: c")
+    assert fallacy_notice([other, fallacy]).splitlines()[1:] == [
+        "- H09 'N' — d. Correction: c"]
