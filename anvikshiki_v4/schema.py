@@ -170,7 +170,9 @@ class DetectionPattern(BaseModel):
     """A fallacy's signature in a form the engine can evaluate (#252).
 
     Matches an answer when every `present` predicate is an accepted conclusion
-    (any entity) and no `absent` predicate is. Names are bare predicate names
+    (any entity) and no `absent` predicate is; when a `rebutted_by` predicate
+    is also accepted the match is reported as guarded against, not as the
+    fallacy. Names are bare predicate names
     from the base's own vocabulary; `KnowledgeStore` refuses names it does not
     know, because a misspelt `present` name would never fire and a misspelt
     `absent` name would fire on every query that has the rest.
@@ -184,6 +186,14 @@ class DetectionPattern(BaseModel):
         ),
     )
     absent: list[str] = Field(default_factory=list)
+    rebutted_by: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Predicates whose acceptance means the base's own reasoning "
+            "rejects the fallacy: the pattern's inputs are there, but the "
+            "answer concludes against it, so warning would misread it (#261)."
+        ),
+    )
 
 
 class Hetvabhasa(BaseModel):
@@ -284,7 +294,8 @@ class KnowledgeStore(BaseModel):
                 vocabulary.add(v.consequent)
         for h in patterned:
             unknown = sorted(
-                {*h.detection_pattern.present, *h.detection_pattern.absent}
+                {*h.detection_pattern.present, *h.detection_pattern.absent,
+                 *h.detection_pattern.rebutted_by}
                 - vocabulary
             )
             if unknown:

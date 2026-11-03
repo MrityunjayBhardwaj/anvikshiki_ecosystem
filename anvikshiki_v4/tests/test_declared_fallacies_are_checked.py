@@ -8,6 +8,10 @@ the question it was written for. The live grounder produced
 `organizational_growth(business)` for that question (openrouter/z-ai/glm-5.2,
 shipped business base, 2026-10-31), which is the replay below.
 
+When the base's own reasoning concludes against the fallacy (a `rebutted_by`
+predicate is accepted) the match is reported as guarded, not as the fallacy
+(#261).
+
 Decided: a match is an advisory, never an attack. It must change no label and
 no status, and it must arrive on both answering paths.
 """
@@ -36,6 +40,10 @@ from anvikshiki_v4.t2_compiler_v4 import compile_t2, load_knowledge_store
 
 BUSINESS = "anvikshiki_v4/data/business_expert.yaml"
 GROWTH = ("organizational_growth(business)",)
+# On GROWTH alone V11 "The Growth Trap" concludes `not_value_creation`, the
+# base reasoning against H01, so H01 is guarded there (#261). A small team
+# with direct contact excludes V11, which leaves H01 unanswered and firing.
+UNGUARDED = GROWTH + ("small_team_direct_contact(business)",)
 BOTH_PATHS = pytest.mark.parametrize("path", ["forward", "forward_with_coverage"])
 
 
@@ -84,8 +92,8 @@ def _af(ks, *predicates):
 # ── the reported case, through the engine ─────────────────────
 
 @BOTH_PATHS
-def test_h01_fires_on_the_growth_question(business, path):
-    pred = _run(business, GROWTH, path)
+def test_h01_fires_on_growth_when_nothing_rebuts_it(business, path):
+    pred = _run(business, UNGUARDED, path)
     (advisory,) = _fallacies(pred)
     assert advisory["hetvabhasa_id"] == "H01"
     assert advisory["vyapti_id"] is None
@@ -106,8 +114,8 @@ def test_h01_is_silent_when_unit_economics_is_accepted(business, path):
 def test_the_check_changes_no_label_and_no_status(business, path):
     """Advisory, never an attack: everything but the advisory list is the
     same whether the base carries the pattern or not."""
-    with_check = _run(business, GROWTH, path)
-    without = _run(_without_patterns(business), GROWTH, path)
+    with_check = _run(business, UNGUARDED, path)
+    without = _run(_without_patterns(business), UNGUARDED, path)
     assert _fallacies(with_check) and not _fallacies(without)
     for field in ("labels", "arguments", "attacks", "violations",
                   "provenance", "uncertainty", "derivation", "extension_size"):
@@ -173,11 +181,12 @@ def _vyapti(vid, antecedents, consequent):
     )
 
 
-def _fallacy(hid, present, absent=()):
+def _fallacy(hid, present, absent=(), rebutted_by=()):
     return Hetvabhasa(
         id=hid, name=f"name {hid}", description=f"description {hid}",
         detection_signature="free text", correction_pattern="fix it",
-        detection_pattern={"present": list(present), "absent": list(absent)},
+        detection_pattern={"present": list(present), "absent": list(absent),
+                           "rebutted_by": list(rebutted_by)},
     )
 
 
@@ -247,16 +256,18 @@ def test_a_pattern_must_name_something_present():
         _fallacy("H09", [], ["a"])
 
 
-@pytest.mark.parametrize("present,absent", [
-    (["a", "typo"], []),
-    (["a"], ["typo"]),
-], ids=["present", "absent"])
-def test_a_pattern_naming_an_unknown_predicate_is_refused(present, absent):
+@pytest.mark.parametrize("present,absent,rebutted_by", [
+    (["a", "typo"], [], []),
+    (["a"], ["typo"], []),
+    (["a"], [], ["typo"]),
+], ids=["present", "absent", "rebutted_by"])
+def test_a_pattern_naming_an_unknown_predicate_is_refused(present, absent,
+                                                           rebutted_by):
     with pytest.raises(ValidationError, match="typo"):
         KnowledgeStore(
             domain_type=DomainType.CRAFT,
             vyaptis={"V01": _vyapti("V01", ["a"], "b")},
-            hetvabhasas={"H01": _fallacy("H01", present, absent)},
+            hetvabhasas={"H01": _fallacy("H01", present, absent, rebutted_by)},
         )
 
 
@@ -290,6 +301,9 @@ def test_a_fallacy_advisory_names_a_fallacy_and_no_rule():
                  hetvabhasa_id="H01", message="m")
     with pytest.raises(ValidationError):
         Advisory(kind=AdvisoryKind.DECAY, message="m")
+    with pytest.raises(ValidationError):
+        Advisory(kind=AdvisoryKind.FALLACY_GUARDED, vyapti_id="V01", message="m")
+    Advisory(kind=AdvisoryKind.FALLACY_GUARDED, hetvabhasa_id="H01", message="m")
 
 
 # ── the warning reaches the answer (#259) ──────────────────────
@@ -302,7 +316,7 @@ WARNING = "Warning: this reasoning has the shape of a fallacy"
 
 @BOTH_PATHS
 def test_the_answer_opens_with_the_matched_fallacy(business, path):
-    pred = _run(business, GROWTH, path)
+    pred = _run(business, UNGUARDED, path)
     h01 = business.hetvabhasas["H01"]
     blocks = pred.response.split("\n\n")
     (warning,) = [b for b in blocks if b.startswith(WARNING)]
@@ -333,3 +347,44 @@ def test_the_warning_names_only_fallacies():
                        message="FALLACY: H09 'N' — d. Correction: c")
     assert fallacy_notice([other, fallacy]).splitlines()[1:] == [
         "- H09 'N' — d. Correction: c"]
+
+
+# ── guarded: the base's own reasoning rejects the fallacy (#261) ──
+#
+# The pattern matches what the reasoning starts from. On the question H01 was
+# written for, V11 concludes the growth is not value creation, which is H01's
+# own correction, and the warning read as if the answer committed it.
+
+@BOTH_PATHS
+def test_h01_is_guarded_on_the_growth_question(business, path):
+    pred = _run(business, GROWTH, path)
+    assert _fallacies(pred) == []
+    (guarded,) = [a for a in pred.advisories if a["kind"] == "fallacy_guarded"]
+    assert guarded["hetvabhasa_id"] == "H01"
+    assert guarded["vyapti_id"] is None
+    assert "not_value_creation(business)" in guarded["message"]
+    assert WARNING not in pred.response
+
+
+def test_an_accepted_rebuttal_guards_and_an_unaccepted_one_does_not():
+    ks = KnowledgeStore(
+        domain_type=DomainType.CRAFT,
+        vyaptis={v.id: v for v in (_vyapti("V01", ["a"], "b"),
+                                   _vyapti("V02", ["c"], "d"))},
+        hetvabhasas={"H01": _fallacy("H01", ["a"], rebutted_by=["d", "b"])},
+    )
+    af, labels = _af(ks, "a(x)")  # V01 derives b(x); nothing derives d
+    (adv,) = declared_fallacy_advisories(ks, af, labels)
+    assert adv.kind is AdvisoryKind.FALLACY_GUARDED
+    assert "concludes b(x), against" in adv.message
+    ks2 = ks.model_copy(update={"hetvabhasas": {
+        "H01": _fallacy("H01", ["a"], rebutted_by=["d"])}})
+    (adv,) = declared_fallacy_advisories(ks2, af, labels)
+    assert adv.kind is AdvisoryKind.FALLACY
+
+
+def test_a_guarded_fallacy_is_not_prepended():
+    from anvikshiki_v4.engine_v4 import fallacy_notice
+    guarded = Advisory(kind=AdvisoryKind.FALLACY_GUARDED, hetvabhasa_id="H01",
+                       message="GUARDED: H01 'N' — x")
+    assert fallacy_notice([guarded]) is None

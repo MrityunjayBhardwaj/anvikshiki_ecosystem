@@ -51,6 +51,10 @@ class AdvisoryKind(str, Enum):
     DECAY = "decay"
     UNESTABLISHED_SCOPE = "unestablished_scope"
     FALLACY = "fallacy"
+    # The pattern's inputs are there, but the base's reasoning concludes
+    # against the fallacy (#261). Not prepended to the answer: the answer
+    # already says the corrective thing, and a warning would misread it.
+    FALLACY_GUARDED = "fallacy_guarded"
 
 
 class Advisory(BaseModel):
@@ -78,7 +82,8 @@ class Advisory(BaseModel):
 
     @model_validator(mode="after")
     def _about_exactly_one_thing(self) -> "Advisory":
-        is_fallacy = self.kind is AdvisoryKind.FALLACY
+        is_fallacy = self.kind in (AdvisoryKind.FALLACY,
+                                   AdvisoryKind.FALLACY_GUARDED)
         if is_fallacy and (self.hetvabhasa_id is None or self.vyapti_id is not None):
             raise ValueError(
                 "a fallacy advisory names a hetvabhasa_id and no vyapti_id")
@@ -331,6 +336,20 @@ def declared_fallacy_advisories(
             continue
 
         matched = sorted(c for p in pattern.present for c in accepted[p])
+        rebuttals = sorted(c for p in pattern.rebutted_by
+                           for c in accepted.get(p, ()))
+        if rebuttals:
+            advisories.append(Advisory(
+                kind=AdvisoryKind.FALLACY_GUARDED,
+                hetvabhasa_id=h.id,
+                subject=", ".join(matched),
+                message=(
+                    f"GUARDED: {h.id} '{h.name}' — the reasoning starts from "
+                    f"{', '.join(matched)} but concludes "
+                    f"{', '.join(rebuttals)}, against the fallacy."
+                ),
+            ))
+            continue
         absent = (
             f"; not established: {', '.join(pattern.absent)}"
             if pattern.absent else ""
