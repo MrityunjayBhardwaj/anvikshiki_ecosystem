@@ -11,6 +11,7 @@
     python -m occam score-same FILE          # re-score a stored probe-same run, no model
     python -m occam rejudge DIR --out DIR    # add the same-answer judge to stored runs, live
     python -m occam calibrate LABELS.jsonl --population "..." [--alpha 0.1] [--out CAL]
+    python -m occam frozen DIR               # which stored runs were made under Occam v1
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
 judgment of how much the answer in FILE is worth, after reading it and its
@@ -18,6 +19,11 @@ quotes.
 
 The same-answer judge (#172) is on by default; `--no-judge-same` turns it off,
 and the choice is recorded in the artifact's params.
+
+Occam v1 (#264, occam.frozen) is the pipeline that made run 14. `ask --v1` and
+`measure --v1` run it, and refuse any flag that would change it. `calibrate`
+refuses a labelled answer that was not made under v1, since a calibration
+describes one pipeline; `--any-pipeline` lets it through, and says so.
 
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
@@ -279,6 +285,72 @@ def _refuse_overwrite(paths: list[Path]) -> bool:
     return bool(held)
 
 
+# Flags that change the pipeline, each with its default outside v1 and its
+# value under it (occam.frozen.V1, V1_RUN). A flag left unset is None, so
+# `--v1` can tell a default from a choice.
+_PIPELINE_FLAGS = {"model": ("z-ai/glm-5.2", "kie/gemini-3-pro"), "web": (3, 3),
+                   "factcheck": (0, 3), "k": (3, 3), "sources": (3, 3)}
+
+
+def _settle(args: argparse.Namespace) -> Optional[str]:
+    """Fill each pipeline flag left unset — from v1 under `--v1`, else from its
+    default — and return why `--v1` refuses, if a flag given would change v1."""
+    from .frozen import V1, V1_RUN
+    assert (V1.model, V1.web_sources, V1.factcheck_sources, V1.k_argue, V1_RUN["n_sources"]) \
+        == tuple(v for _, v in _PIPELINE_FLAGS.values()) and V1.k_attack == V1.k_argue
+    given = [f"--{f}" for f in _PIPELINE_FLAGS if getattr(args, f, None) is not None]
+    given += ["--no-judge-same"] * bool(args.no_judge_same) + ["--url"] * bool(getattr(args, "url", None))
+    for f, (default, v1) in _PIPELINE_FLAGS.items():
+        if hasattr(args, f) and getattr(args, f) is None:
+            setattr(args, f, v1 if args.v1 else default)
+    if args.v1 and given:
+        return (f"--v1 runs Occam v1 as frozen; {', '.join(given)} would change it "
+                f"(occam.frozen.V1)")
+    return None
+
+
+def _params(args: argparse.Namespace) -> Params:
+    """The run's params: v1's own under `--v1`, else built from the flags."""
+    from .frozen import V1
+    if args.v1:
+        return V1
+    k = getattr(args, "k", 3)                 # measure has no --k: it always ran 3
+    return Params(k_argue=k, k_attack=k, judge_same=not args.no_judge_same,
+                  web_sources=args.web, factcheck_sources=args.factcheck)
+
+
+def _v1_line(art: Artifact) -> str:
+    """Whether a run was made under Occam v1, said every time."""
+    from .frozen import made_under_v1
+    off = made_under_v1(art.params)
+    return "made under Occam v1" if not off else \
+        f"NOT made under Occam v1: {'; '.join(off)}"
+
+
+def _frozen(directory: Path) -> int:
+    """Each stored run in DIR: made under v1 or not, and whether it replays to
+    its stored answer. Exit 0 only when every one is v1 and replays."""
+    from .frozen import made_under_v1
+    files = sorted(directory.glob("*.json"))
+    v1 = replays = 0
+    for f in files:
+        stored = json.loads(f.read_text())
+        if "artifact" not in stored:
+            print(f"{f.name}: not a stored run")
+            continue
+        art = Artifact.model_validate(stored["artifact"])
+        off = made_under_v1(art.params)
+        same = canonical(replay(art)) == json.dumps(stored["answer"], sort_keys=True,
+                                                    ensure_ascii=False)
+        v1 += not off
+        replays += same
+        print(f"{f.name}: {'v1' if not off else 'NOT v1'}; replay "
+              f"{'matches' if same else 'DIFFERS'}" + (f" — {'; '.join(off)}" if off else ""))
+    print(f"\n{v1} of {len(files)} made under Occam v1; {replays} of {len(files)} replay to "
+          f"their stored answer")
+    return 0 if files and v1 == replays == len(files) else 1
+
+
 def _report_probe(probe, kill_criteria) -> int:
     from .sameprobe import score
     res, rows = score(probe)
@@ -366,14 +438,16 @@ def main(argv: list[str] | None = None) -> int:
                     help="turn off the same-answer judge (on by default)")
     ask.add_argument("question")
     ask.add_argument("--url", action="append")
-    ask.add_argument("--k", type=int, default=3)
-    ask.add_argument("--sources", type=int, default=3)
-    ask.add_argument("--web", type=int, default=3,
+    ask.add_argument("--v1", action="store_true",
+                     help="run Occam v1 as frozen (#264); refuses flags that would change it")
+    ask.add_argument("--k", type=int)
+    ask.add_argument("--sources", type=int)
+    ask.add_argument("--web", type=int,
                      help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
-    ask.add_argument("--factcheck", type=int, default=0,
+    ask.add_argument("--factcheck", type=int,
                      help="fact-check articles found by Google Fact Check Tools after the web "
                           "pages (#230); needs GOOGLE_FACTCHECK_API_KEY. 0 for none")
-    ask.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ask.add_argument("--model", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     ask.add_argument("--out")
     ask.add_argument("--calibration")
     rp = sub.add_parser("replay")
@@ -407,13 +481,15 @@ def main(argv: list[str] | None = None) -> int:
     ms.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ms.add_argument("--out")
-    ms.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ms.add_argument("--model", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ms.add_argument("--v1", action="store_true",
+                    help="run Occam v1 as frozen (#264); refuses flags that would change it")
     ms.add_argument("--resume", action="store_true",
                     help="keep the questions already written to --out and run only the rest; "
                          "refused if a kept one was made by another model")
-    ms.add_argument("--web", type=int, default=3,
+    ms.add_argument("--web", type=int,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
-    ms.add_argument("--factcheck", type=int, default=0,
+    ms.add_argument("--factcheck", type=int,
                     help="fact-check articles found by Google Fact Check Tools after the web "
                          "pages (#230); needs GOOGLE_FACTCHECK_API_KEY. 0 for none")
     ms.add_argument("--questions", metavar="FILE",
@@ -424,7 +500,16 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--population", required=True)
     cp.add_argument("--alpha", type=float, default=0.1)
     cp.add_argument("--out", default="traces/occam/calibration.json")
+    cp.add_argument("--any-pipeline", action="store_true",
+                    help="accept labelled answers not made under Occam v1 (said in the output)")
+    fz = sub.add_parser("frozen")
+    fz.add_argument("dir")
     args = ap.parse_args(argv)
+    if args.cmd in ("ask", "measure"):
+        refused = _settle(args)
+        if refused:
+            print(refused, file=sys.stderr)
+            return 2
     cal = None
     if getattr(args, "calibration", None):
         cal = Calibration.model_validate_json(Path(args.calibration).read_text())
@@ -510,8 +595,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "rejudge":
         return _rejudge(Path(args.dir), Path(args.out))
 
+    if args.cmd == "frozen":
+        return _frozen(Path(args.dir))
+
     if args.cmd == "measure":
         from .controls import FACTUAL_QUESTIONS
+        from .frozen import made_under_v1
         from .model import make_model
         # Read before any model is built, so a bad file costs nothing.
         questions = FACTUAL_QUESTIONS if not args.questions else tuple(
@@ -555,9 +644,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if path not in kept:
                     answer, artifact = run(q, model,
-                                           params=Params(judge_same=not args.no_judge_same,
-                                                         web_sources=args.web,
-                                                         factcheck_sources=args.factcheck),
+                                           params=_params(args),
                                            web_search=getattr(model, "web_search", None)
                                            if args.web else None,
                                            factcheck_search=fc_search)
@@ -590,6 +677,10 @@ def main(argv: list[str] | None = None) -> int:
               f"{pooled['absent']}, punctuation {pooled['punctuation']}, unresolvable "
               f"{pooled['unresolvable']}")
         print(f"abstained {abstained} of {len(questions)}; statuses {statuses}")
+        made = [p for p in paths if p.exists()]
+        v1 = sum(not made_under_v1(Artifact.model_validate(json.loads(p.read_text())["artifact"])
+                                   .params) for p in made)
+        print(f"made under Occam v1: {v1} of {len(made)}")
         if hasattr(model, "credits"):
             print(f"spent: {model.credits:g} kie.ai credits in this pass, as the provider "
                   f"counted them ({len(kept)} question(s) kept from earlier passes not included)")
@@ -597,13 +688,24 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "calibrate":
+        from .frozen import made_under_v1
         examples = []
+        mixed = 0
         for line in Path(args.labels).read_text().splitlines():
             if not line.strip():
                 continue
             row = json.loads(line)
             stored = json.loads(Path(row["artifact"]).read_text())
-            a = replay(Artifact.model_validate(stored["artifact"]))
+            art = Artifact.model_validate(stored["artifact"])
+            off = made_under_v1(art.params)
+            if off:
+                if not args.any_pipeline:
+                    print(f"refusing {row['artifact']}: not made under Occam v1 ({'; '.join(off)}); "
+                          f"a calibration describes one pipeline (--any-pipeline to accept it)",
+                          file=sys.stderr)
+                    return 2
+                mixed += 1
+            a = replay(art)
             examples.append(Example(derived=a.status.value if a.status and not a.abstained
                                     else ABSTAINED, label=row["label"], ref=row["artifact"]))
         cal = fit(examples, alpha=args.alpha, population=args.population)
@@ -611,6 +713,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.out).write_text(cal.model_dump_json(indent=1))
         print(f"{len(examples)} labelled answers: fit {cal.n_fit}, calibrate {cal.n_cal}; "
               f"qhat={cal.qhat}; written {args.out}")
+        print(f"labelled answers not made under Occam v1: {mixed} of {len(examples)}")
         print("Report coverage only on answers NOT in this file (evaluate on held-out labels).")
         return 0
 
@@ -625,16 +728,14 @@ def main(argv: list[str] | None = None) -> int:
         model = make_model(args.model)
         answer, artifact = run(args.question, model, urls=args.url,
                                n_sources=args.sources,
-                               params=Params(k_argue=args.k, k_attack=args.k,
-                                             judge_same=not args.no_judge_same,
-                                             web_sources=args.web,
-                                             factcheck_sources=args.factcheck),
+                               params=_params(args),
                                calibration=cal,
                                web_search=getattr(model, "web_search", None) if args.web else None,
                                factcheck_search=fc_search)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(stored_run(answer, artifact))
         _show(answer, artifact)
+        print(_v1_line(artifact))
         print(f"\nartifact: {out}")
         return 0
 
