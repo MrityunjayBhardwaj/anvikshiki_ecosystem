@@ -7,6 +7,7 @@ Supports two entry points:
   forward_with_coverage() — coverage-based routing (FULL/PARTIAL/DECLINE)
 """
 
+import re
 from typing import Optional
 
 import dspy
@@ -364,6 +365,37 @@ def fallacy_notice(advisories: list[Advisory]) -> str | None:
     return ("Warning: this reasoning has the shape of a fallacy my knowledge "
             "base warns about:\n" + "\n".join(lines))
 
+
+# A yes or no at the head of the model's text, after markdown and a lead-in
+# such as "Short answer:". It must be followed by punctuation or the end, so
+# "No one", "Not necessarily" and "Yes and no" are not verdicts.
+_HEADLINE = re.compile(
+    r"^[\s*_#>]*"
+    r"(?:(?:the\s+)?(?:short\s+answer|in\s+short|bottom\s+line|answer)"
+    r"(?:\s+is)?[\s*_:,\u2014\u2013-]*)?"
+    r"(yes|no)\b[*_]*\s*(?:[,.;:!\u2014\u2013-]|$)",
+    re.IGNORECASE,
+)
+
+
+def headline_notice(model_text: str) -> str | None:
+    """Say that a yes or no heading the answer is not the engine's (#197).
+
+    The engine derives conclusions, not a verdict on the question: nothing
+    records which fact a yes/no question asks about, so a "No" at the head of
+    the answer is the synthesizer's reading of the accepted conclusions, and
+    it drifts from run to run. It read as a conclusion the engine reasoned
+    to. Until a verdict is derived, the answer is told so, prepended like the
+    other notices. Only the model's own text is read, never the notices.
+    """
+    m = _HEADLINE.match(model_text)
+    if not m:
+        return None
+    word = m.group(1).capitalize()
+    return (f'Note: my knowledge base does not decide yes or no here. The '
+            f'"{word}" that opens the answer below is the model\'s reading of '
+            f'what was derived, not a verdict the engine reached.')
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -519,7 +551,8 @@ class AnvikshikiEngineV4(dspy.Module):
         # and this is the one sentence the reader most needs to be able to
         # rely on.
         response_text = response.response
-        for notice in (fallacy_notice(advisories), supposition_notice(results)):
+        for notice in (headline_notice(response.response),
+                       fallacy_notice(advisories), supposition_notice(results)):
             if notice:
                 response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:
@@ -755,7 +788,8 @@ class AnvikshikiEngineV4(dspy.Module):
         # guarantee — and this is the one sentence the reader most needs to be
         # able to rely on.
         response_text = response.response
-        for notice in (fallacy_notice(advisories), supposition_notice(results)):
+        for notice in (headline_notice(response.response),
+                       fallacy_notice(advisories), supposition_notice(results)):
             if notice:
                 response_text = f"{notice}\n\n{response_text}"
         if framework_derived_nothing:

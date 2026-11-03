@@ -640,6 +640,12 @@ class SynthesizeResponse(dspy.Signature):
     sources_cited:       list  → source IDs used in the response
 ```
 
+**Notices the engine adds above the model's text.** Some things the reader must see can't depend on the model complying, so the engine prepends them to `response` on both answering paths, top to bottom:
+- `NO_DERIVATION_NOTICE` when no rule fired;
+- `supposition_notice` naming each conclusion that holds only given what the question supposed (#256);
+- `fallacy_notice` naming each declared fallacy the reasoning matched (#259);
+- `headline_notice` when the model's text opens with "yes" or "no". The engine derives conclusions, not a verdict on the question, so that word is the model's reading (#197).
+
 **Source:** `engine_v4.py:16-34`, `engine_v4.py:36-74`, `engine_service.py:213-244`
 
 ---
