@@ -177,11 +177,14 @@ hetvabhasas:
     description: "Inferring business health from revenue growth alone, ignoring unit economics, cash flow, and margin structure"
     detection_signature: "revenue_growth_cited_without_unit_economics"
     # Checked at query time: fires as an advisory when growth is accepted and
-    # positive unit economics is not. H02–H08 have no pattern: their
-    # signatures name nothing this base has a predicate for.
+    # positive unit economics is not, unless V11 concludes the growth is not
+    # value creation, which is the base reasoning against this fallacy.
+    # H02–H08 have no pattern: their signatures name nothing this base has a
+    # predicate for.
     detection_pattern:
       present: ["organizational_growth"]
       absent: ["positive_unit_economics"]
+      rebutted_by: ["not_value_creation"]
     correction_pattern: "Require unit economic analysis alongside any revenue growth claim"
     common_contexts: ["startup_evaluation", "investor_pitches", "media_coverage"]
 
