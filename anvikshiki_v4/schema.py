@@ -235,6 +235,20 @@ class ChapterFingerprint(BaseModel):
     difficulty_tier: str = "intermediate"
 
 
+class QuestionTarget(BaseModel):
+    """What a yes/no question about a concept is asking, in this base's terms (#197).
+
+    A question can ask about something no predicate is named for: "is it
+    viable?" when the base reasons about `value_creation`. The base says
+    which predicate answers it and which rule licenses that reading, so the
+    mapping is the base's claim, citable, not the grounder's guess.
+    """
+
+    concept: str = Field(description="The question's wording, e.g. 'viable, survives'")
+    predicate: str = Field(description="The predicate whose truth answers it")
+    basis: str = Field(description="The rule id whose statement licenses the mapping")
+
+
 # ─── Top-Level Knowledge Store ────────────────────────────────
 
 
@@ -261,6 +275,14 @@ class KnowledgeStore(BaseModel):
     contrariness_pairs: list[list[str]] = Field(
         default_factory=list,
         description="Domain-specific contradictory predicate pairs beyond syntactic not_ negation",
+    )
+
+    question_targets: list[QuestionTarget] = Field(
+        default_factory=list,
+        description=(
+            "Concepts a yes/no question may ask about that no predicate is "
+            "named for, each mapped to the predicate that answers it (#197)."
+        ),
     )
 
     # T2b compile-time extensions (populated by compile_t2b)
@@ -303,4 +325,24 @@ class KnowledgeStore(BaseModel):
                     f"hetvabhasa {h.id} detection_pattern names predicates no "
                     f"rule mentions: {unknown}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _question_targets_are_concluded(self) -> "KnowledgeStore":
+        """A question target must name a predicate some rule concludes.
+
+        One no rule concludes can never be accepted except as a supposition,
+        and a supposition is not a verdict, so it would answer "unknown" on
+        every question, silently. The cited basis must be a rule here.
+        """
+        concluded = {v.consequent for v in self.vyaptis.values() if v.consequent}
+        for t in self.question_targets:
+            if t.predicate not in concluded:
+                raise ValueError(
+                    f"question target {t.concept!r} maps to {t.predicate!r}, "
+                    "which no rule concludes")
+            if t.basis not in self.vyaptis:
+                raise ValueError(
+                    f"question target {t.concept!r} cites {t.basis!r}, "
+                    "which is not a rule in this base")
         return self

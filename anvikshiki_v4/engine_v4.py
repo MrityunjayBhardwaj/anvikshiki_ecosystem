@@ -22,6 +22,9 @@ from .advisories import (
 from .schema import KnowledgeStore
 from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
+from .predicate_contrariness import (
+    are_contrary, normalize_entity, predicate_entity, predicate_name, with_entity,
+)
 from .uncertainty import compute_uncertainty_v4
 from .contestation import ContestationManager
 from .coverage import CoverageResult, SemanticCoverageAnalyzer
@@ -396,6 +399,107 @@ def headline_notice(model_text: str) -> str | None:
             f'"{word}" that opens the answer below is the model\'s reading of '
             f'what was derived, not a verdict the engine reached.')
 
+
+def _key(pred: str) -> tuple[str, str | None]:
+    return predicate_name(pred), normalize_entity(predicate_entity(pred))
+
+
+def bind_asks(asks: str | None, predicates: list[str]) -> str | None:
+    """The target, spelt with the subject the question facts use.
+
+    Contrariness checks the binding first, so `value_creation(the_business)`
+    and `not_value_creation(business)` would never meet. The grounder names
+    one subject per question; normalising can only align the spelling.
+    """
+    if asks is None:
+        return None
+    for p in predicates:
+        if (predicate_entity(p) and normalize_entity(predicate_entity(p))
+                == normalize_entity(predicate_entity(asks))):
+            return with_entity(predicate_name(asks), predicate_entity(p))
+    return asks
+
+
+def question_verdict(af, knowledge_store, asks: str | None) -> dict | None:
+    """Yes, no or unknown on what the question asks, from the labels (#197).
+
+    Yes when the target is accepted and nothing against it is; no when
+    something contrary to it is accepted and the target is not; unknown
+    otherwise. "Not derived" is never "no": a no needs its contrary
+    accepted. The target is never a supposition, so it cannot answer itself.
+    """
+    if asks is None:
+        return None
+    rank = {s: i for i, s in enumerate((
+        EpistemicStatus.ESTABLISHED, EpistemicStatus.HYPOTHESIS,
+        EpistemicStatus.PROVISIONAL))}
+    status, _, _ = af.get_epistemic_status(asks)
+    for_it = status in SHOWN_STATUSES
+    against = sorted(
+        {a.conclusion for a in af.arguments.values()
+         if not a.conclusion.startswith("_")
+         and are_contrary(asks, a.conclusion, knowledge_store)},
+        key=lambda c: c)
+    against = [(c, af.get_epistemic_status(c)[0]) for c in against]
+    against = sorted([(c, st) for c, st in against if st in SHOWN_STATUSES],
+                     key=lambda x: (rank[x[1]], x[0]))
+
+    def given(c):
+        return [sorted(g) for g in af.given(c)]
+
+    if for_it and not against:
+        return {"asks": asks, "answer": "yes", "by": asks, "status": status.value,
+                "given": given(asks), "reason": "accepted"}
+    if against and not for_it:
+        c, st = against[0]
+        return {"asks": asks, "answer": "no", "by": c, "status": st.value,
+                "given": given(c), "reason": "contrary_accepted"}
+    reason = ("both" if for_it else
+              "undecided" if status is not None else "neither")
+    return {"asks": asks, "answer": "unknown",
+            "by": against[0][0] if against else None,
+            "status": status.value if status is not None else None,
+            "given": [], "reason": reason}
+
+
+def verdict_notice(verdict: dict | None, model_text: str) -> str | None:
+    """The engine's verdict above the model's text, or the stopgap note.
+
+    Without a target the engine has no verdict, and a leading yes or no is
+    the model's reading (`headline_notice`). With one, the verdict is stated
+    first, and a leading yes or no that disagrees with it is called out.
+    """
+    if verdict is None:
+        return headline_notice(model_text)
+    m = _HEADLINE.match(model_text)
+    word = m.group(1).capitalize() if m else None
+    asks = verdict["asks"]
+    if verdict["answer"] in ("yes", "no"):
+        line = (f"Verdict: {verdict['answer'].capitalize()} — "
+                + (f"{asks} is accepted ({verdict['status']})"
+                   if verdict["answer"] == "yes" else
+                   f"{verdict['by']} is accepted ({verdict['status']}), "
+                   f"against {asks}"))
+        if verdict["given"]:
+            line += ("; this holds only if what your question assumes is "
+                     "true: " + " or ".join(" and ".join(g)
+                                            for g in verdict["given"]))
+        line += "."
+        if word and word.lower() != verdict["answer"]:
+            line += (f'\nThe "{word}" that opens the answer below disagrees '
+                     "with this verdict; it is the model's reading.")
+        return line
+    reason = {
+        "neither": f"my knowledge base derives neither {asks} nor anything against it",
+        "both": f"my knowledge base accepts both {asks} and {verdict['by']}",
+        "undecided": f"{asks} is {verdict['status']}, neither accepted nor rejected",
+    }[verdict["reason"]]
+    line = f"Verdict: unknown — {reason}."
+    if word:
+        line += (f'\nThe "{word}" that opens the answer below is the '
+                 "model's reading, not a verdict the engine reached.")
+    return line
+
 # ── Engine ──
 
 class AnvikshikiEngineV4(dspy.Module):
@@ -433,6 +537,7 @@ class AnvikshikiEngineV4(dspy.Module):
         grounding = self.grounding(query)
         if grounding.clarification_needed:
             return dspy.Prediction(
+                verdict=None,
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
                 violations=[], advisories=as_wire(grounding.advisories),
@@ -443,10 +548,13 @@ class AnvikshikiEngineV4(dspy.Module):
         # STEP 2: Build argumentation framework
         # Include source provenance from grounding when available
         grounding_sources = getattr(grounding, 'sources', []) or []
+        # What the question asks is never something it supposes (#197).
+        asks = bind_asks(grounding.asks, grounding.predicates)
         query_facts = [
             {"predicate": p, "confidence": grounding.confidence,
              "sources": grounding_sources}
             for p in grounding.predicates
+            if asks is None or _key(p) != _key(asks)
         ]
         af = compile_t2(self.ks, query_facts)
 
@@ -551,7 +659,8 @@ class AnvikshikiEngineV4(dspy.Module):
         # and this is the one sentence the reader most needs to be able to
         # rely on.
         response_text = response.response
-        for notice in (headline_notice(response.response),
+        verdict = question_verdict(af, self.ks, asks)
+        for notice in (verdict_notice(verdict, response.response),
                        fallacy_notice(advisories), supposition_notice(results)):
             if notice:
                 response_text = f"{notice}\n\n{response_text}"
@@ -559,6 +668,7 @@ class AnvikshikiEngineV4(dspy.Module):
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 
         return dspy.Prediction(
+            verdict=verdict,
             response=response_text,
             sources=response.sources_cited,
             derivation=derivation,
@@ -595,6 +705,7 @@ class AnvikshikiEngineV4(dspy.Module):
         grounding = self.grounding(query)
         if grounding.clarification_needed:
             return dspy.Prediction(
+                verdict=None,
                 response=f"Clarification needed: {grounding.warnings}",
                 sources=[], uncertainty={}, provenance={},
                 violations=[], advisories=as_wire(grounding.advisories),
@@ -640,6 +751,7 @@ class AnvikshikiEngineV4(dspy.Module):
             elif not aug_result.augmented:
                 # Out-of-domain: decline
                 return dspy.Prediction(
+                    verdict=None,
                     response=(
                         f"This query falls outside my domain's reasoning framework. "
                         f"{aug_result.reason}"
@@ -655,10 +767,13 @@ class AnvikshikiEngineV4(dspy.Module):
 
         # STEP 4: Build argumentation framework with active KB
         grounding_sources = getattr(grounding, 'sources', []) or []
+        # What the question asks is never something it supposes (#197).
+        asks = bind_asks(grounding.asks, grounding.predicates)
         query_facts = [
             {"predicate": p, "confidence": grounding.confidence,
              "sources": grounding_sources}
             for p in grounding.predicates
+            if asks is None or _key(p) != _key(asks)
         ]
         af = compile_t2(active_ks, query_facts)
 
@@ -788,7 +903,8 @@ class AnvikshikiEngineV4(dspy.Module):
         # guarantee — and this is the one sentence the reader most needs to be
         # able to rely on.
         response_text = response.response
-        for notice in (headline_notice(response.response),
+        verdict = question_verdict(af, active_ks, asks)
+        for notice in (verdict_notice(verdict, response.response),
                        fallacy_notice(advisories), supposition_notice(results)):
             if notice:
                 response_text = f"{notice}\n\n{response_text}"
@@ -796,6 +912,7 @@ class AnvikshikiEngineV4(dspy.Module):
             response_text = f"{NO_DERIVATION_NOTICE}\n\n{response_text}"
 
         return dspy.Prediction(
+            verdict=verdict,
             response=response_text,
             sources=response.sources_cited,
             derivation=derivation,
@@ -841,6 +958,7 @@ class AnvikshikiEngineV4Phase1(dspy.Module):
         )
         # Normalize output to match Phase 2+ schema for downstream compatibility
         return dspy.Prediction(
+            verdict=None,
             response=response.response,
             sources=getattr(response, "sources_cited", []) or [],
             uncertainty={},

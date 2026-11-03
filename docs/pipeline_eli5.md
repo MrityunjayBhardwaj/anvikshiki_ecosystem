@@ -644,7 +644,7 @@ class SynthesizeResponse(dspy.Signature):
 - `NO_DERIVATION_NOTICE` when no rule fired;
 - `supposition_notice` naming each conclusion that holds only given what the question supposed (#256);
 - `fallacy_notice` naming each declared fallacy the reasoning matched (#259);
-- `headline_notice` when the model's text opens with "yes" or "no". The engine derives conclusions, not a verdict on the question, so that word is the model's reading (#197).
+- `verdict_notice` on a yes/no question. The grounder names what the question asks (`asks`), and the base's `question_targets` map a concept no predicate is named for, such as "viable", to the predicate that answers it (`value_creation`, licensed by V01). The engine then decides (`question_verdict`). It answers **yes** when the target is accepted and nothing contrary to it is, and **no** when something contrary is accepted and the target is not. Otherwise it answers **unknown**: "not derived" never reads as "no". The verdict carries the status it rests on and the suppositions it holds given. The target is never compiled as a supposition, so it cannot answer itself. When the model's text opens with a yes or no that disagrees, the notice says so. With no target, as on a "why" question, `headline_notice` says that a leading "yes" or "no" is the model's reading (#197).
 
 **Source:** `engine_v4.py:16-34`, `engine_v4.py:36-74`, `engine_service.py:213-244`
 

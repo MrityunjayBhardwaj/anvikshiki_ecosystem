@@ -83,6 +83,25 @@ class GroundingResult(BaseModel):
             "and dropped."
         ),
     )
+    asks: Optional[str] = Field(
+        default=None,
+        description=(
+            "For a yes/no question, the predicate whose truth answers it, "
+            "e.g. `value_creation(business)` (#197). None for why/how/what "
+            "questions, when the grounder named none, or when the ensemble "
+            "did not agree on one. Never a supposition: the engine does not "
+            "compile it as a question fact, or every yes/no question would "
+            "answer itself."
+        ),
+    )
+    asks_rejected: Optional[str] = Field(
+        default=None,
+        description=(
+            "What the grounder named as `asks` when it was refused because "
+            "no rule concludes that name. Kept apart from None so 'could "
+            "not name one' never reads as 'not a yes/no question'."
+        ),
+    )
     refinement_rounds: int = 0
     clarification_needed: bool = False
 
@@ -109,6 +128,11 @@ class GroundQuery(dspy.Signature):
     )
     relevant_vyaptis: list[str] = dspy.OutputField(
         desc="IDs of vyāptis relevant to this query, e.g. ['V01', 'V02']"
+    )
+    asks: str = dspy.OutputField(
+        desc="For a yes/no question only: the ONE predicate whose truth "
+             "answers it, with its entity, e.g. 'value_creation(business)'. "
+             "Empty for why/how/what questions."
     )
 
 
@@ -270,6 +294,23 @@ class OntologySnippetBuilder:
                 "applied.\n"
             )
 
+        concluded = sorted({v.consequent for v in knowledge_store.vyaptis.values()
+                            if v.consequent})
+        snippet += (
+            "\nYES/NO QUESTIONS:\n"
+            "This only sets `asks`; choose `predicates` exactly as above. "
+            "If the query is a yes/no question (including 'is X enough for "
+            "Y'), set `asks` to the ONE predicate, from the names a rule "
+            "concludes (THEN), whose truth would answer it, with its entity. "
+            "Leave `asks` empty for why/how/what questions, or when no "
+            "concluded name expresses what is asked.\n"
+            f"Concluded names: {', '.join(concluded)}\n"
+        )
+        for t in knowledge_store.question_targets:
+            rule = knowledge_store.vyaptis[t.basis]
+            snippet += (f"  - asking whether something is {t.concept}: use "
+                        f"{t.predicate} (RULE {t.basis}: {rule.statement})\n")
+
         snippet += (
             "\nOUTPUT FORMAT:\n"
             "Return predicates as: predicate_name(entity)\n"
@@ -357,6 +398,55 @@ def _consensus(
     return consensus, disputed
 
 
+_NO_ASKS = {"", "none", "null", "n/a", "na", "-"}
+
+
+def _asks_of(g) -> Optional[str]:
+    """One member's `asks`, with the ways a model writes "none" folded."""
+    raw = (getattr(g, "asks", None) or "").strip().strip("'\"`")
+    return None if raw.lower() in _NO_ASKS else raw
+
+
+def _asks_consensus(values: list[Optional[str]],
+                    threshold: float = CONSENSUS_THRESHOLD) -> Optional[str]:
+    """The target a majority of members named, or None.
+
+    Votes are counted per (predicate name, normalised entity), as
+    `_consensus` counts predicates, so two spellings of one subject are one
+    vote each. A member that named none votes for none: three of five
+    naming different targets is no target, not the most common one.
+    """
+    votes: dict[tuple[str, str | None], dict[str, int]] = {}
+    for v in values:
+        if v is None:
+            continue
+        key = (predicate_name(v), normalize_entity(predicate_entity(v)))
+        votes.setdefault(key, {}).setdefault(v, 0)
+        votes[key][v] += 1
+    needed = len(values) * threshold
+    for spellings in votes.values():
+        if sum(spellings.values()) > needed:
+            return min(sorted(spellings), key=lambda p: (-spellings[p], p))
+    return None
+
+
+def _checked_asks(asks: Optional[str],
+                  knowledge_store: KnowledgeStore) -> tuple[Optional[str], Optional[str]]:
+    """(asks, rejected): a target must be a name some rule concludes.
+
+    A name no rule concludes can only be accepted as a supposition, and the
+    target is never one, so it would answer "unknown" whatever the base
+    knows. Refused, and kept, so the refusal is visible.
+    """
+    if asks is None:
+        return None, None
+    concluded = {v.consequent for v in knowledge_store.vyaptis.values()
+                 if v.consequent}
+    if predicate_name(asks) in concluded and predicate_entity(asks):
+        return asks, None
+    return None, asks
+
+
 # ─── Grounding Pipeline ──────────────────────────────────────
 
 
@@ -429,6 +519,7 @@ class GroundingPipeline(dspy.Module):
         advisories: list[Advisory] = []
         advisories.extend(self._check_scope(candidate_preds))
 
+        asks, asks_rejected = _checked_asks(_asks_of(g), self.ks)
         return GroundingResult(
             predicates=candidate_preds,
             confidence=1.0,
@@ -436,6 +527,8 @@ class GroundingPipeline(dspy.Module):
             warnings=[a.message for a in advisories],
             advisories=advisories,
             relevant_vyaptis=candidate_vyaptis,
+            asks=asks,
+            asks_rejected=asks_rejected,
             refinement_rounds=0,
             clarification_needed=False,
         )
@@ -532,6 +625,8 @@ class GroundingPipeline(dspy.Module):
         advisories: list[Advisory] = []
         advisories.extend(self._check_scope(candidate_preds))
 
+        asks, asks_rejected = _checked_asks(
+            _asks_consensus([_asks_of(g) for g in groundings]), self.ks)
         return GroundingResult(
             predicates=candidate_preds,
             confidence=confidence,
@@ -539,6 +634,8 @@ class GroundingPipeline(dspy.Module):
             warnings=[a.message for a in advisories],
             advisories=advisories,
             relevant_vyaptis=candidate_vyaptis,
+            asks=asks,
+            asks_rejected=asks_rejected,
             refinement_rounds=refinement_rounds,
             clarification_needed=False,
         )
