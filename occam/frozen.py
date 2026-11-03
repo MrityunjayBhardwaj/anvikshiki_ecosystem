@@ -73,6 +73,12 @@ _Q = "Why do leaves change colour in autumn?"
 _TEXT = ("In autumn the leaves stop making chlorophyll. As the green fades, the "
          "yellow and orange pigments that were there all along become visible.")
 _SNAP = capture(url="https://example.org/leaves", body=b"leaves", text=_TEXT, fetched_at=_T0)
+# Long enough that argue cuts it at v1's window and support shows only the
+# words around the quote, so a change to either cut changes a hash.
+_FILLER = "Trees respond to shorter days and cooler nights. " * 500
+_LONG_TEXT = _FILLER + _TEXT + " " + _FILLER
+assert len(_LONG_TEXT) > V1.max_chars
+_LONG = capture(url="https://example.org/long", body=b"long", text=_LONG_TEXT, fetched_at=_T0)
 _STEPS = [
     {"id": "s1", "kind": "quote", "source": 1,
      "quote": "In autumn the leaves stop making chlorophyll.",
@@ -102,10 +108,17 @@ def rendered_prompts() -> dict[str, str]:
     too."""
     argued = argue_from_replies([json.dumps({"answer": "s2", "steps": _STEPS})], [_SNAP])
     quotes = [a for a in argued.arguments if a.kind == "quote"]
+    long_steps = [{**_STEPS[0], "source": 2}, {**_STEPS[1], "from": ["s1"]}]
+    in_long = argue_from_replies([json.dumps({"answer": "s2", "steps": long_steps})],
+                                 [_SNAP, _LONG])
+    long_quotes = [a for a in in_long.arguments if a.kind == "quote"]
+    assert long_quotes and long_quotes[0].span.snapshot_id == _LONG.id
     out = {
         "query": QUERY_PROMPT.format(question=_Q),
         "argue": argue_prompt(_Q, [_SNAP], V1.max_chars),
+        "argue/past the window": argue_prompt(_Q, [_SNAP, _LONG], V1.max_chars),
         "support": support_prompt(quotes, [_SNAP]),
+        "support/inside a long page": support_prompt(long_quotes, [_SNAP, _LONG]),
         "attack": attack_prompt(_Q, argued.arguments),
         "reason": reason_prompt(_Q, _A),
     }
@@ -130,11 +143,13 @@ def fingerprint() -> dict[str, str]:
 
 
 # Rendered at dc527bc, the commit run 14 ran, and at its successor 80568af:
-# all 13 identical.
+# all 15 identical.
 V1_PROMPTS: dict[str, str] = {
     "query": "faeb37be34cfe96054d0bc2e8be09956c5c3626cf149a4498f24d2ca586b3adc",
     "argue": "4cab74900d9b8f9fcb8a9abdb73ddea1165d345edf121da066b19a79c51d8b3e",
+    "argue/past the window": "d951dd722f65b330124ea92dda0a9c467cd3b1ee20b7587c2105e8580db72069",
     "support": "951844e0099e0a0ae411ae2741d6aeb4f3c8a26e2db9cb9bbf8764bb52f55db9",
+    "support/inside a long page": "8bb0726298a948fdfe752a31d991529c5e5995ea74559f49995f4923be078a4e",
     "attack": "e388184ce5ef04ce5fba45c43e6b749752b542fa57e5b927f4711f5fabd55fc7",
     "reason": "3441995c2b8bfdcc8cf87103372927f170917de199b9a3133f6cd4ee0d8da866",
     "same/question/as given": "9f24e619f0cae7cb924f674f9cbd5b37cee36f205fab0ed8d15ea5037e81f3b7",

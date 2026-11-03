@@ -1900,14 +1900,15 @@ without anyone noticing.
   - k = 3 for argue and attack, at temperatures 0.7 and 0.2;
   - the 40,000-character window and the 365-day age limit.
 - **`V1_RUN`:** 3 Wikipedia pages per question. `run` takes this as an argument, and no artifact records it.
-- **`V1_PROMPTS`:** the sha256 of all 13 prompts the model is sent, each rendered on fixed inputs:
+- **`V1_PROMPTS`:** the sha256 of all 15 prompts the model is sent, each rendered on fixed inputs:
   - the search queries;
-  - argue, support, attack and reason;
+  - argue and support, each also on a page past the 40,000-character window (so the cut and the context window are pinned);
+  - attack and reason;
   - the same-answer judge under both lenses and in both orders;
   - covers in both orders;
   - kie.ai's call and web search payloads.
 
-  They were rendered at dc527bc, the commit run 14 ran, and at 80568af, and all 13 were identical. A law (`occam/tests/test_frozen.py`) turns red when any of them changes. **A changed prompt is Occam v2**, never an edit to v1.
+  They were rendered at dc527bc, the commit run 14 ran, and at 80568af, and all 15 were identical. A law (`occam/tests/test_frozen.py`) turns red when any of them changes. **A changed prompt is Occam v2**, never an edit to v1.
 
 **Using it:**
 
