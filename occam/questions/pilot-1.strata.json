@@ -1,0 +1,46 @@
+{
+ "drafted": "2026-11-04",
+ "what this is": "the drafter's expected status for each question, used to spread the set and to read the pilot; never a label, never shown on the labelling sheet",
+ "strata": {
+  "established": [
+   "What is the chemical symbol for gold?",
+   "How many bones are in the adult human body?",
+   "In what year did the Berlin Wall fall?",
+   "What is the capital of Australia?",
+   "Who wrote the novel Pride and Prejudice?",
+   "What is the speed of light in a vacuum?"
+  ],
+  "hypothesis": [
+   "Why does ice float on water?",
+   "Why do onions make people cry?",
+   "Why does the Moon always show the same face to Earth?",
+   "Why does bread dough rise?",
+   "Why do people get goosebumps?",
+   "How do vaccines produce immunity?"
+  ],
+  "provisional": [
+   "Does intermittent fasting extend human lifespan?",
+   "Is drinking red wine in moderation good for the heart?",
+   "Do microplastics in the body harm human health?",
+   "Is there liquid water deep beneath the surface of Mars?",
+   "Does long COVID cause lasting damage to the brain?",
+   "Does microdosing psilocybin improve mood?"
+  ],
+  "open": [
+   "Why do humans need sleep?",
+   "What is dark matter made of?",
+   "How did life on Earth begin?",
+   "Why do people yawn?",
+   "What is the purpose of dreaming?",
+   "Is there life in the ocean beneath Europa's ice?"
+  ],
+  "contested": [
+   "Did competition with modern humans cause the Neanderthals to die out?",
+   "Did human hunting cause the extinction of the woolly mammoth?",
+   "Does raising the minimum wage reduce employment?",
+   "Did the COVID-19 virus come from a laboratory leak?",
+   "Can hot water freeze faster than cold water?",
+   "What caused the Late Bronze Age collapse?"
+  ]
+ }
+}

@@ -2,6 +2,7 @@
 
     python -m occam ask "question" [--url URL ...] [--k 3] [--sources 3] [--out FILE] [--no-judge-same]
     python -m occam replay FILE [--calibration CAL] [--blind]
+    python -m occam replay DIR --blind [--template LABELS.jsonl] [--seed 0]  # a labeller's sheet
     python -m occam replay FILE --drop-attack A:T ... --reject-quote ID ...   # what if
     python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
@@ -15,7 +16,10 @@
 
 LABELS.jsonl has one {"artifact": FILE, "label": STATUS} per line — a person's
 judgment of how much the answer in FILE is worth, after reading it and its
-quotes.
+quotes (docs/occam-labelling-guide.md). `replay DIR --blind --template`
+writes a blank one in the sheet's order; `calibrate` refuses any row whose
+label is not one of the five statuses, and prints derived against label for
+every labelled answer.
 
 The same-answer judge (#172) is on by default; `--no-judge-same` turns it off,
 and the choice is recorded in the artifact's params.
@@ -28,9 +32,10 @@ describes one pipeline; `--any-pipeline` lets it through, and says so.
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
 `--blind` shows the answer as a labeller should read it: the question, the
-answer and its chain down to the quoted bytes, with nothing the pipeline
-decided about it — no status, bounds, attack outcomes, judge verdicts or
-counters — so a label cannot echo the status it is meant to check.
+answer and its chain down to the quoted bytes, then every other quote the
+model drew from the sources (#267), with nothing the pipeline decided about
+it — no status, bounds, attack outcomes, judge verdicts, counters or reason
+for an abstention — so a label cannot echo the status it is meant to check.
 With `--drop-attack ATTACKER:TARGET` or `--reject-quote ID` (each repeatable)
 it edits those stored replies first and prints the answer before and after:
 what would change it, computed by replay. Nothing is written, and an edit the
@@ -48,7 +53,8 @@ from pathlib import Path
 from typing import Optional
 
 from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
-                     counted_sources, derivation_nodes, question_details, replay, replay_counted,
+                     counted_sources, derivation_nodes, gathered_quotes, question_details,
+                     replay, replay_counted,
                      run, stored_run,
                      support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
@@ -169,13 +175,36 @@ def _counted(art: Artifact, a: Answer, counted: Optional[dict] = None) -> None:
             print(f"      {h} {', '.join(aids)}: \"{q[:150]}{'…' if len(q) > 150 else ''}\"")
 
 
+def _gathered(a: Answer, art: Artifact) -> None:
+    """Every other quote the model drew from the sources, for the labeller
+    (#267), counted every time, none included. Listed by page, in id order,
+    with nothing the pipeline decided about them."""
+    shown = {n["id"] for _, n, _ in derivation_nodes(a)}
+    rest = [q for q in gathered_quotes(art) if q[0] not in shown]
+    print(f"   other quotes the model drew from the sources: {len(rest)}"
+          + (" (none)" if not rest else ""))
+    by_url: dict[str, list] = {}
+    for q in rest:
+        by_url.setdefault(q[3], []).append(q)
+    for url, qs in by_url.items():
+        print(f"      {url}")
+        for aid, quote, verdict, _, s, e in qs:
+            print(f"         {aid} \"{quote}\"")
+            print(f"            verbatim: {verdict} · characters {s}–{e}")
+
+
 def _show(a: Answer, art: Optional[Artifact] = None, blind: bool = False,
           counted: Optional[dict] = None) -> None:
     print(f"\nQ: {a.question}")
     if blind:
-        print(f"ABSTAINED — {a.abstain_reason}" if a.abstained else f"A: {a.conclusion}")
+        # The reason is the pipeline's judgement (which check failed), so the
+        # labeller is told only that no answer was given (#267).
+        print("ABSTAINED — the pipeline gave no answer" if a.abstained
+              else f"A: {a.conclusion}")
         if not a.abstained:
             _chain(a, None, blind=True)
+        if art is not None:
+            _gathered(a, art)
         for s in a.snapshots:
             print(f"source {s['urls'][0]}\n   revision: "
                   f"{s.get('revision_url') or 'not recorded'}")
@@ -270,6 +299,94 @@ def _factcheck_search(n: int) -> tuple[object, bool]:
         return None, False
     from .factcheck import factcheck_search
     return factcheck_search(key), True
+
+
+def _sheet(directory: Path, args) -> int:
+    """The labeller's sheet (#266): every run in a directory, blind, in a
+    seeded shuffled order so neighbouring items do not share a question set's
+    order. With --template, a labels file in the same order with one blank
+    row per item; `calibrate` refuses it until every label is filled in."""
+    if not args.blind:
+        print("a directory is replayed only as a labeller's sheet: add --blind",
+              file=sys.stderr)
+        return 2
+    if args.calibration or args.drop_attack or args.reject_quote:
+        print("a labeller's sheet shows nothing decided: no --calibration, "
+              "--drop-attack or --reject-quote", file=sys.stderr)
+        return 2
+    paths = sorted(directory.glob("q*.json"))
+    if not paths:
+        print(f"no runs (q*.json) in {directory}", file=sys.stderr)
+        return 1
+    if args.template and _refuse_overwrite([Path(args.template)]):
+        return 2
+    import random
+    order = list(paths)
+    random.Random(args.seed).shuffle(order)
+    rows = []
+    for i, p in enumerate(order, 1):
+        art = Artifact.model_validate(json.loads(p.read_text())["artifact"])
+        answer = replay(art)
+        print(f"\n══ item {i} of {len(order)} · {p} " + "═" * 20)
+        _show(answer, art, blind=True)
+        # `wrong` is apart from the label: a status says how well an answer is
+        # carried, and an answer can be carried well and still be false (#266).
+        rows.append(json.dumps({"item": i, "artifact": str(p), "label": "",
+                                "wrong": None, "minutes": None, "note": ""}))
+    if args.template:
+        Path(args.template).write_text("\n".join(rows) + "\n")
+        print(f"\nlabels template: {args.template} ({len(rows)} blank rows)", file=sys.stderr)
+    return 0
+
+
+def _label_table(examples) -> None:
+    """Every labelled answer, derived status against label, every cell
+    printed, zeros included (#266): the table a pilot is read from, over all
+    the labels and not the fitted half."""
+    from .conformal import _INPUTS, _LABELS
+    n = len(examples)
+    agree = sum(e.derived == e.label for e in examples)
+    print(f"derived (rows) against label (columns), all {n} labelled answers:")
+    print("   " + " " * 12 + "".join(f"{y:>12}" for y in _LABELS) + f"{'total':>8}")
+    for x in _INPUTS:
+        cells = [sum(e.derived == x and e.label == y for e in examples) for y in _LABELS]
+        print(f"   {x:<12}" + "".join(f"{c:>12}" for c in cells) + f"{sum(cells):>8}")
+    print(f"   label same as derived: {agree} of {n}")
+
+
+def _wrong(rows: list[dict], examples) -> None:
+    """Answers the labeller marked false, by derived status, every time,
+    zero included (#266). An established answer marked wrong is the pilot's
+    kill criterion. A row that never said is counted as not said, never as
+    right: silence must not read as safety."""
+    marked = [(e.derived, r.get("wrong")) for r, e in zip(rows, examples)]
+    wrong = [d for d, w in marked if w is True]
+    unsaid = sum(w is None for _, w in marked)
+    by = ", ".join(f"{x} {wrong.count(x)}" for x in
+                   ("established", "hypothesis", "provisional", "open", "contested", ABSTAINED))
+    print(f"labelled wrong: {len(wrong)} of {len(rows)} ({by}); "
+          f"wrong not said on {unsaid} of {len(rows)}")
+
+
+def _relabel_agreement(rows: list[dict], relabels: Path) -> None:
+    """How often a second labelling of the same answers agrees with the first,
+    keyed by artifact. Blank rows are the unlabelled rest of the re-label
+    sheet; a filled row naming an answer the first file lacks is counted
+    apart, never dropped silently."""
+    first = {r["artifact"]: r["label"] for r in rows}
+    valid = {s.value for s in Status}
+    again = [json.loads(line) for line in relabels.read_text().splitlines() if line.strip()]
+    filled = [r for r in again if r.get("label")]
+    bad = [r for r in filled if r["label"] not in valid]
+    unknown = [r for r in filled if r["label"] in valid and r["artifact"] not in first]
+    pairs = [(first[r["artifact"]], r["label"]) for r in filled
+             if r["label"] in valid and r["artifact"] in first]
+    same = sum(a == b for a, b in pairs)
+    print(f"re-labelled: same label {same} of {len(pairs)} answers labelled twice "
+          f"({len(again) - len(filled)} rows left blank, {len(bad)} not a status, "
+          f"{len(unknown)} not in the first labelling)")
+    for a, b in ((a, b) for a, b in pairs if a != b):
+        print(f"   first {a}, then {b}")
 
 
 def _refuse_overwrite(paths: list[Path]) -> bool:
@@ -454,7 +571,13 @@ def main(argv: list[str] | None = None) -> int:
     rp.add_argument("file")
     rp.add_argument("--calibration")
     rp.add_argument("--blind", action="store_true",
-                    help="show it as a labeller reads it: no status or anything decided")
+                    help="show it as a labeller reads it: no status or anything decided. "
+                         "Given a directory, one sheet of every run in it (#266)")
+    rp.add_argument("--template", metavar="LABELS.jsonl",
+                    help="with a directory and --blind: also write a labels file with one "
+                         "blank row per item, in the sheet's order")
+    rp.add_argument("--seed", type=int, default=0,
+                    help="with a directory and --blind: the order the items are shuffled into")
     rp.add_argument("--drop-attack", action="append", default=[], metavar="ATTACKER:TARGET",
                     help="what if this attack had not been proposed (repeatable)")
     rp.add_argument("--reject-quote", action="append", default=[], metavar="ID",
@@ -500,6 +623,9 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--population", required=True)
     cp.add_argument("--alpha", type=float, default=0.1)
     cp.add_argument("--out", default="traces/occam/calibration.json")
+    cp.add_argument("--relabels", metavar="FILE",
+                    help="a second labelling of some of the same answers (#266): prints how "
+                         "often the two agree; rows with a blank label are not counted")
     cp.add_argument("--any-pipeline", action="store_true",
                     help="accept labelled answers not made under Occam v1 (said in the output)")
     fz = sub.add_parser("frozen")
@@ -691,10 +817,18 @@ def main(argv: list[str] | None = None) -> int:
         from .frozen import made_under_v1
         examples = []
         mixed = 0
-        for line in Path(args.labels).read_text().splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
+        rows = [json.loads(line) for line in Path(args.labels).read_text().splitlines()
+                if line.strip()]
+        valid = {s.value for s in Status}
+        bad = [r for r in rows if r.get("label") not in valid]
+        if bad or not rows:
+            print(f"refusing {args.labels}: {len(bad)} of {len(rows)} rows have no valid "
+                  f"label (one of {', '.join(sorted(valid))})", file=sys.stderr)
+            for r in bad[:10]:
+                print(f"   item {r.get('item', '?')} {r.get('artifact')}: "
+                      f"label {r.get('label')!r}", file=sys.stderr)
+            return 2
+        for row in rows:
             stored = json.loads(Path(row["artifact"]).read_text())
             art = Artifact.model_validate(stored["artifact"])
             off = made_under_v1(art.params)
@@ -714,6 +848,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(examples)} labelled answers: fit {cal.n_fit}, calibrate {cal.n_cal}; "
               f"qhat={cal.qhat}; written {args.out}")
         print(f"labelled answers not made under Occam v1: {mixed} of {len(examples)}")
+        _label_table(examples)
+        _wrong(rows, examples)
+        if args.relabels:
+            _relabel_agreement(rows, Path(args.relabels))
         print("Report coverage only on answers NOT in this file (evaluate on held-out labels).")
         return 0
 
@@ -739,6 +877,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nartifact: {out}")
         return 0
 
+    if Path(args.file).is_dir():
+        return _sheet(Path(args.file), args)
+    if args.template:
+        print("--template needs a directory of runs", file=sys.stderr)
+        return 2
     stored = json.loads(Path(args.file).read_text())
     artifact = Artifact.model_validate(stored["artifact"])
     answer, counted = replay_counted(artifact, cal)

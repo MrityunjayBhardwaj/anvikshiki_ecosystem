@@ -1930,3 +1930,115 @@ The settings check, against run 14 and run 13 on 2026-11-03:
 - **The model behind the name.** kie.ai reports no version, so `gemini-3-pro` can change under the same name.
 - **The web.** Pages change. Each artifact's stored snapshots pin what was read.
 - **Replay.** The deterministic reading of replies is versioned by the rules table, and `frozen DIR` reports any v1 artifact that no longer replays.
+
+## Amendment 14 — 2026-11-04: the labelling pilot, 30 questions under Occam v1 (#266)
+
+Added before any live call on these questions, and before any label. Nothing
+above is changed. **Draft: the user approves the question set, the labelling
+guide and this amendment before the run.**
+
+**Why.** M7 (#144) needs about 150–200 labelled answers. Before that effort is
+spent, three things are unknown:
+
+- **Does v1 derive more than two statuses?** Across runs 12–14, 60 answers, it
+  derived only `established` (17) and `hypothesis` (43). It abstained on none.
+  If that holds, M7's table has two rows that carry data, and the status sets
+  #144 describes reduce to what each of those two statuses is worth.
+- **Do the labels spread?** The calibration gate (Amendment 6) asks for at
+  least 3 statuses at 10% or more.
+- **Is a label cheap, and can it be repeated?** How long does an item take, and
+  does the same reader give the same label twice?
+
+The pilot is a feasibility measurement, **not a calibration**. No coverage
+figure from it is quoted. With 30 labels, the 15 calibration examples are
+enough to compute a threshold at α = 0.1, but too few to say anything about it.
+
+**Pilot set 1** is `occam/questions/pilot-1.txt`, committed with this
+amendment.
+- **The questions:** 30, none in any earlier set or the built-in ten.
+- **How they were drafted:** six at a time toward each status a careful reader
+  might give the answer. That expectation is in `pilot-1.strata.json`. It is
+  the drafter's guess, there to spread the labels, and it is not a label.
+- **Order:** shuffled with seed 266.
+
+**The run** is v1 as frozen, and nothing else:
+
+    python -m occam measure --v1 --questions occam/questions/pilot-1.txt --out traces/occam/pilot1
+    python -m occam frozen traces/occam/pilot1        # must say 30 of 30 and 30 of 30
+
+The controls are not run, because `controls` has no `--v1` (#265's
+self-review). The kill criterion below is read from the labels instead.
+
+**The labelling** follows `docs/occam-labelling-guide.md`:
+
+- **The sheet:**
+  `python -m occam replay traces/occam/pilot1 --blind --template traces/occam/pilot1-labels.jsonl`.
+  It lists every quote the model drew, not only the answer's chain (#267).
+- **What each row records:** a `label`, whether the answer is `wrong`, and the
+  `minutes` the item took.
+- **The re-label:** at least 7 days later, the first 10 items of the seed-1
+  sheet are labelled again, without looking at the first labels.
+
+**Reading.** Every figure below comes from:
+
+    python -m occam calibrate traces/occam/pilot1-labels.jsonl \
+        --population "pilot set 1 (#266)" --relabels traces/occam/pilot1-relabels.jsonl \
+        --out traces/occam/pilot1-calibration.json
+
+That command prints:
+- the derived × label table, every cell;
+- the answers marked wrong, by derived status;
+- re-label agreement.
+
+The minutes come from the labels file. Spend is kie.ai's balance before and
+after, beside the provider's own count.
+
+**Predictions.** There are 30 questions.
+
+1. **No answer derived `established` is marked wrong.** This is the kill
+   criterion, as in Amendment 13. A miss is reported first and its cover pairs
+   are read. No label is added to M7 until it is understood.
+2. **Derived spread:** at most 3 of 30 are derived as anything other than
+   `established` or `hypothesis`, abstentions included. The prior is 0 of 60.
+   Four or more is a surprise, and each one is read.
+3. **Established: 4–14 of 30.** Run 14 established 10 of 20 fact-checked
+   claims, and runs 12 and 13 established 4 and 3. This set has 6 settled-fact
+   questions, and the rest are drafted to be harder.
+4. **Label spread:** at least 3 labels each on 3 or more of the 30. This is the
+   calibration gate, applied to the labels.
+5. **Precision of `established`:** of the answers derived `established`, at
+   least two-thirds are labelled `established`.
+6. **Minutes:** a median of 5 or fewer per item.
+7. **Re-label agreement:** the same label on at least 7 of the 10.
+8. **Abstentions:** at most 5.
+9. **Spend:** 300–700 credits. Run 14 cost 15.2 per question, and this set
+   asks why-questions, which the reason check adds calls for.
+10. **Strata against labels:** a reading, not a prediction. It is reported in
+    full, and it says only how well the drafter guessed.
+
+**What follows from it, decided now:**
+
+- **1 fails →** stop. Nothing is labelled under v1 until the miss is understood.
+- **4 fails →** the labels do not spread. The next set's questions are redrawn,
+  and the pipeline is not changed.
+- **6 or 7 fails →** the guide is revised and the 30 are labelled again before
+  any more labels are made. A label that can't be repeated can't be calibrated.
+- **Otherwise →** M7's full labelling proceeds under v1, and these 30 labels
+  join it.
+- **2 holds →** M7 proceeds anyway, and its results say the table has two
+  informative rows. Its sets are reported as what `established` and
+  `hypothesis` are worth, not as a five-way status set.
+
+**Limits, stated now.**
+- **One labeller.** Re-label agreement measures one reader against
+  themselves, not agreement between readers.
+- **Blinding is partial.** The labeller approves the question set, so they
+  have seen the strata.
+- **The definitions are Occam's own.** The guide's five definitions follow the
+  meaning Occam prints for each status, such as "two independent sources say
+  it" for `established`. So agreement measures whether the pipeline applies
+  its own definitions the way a careful reader would: whether its sources are
+  independent, whether its answer is right, whether it missed a dispute. It
+  does not measure whether those definitions are the right ones.
+- **Marginal coverage.** Coverage from M7 is marginal over questions drafted
+  like these, and it says nothing about other kinds of question (#144).
