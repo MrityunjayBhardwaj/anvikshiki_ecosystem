@@ -247,3 +247,46 @@ def test_litellm_routes_the_openrouter_prefix():
     )[:2]
     assert provider == "openrouter"
     assert model == "z-ai/glm-5.2"
+
+
+# ── kie.ai (#269) ──────────────────────────────────────────
+
+def test_kie_is_selectable_by_name_while_other_keys_are_present(monkeypatch):
+    _set(monkeypatch, OPENROUTER_API_KEY="or", KIE_API_KEY="k", ANVI_LM_PROVIDER="kie")
+    assert select_provider().name == "kie"
+
+
+def test_kie_is_last_so_a_kie_key_changes_no_existing_default(monkeypatch):
+    _set(monkeypatch, OPENROUTER_API_KEY="or", KIE_API_KEY="k")
+    assert PROVIDER_ORDER[-1] == "kie"
+    assert select_provider().name == "openrouter"
+
+
+def test_kie_alone_is_reachable_without_naming_it(monkeypatch):
+    _set(monkeypatch, KIE_API_KEY="k")
+    assert select_provider().name == "kie"
+
+
+def test_kie_builds_a_plain_lm_at_its_models_own_endpoint(monkeypatch):
+    _set(monkeypatch, KIE_API_KEY="k", ANVI_LM_PROVIDER="kie")
+    lm, provider, model = build_lm()
+    assert type(lm) is dspy.LM
+    assert model == "openai/gemini-3-pro"
+    assert lm.kwargs["api_base"] == "https://api.kie.ai/gemini-3-pro/v1"
+
+
+@pytest.mark.parametrize("override", ["gpt-5-2", "openai/gpt-5-2"])
+def test_a_kie_model_override_moves_the_endpoint_with_it(monkeypatch, override):
+    """A fixed base would send a request naming one model to another model's
+    endpoint, and the run would be attributed to the wrong model."""
+    _set(monkeypatch, KIE_API_KEY="k", ANVI_LM_PROVIDER="kie", ANVI_LM_MODEL=override)
+    lm, _, model = build_lm()
+    assert model == "openai/gpt-5-2"
+    assert lm.kwargs["api_base"] == "https://api.kie.ai/gpt-5-2/v1"
+
+
+def test_a_fixed_base_is_passed_through_unchanged(monkeypatch):
+    _set(monkeypatch, DEEPINFRA_API_KEY="d", ANVI_LM_PROVIDER="deepinfra")
+    lm, _, model = build_lm()
+    assert lm.kwargs["api_base"] == "https://api.deepinfra.com/v1/openai"
+    assert model == "openai/zai-org/GLM-5"

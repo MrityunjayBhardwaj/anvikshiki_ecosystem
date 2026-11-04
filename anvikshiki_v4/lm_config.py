@@ -15,7 +15,7 @@ cannot be selected however correct it is.
 
 So selection is explicit here:
 
-    ANVI_LM_PROVIDER   openrouter | deepinfra | google | openai
+    ANVI_LM_PROVIDER   openrouter | deepinfra | google | openai | kie
                        When set, that provider is used. If its key is missing
                        this raises, rather than quietly using a different
                        provider — a run that silently changed model is worse
@@ -72,6 +72,9 @@ class Provider:
     env_key: str
     default_model: str
     reasoning: bool
+    # May hold "{model}": a provider that serves each model at its own
+    # endpoint (kie.ai) has its base built from the model in use, so an
+    # ANVI_LM_MODEL override cannot send one model's request to another's.
     api_base: Optional[str] = None
 
 
@@ -108,6 +111,18 @@ PROVIDERS: tuple[Provider, ...] = (
         env_key="OPENAI_API_KEY",
         default_model="openai/gpt-4o-mini",
         reasoning=False,
+    ),
+    # kie.ai (#269): an OpenAI-compatible endpoint per model. gemini-3-pro,
+    # not 3.1: kie.ai's gemini-3.1-pro refuses any prompt with "&" in it.
+    # Content comes back in `content`, so a plain LM (observed 2026-11-04
+    # through DSPy's JSON adapter). Last in the order: ranking it first would
+    # change the model under every run on a machine that also has a kie key.
+    Provider(
+        name="kie",
+        env_key="KIE_API_KEY",
+        default_model="openai/gemini-3-pro",
+        reasoning=False,
+        api_base="https://api.kie.ai/{model}/v1",
     ),
 )
 
@@ -216,6 +231,9 @@ def build_lm(
     """
     chosen = select_provider(provider)
     model_id = resolve_model(chosen, model)
+    templated = bool(chosen.api_base and "{model}" in chosen.api_base)
+    if templated and not model_id.startswith("openai/"):
+        model_id = f"openai/{model_id}"     # litellm's prefix for an OpenAI-style API
 
     lm_kwargs = dict(
         api_key=_api_key(chosen),
@@ -223,7 +241,8 @@ def build_lm(
         **kwargs,
     )
     if chosen.api_base:
-        lm_kwargs["api_base"] = chosen.api_base
+        lm_kwargs["api_base"] = (chosen.api_base.format(model=model_id.removeprefix("openai/"))
+                                 if templated else chosen.api_base)
 
     cls = ReasoningLM if chosen.reasoning else dspy.LM
     return cls(model_id, **lm_kwargs), chosen, model_id
