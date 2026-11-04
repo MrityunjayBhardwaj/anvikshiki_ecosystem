@@ -570,18 +570,19 @@ def derivation_nodes(answer: Answer) -> Iterator[tuple[int, dict[str, Any], bool
 
 
 def gathered_quotes(artifact: Artifact) -> list[tuple[str, str, str, str, int, int]]:
-    """Every quote the model drew from the sources, as argued, before any
-    check dropped one: (id, quote, verbatim verdict, url, start, end).
+    """Every quote the model drew from the sources, as argued: (id, quote,
+    verbatim verdict, url, start, end). Only quotes found on their page are
+    here (`ok` or `markup`), because argue admits no other.
 
     The labeller's view needs these (#267). The answer's own chain shows one
     page, but corroboration counts other pages' quotes toward `established`,
     and the rival positions live in quotes the chain never reaches. A reader
     shown only the chain judges a three-source answer as single-source. Taken
-    before support, attacks or the same-answer judge, so which quotes appear
-    is not something the pipeline decided."""
+    before support, attacks or the same-answer judge, so beyond being on the
+    page, which quotes appear is not something the pipeline decided."""
     snaps, _, raw, _, _ = _argued(artifact)
     url = {s.id: s.urls[0] for s in snaps}
-    return [(a.id, a.span.quote, a.span.verdict or "unchecked",
+    return [(a.id, a.span.quote, a.span.verdict,
              url.get(a.span.snapshot_id, a.span.snapshot_id), a.span.start, a.span.end)
             for a in raw.arguments if a.kind == "quote" and a.span is not None]
 
