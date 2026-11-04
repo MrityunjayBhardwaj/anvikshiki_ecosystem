@@ -1,0 +1,38 @@
+# Pilot set 1 (#266), drafted 2026-11-04 for Amendment 14, to be approved by
+# the user before any run on it. Never used to write or tune a rule, and none
+# is in an earlier set. Thirty questions, drafted six at a time toward each
+# status a careful reader might give the answer: settled, explained by
+# inference, emerging, unknown, disputed. That expectation is in
+# pilot-1.strata.json. It is the drafter's guess, there to spread the labels,
+# and it is not a label. The order is shuffled (seed 266) so neighbours do not
+# share a stratum.
+Why do people get goosebumps?
+Who wrote the novel Pride and Prejudice?
+What is dark matter made of?
+Does raising the minimum wage reduce employment?
+Why do onions make people cry?
+What is the purpose of dreaming?
+How do vaccines produce immunity?
+Did competition with modern humans cause the Neanderthals to die out?
+Does long COVID cause lasting damage to the brain?
+What is the speed of light in a vacuum?
+Why does bread dough rise?
+What is the chemical symbol for gold?
+Why does the Moon always show the same face to Earth?
+How did life on Earth begin?
+Is there liquid water deep beneath the surface of Mars?
+What caused the Late Bronze Age collapse?
+Did human hunting cause the extinction of the woolly mammoth?
+How many bones are in the adult human body?
+Why do humans need sleep?
+Is drinking red wine in moderation good for the heart?
+Does intermittent fasting extend human lifespan?
+Can hot water freeze faster than cold water?
+Why does ice float on water?
+Is there life in the ocean beneath Europa's ice?
+Do microplastics in the body harm human health?
+What is the capital of Australia?
+Did the COVID-19 virus come from a laboratory leak?
+Why do people yawn?
+Does microdosing psilocybin improve mood?
+In what year did the Berlin Wall fall?

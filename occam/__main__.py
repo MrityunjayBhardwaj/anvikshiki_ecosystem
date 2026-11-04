@@ -329,8 +329,10 @@ def _sheet(directory: Path, args) -> int:
         answer = replay(art)
         print(f"\n══ item {i} of {len(order)} · {p} " + "═" * 20)
         _show(answer, art, blind=True)
+        # `wrong` is apart from the label: a status says how well an answer is
+        # carried, and an answer can be carried well and still be false (#266).
         rows.append(json.dumps({"item": i, "artifact": str(p), "label": "",
-                                "minutes": None, "note": ""}))
+                                "wrong": None, "minutes": None, "note": ""}))
     if args.template:
         Path(args.template).write_text("\n".join(rows) + "\n")
         print(f"\nlabels template: {args.template} ({len(rows)} blank rows)", file=sys.stderr)
@@ -350,6 +352,41 @@ def _label_table(examples) -> None:
         cells = [sum(e.derived == x and e.label == y for e in examples) for y in _LABELS]
         print(f"   {x:<12}" + "".join(f"{c:>12}" for c in cells) + f"{sum(cells):>8}")
     print(f"   label same as derived: {agree} of {n}")
+
+
+def _wrong(rows: list[dict], examples) -> None:
+    """Answers the labeller marked false, by derived status, every time,
+    zero included (#266). An established answer marked wrong is the pilot's
+    kill criterion. A row that never said is counted as not said, never as
+    right: silence must not read as safety."""
+    marked = [(e.derived, r.get("wrong")) for r, e in zip(rows, examples)]
+    wrong = [d for d, w in marked if w is True]
+    unsaid = sum(w is None for _, w in marked)
+    by = ", ".join(f"{x} {wrong.count(x)}" for x in
+                   ("established", "hypothesis", "provisional", "open", "contested", ABSTAINED))
+    print(f"labelled wrong: {len(wrong)} of {len(rows)} ({by}); "
+          f"wrong not said on {unsaid} of {len(rows)}")
+
+
+def _relabel_agreement(rows: list[dict], relabels: Path) -> None:
+    """How often a second labelling of the same answers agrees with the first,
+    keyed by artifact. Blank rows are the unlabelled rest of the re-label
+    sheet; a filled row naming an answer the first file lacks is counted
+    apart, never dropped silently."""
+    first = {r["artifact"]: r["label"] for r in rows}
+    valid = {s.value for s in Status}
+    again = [json.loads(line) for line in relabels.read_text().splitlines() if line.strip()]
+    filled = [r for r in again if r.get("label")]
+    bad = [r for r in filled if r["label"] not in valid]
+    unknown = [r for r in filled if r["label"] in valid and r["artifact"] not in first]
+    pairs = [(first[r["artifact"]], r["label"]) for r in filled
+             if r["label"] in valid and r["artifact"] in first]
+    same = sum(a == b for a, b in pairs)
+    print(f"re-labelled: same label {same} of {len(pairs)} answers labelled twice "
+          f"({len(again) - len(filled)} rows left blank, {len(bad)} not a status, "
+          f"{len(unknown)} not in the first labelling)")
+    for a, b in ((a, b) for a, b in pairs if a != b):
+        print(f"   first {a}, then {b}")
 
 
 def _refuse_overwrite(paths: list[Path]) -> bool:
@@ -586,6 +623,9 @@ def main(argv: list[str] | None = None) -> int:
     cp.add_argument("--population", required=True)
     cp.add_argument("--alpha", type=float, default=0.1)
     cp.add_argument("--out", default="traces/occam/calibration.json")
+    cp.add_argument("--relabels", metavar="FILE",
+                    help="a second labelling of some of the same answers (#266): prints how "
+                         "often the two agree; rows with a blank label are not counted")
     cp.add_argument("--any-pipeline", action="store_true",
                     help="accept labelled answers not made under Occam v1 (said in the output)")
     fz = sub.add_parser("frozen")
@@ -809,6 +849,9 @@ def main(argv: list[str] | None = None) -> int:
               f"qhat={cal.qhat}; written {args.out}")
         print(f"labelled answers not made under Occam v1: {mixed} of {len(examples)}")
         _label_table(examples)
+        _wrong(rows, examples)
+        if args.relabels:
+            _relabel_agreement(rows, Path(args.relabels))
         print("Report coverage only on answers NOT in this file (evaluate on held-out labels).")
         return 0
 

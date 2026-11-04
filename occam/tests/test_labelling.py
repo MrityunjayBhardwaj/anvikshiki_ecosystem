@@ -73,7 +73,7 @@ def test_a_directory_is_one_blind_sheet_with_a_blank_template_in_its_order(runs,
     rows = [json.loads(line) for line in t.read_text().splitlines()]
     assert [r["item"] for r in rows] == [1, 2, 3, 4, 5]
     assert sorted(r["artifact"] for r in rows) == sorted(str(p) for p in runs.glob("q*.json"))
-    assert all(r["label"] == "" and r["minutes"] is None for r in rows)
+    assert all(r["label"] == "" and r["wrong"] is None and r["minutes"] is None for r in rows)
     for r in rows:
         assert f"══ item {r['item']} of 5 · {r['artifact']} " in out
     assert "status:" not in out and "counters:" not in out
@@ -141,3 +141,40 @@ def test_calibrate_prints_every_cell_of_derived_against_label(tmp_path, capsys):
     rows = {line.split()[0] for line in out.splitlines()
             if len(line.split()) == 7 and line.split()[1].isdigit()}
     assert rows == {"contested", "open", "provisional", "hypothesis", "established", "abstained"}
+
+
+def test_a_relabelling_is_compared_answer_by_answer(tmp_path, capsys):
+    labels = ["hypothesis", "established", "open", "hypothesis"]
+    rows = []
+    for i, label in enumerate(labels):
+        f = tmp_path / f"q{i:02d}.json"
+        _stored(f)
+        rows.append({"artifact": str(f), "label": label})
+    (tmp_path / "labels.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    again = [{"artifact": rows[0]["artifact"], "label": "hypothesis"},     # same
+             {"artifact": rows[1]["artifact"], "label": "hypothesis"},     # changed
+             {"artifact": rows[2]["artifact"], "label": ""},               # left blank
+             {"artifact": rows[3]["artifact"], "label": "Hypothesis"},     # not a status
+             {"artifact": str(tmp_path / "elsewhere.json"), "label": "open"}]
+    (tmp_path / "again.jsonl").write_text("\n".join(json.dumps(r) for r in again))
+    assert cli.main(["calibrate", str(tmp_path / "labels.jsonl"), "--population", "test",
+                     "--out", str(tmp_path / "cal.json"),
+                     "--relabels", str(tmp_path / "again.jsonl")]) == 0
+    out = capsys.readouterr().out
+    assert ("re-labelled: same label 1 of 2 answers labelled twice (1 rows left blank, "
+            "1 not a status, 1 not in the first labelling)") in out
+    assert "first established, then hypothesis" in out
+
+
+def test_answers_marked_wrong_are_counted_by_derived_status_and_silence_is_not_right(
+        tmp_path, capsys):
+    rows = []
+    for i, wrong in enumerate([True, False, None, True]):
+        f = tmp_path / f"q{i:02d}.json"
+        _stored(f)
+        rows.append({"artifact": str(f), "label": "open", "wrong": wrong})
+    (tmp_path / "labels.jsonl").write_text("\n".join(json.dumps(r) for r in rows))
+    assert cli.main(["calibrate", str(tmp_path / "labels.jsonl"), "--population", "test",
+                     "--out", str(tmp_path / "cal.json")]) == 0
+    assert ("labelled wrong: 2 of 4 (established 0, hypothesis 2, provisional 0, open 0, "
+            "contested 0, abstained 0); wrong not said on 1 of 4") in capsys.readouterr().out
