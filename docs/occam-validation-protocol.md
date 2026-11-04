@@ -1883,3 +1883,50 @@ All 20 files parse.
 2. The remaining single-source holds, 7 of 10 hypotheses, are what
    independence (#220, #225) is about. Replaying runs 5–14 with hosts counted
    by organisation changed no status (#220, comment of 2026-10-30).
+
+## Occam v1 — frozen 2026-11-03 (#264)
+
+This section is not an amendment. It names, once, the pipeline every label for
+calibration (#144) will describe, so labels from two pipelines cannot be mixed
+without anyone noticing.
+
+**Occam v1 is the pipeline that made run 14.** It is defined in `occam/frozen.py`:
+
+- **`V1`:** the settings all 20 of run 14's artifacts recorded:
+  - rules row 8 and argue prompt 5;
+  - the same-answer judge on;
+  - 3 web pages under fill rule 2, and 3 fact-check articles;
+  - model `kie/gemini-3-pro`;
+  - k = 3 for argue and attack, at temperatures 0.7 and 0.2;
+  - the 40,000-character window and the 365-day age limit.
+- **`V1_RUN`:** 3 Wikipedia pages per question. `run` takes this as an argument, and no artifact records it.
+- **`V1_PROMPTS`:** the sha256 of all 15 prompts the model is sent, each rendered on fixed inputs:
+  - the search queries;
+  - argue and support, each also on a page past the 40,000-character window (so the cut and the context window are pinned);
+  - attack and reason;
+  - the same-answer judge under both lenses and in both orders;
+  - covers in both orders;
+  - kie.ai's call and web search payloads.
+
+  They were rendered at dc527bc, the commit run 14 ran, and at 80568af, and all 15 were identical. A law (`occam/tests/test_frozen.py`) turns red when any of them changes. **A changed prompt is Occam v2**, never an edit to v1.
+
+**Using it:**
+
+| Command | What it does |
+|---|---|
+| `python -m occam measure --v1 …` / `ask --v1 …` | Runs v1. Refuses any flag that would change it, even one set to v1's own value. |
+| `python -m occam frozen DIR` | For each stored run: whether it was made under v1, and whether it replays to its stored answer. Exits 0 only when every run is both. |
+| `python -m occam calibrate …` | Refuses a labelled answer not made under v1. `--any-pipeline` lets it through, and prints how many came from elsewhere. |
+
+The settings check, against run 14 and run 13 on 2026-11-03:
+- run 14 gave "20 of 20 made under Occam v1; 20 of 20 replay to their stored answer";
+- run 13 gave 0 of 20 under v1, and named the differing rules: row 4, not row 8.
+
+**Limits v1 accepts, measured rather than assumed:**
+- **Hosts, not organisations (#220).** Two subdomains of one organisation count as two hosts. This was seen in 3 of 347 cross-host page pairs in runs 5–8. Counting by organisation changed no status in runs 5–14.
+- **A paraphrase counts as independent (#225).** A page that paraphrases another counts as a second source. Word overlap could not tell copying from agreement: containment ≥ 0.7 flagged 119 of 347 pairs and 5 of 6 established answers (measured 2026-10-06, posted on #225). So v1 relies on reading each established answer by hand, as runs 6–14 did.
+
+**What is not frozen:**
+- **The model behind the name.** kie.ai reports no version, so `gemini-3-pro` can change under the same name.
+- **The web.** Pages change. Each artifact's stored snapshots pin what was read.
+- **Replay.** The deterministic reading of replies is versioned by the rules table, and `frozen DIR` reports any v1 artifact that no longer replays.
