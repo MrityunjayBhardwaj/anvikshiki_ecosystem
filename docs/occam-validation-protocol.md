@@ -2034,5 +2034,11 @@ after, beside the provider's own count.
   themselves, not agreement between readers.
 - **Blinding is partial.** The labeller approves the question set, so they
   have seen the strata.
+- **The definitions are Occam's own.** The guide's five definitions follow the
+  meaning Occam prints for each status, such as "two independent sources say
+  it" for `established`. So agreement measures whether the pipeline applies
+  its own definitions the way a careful reader would: whether its sources are
+  independent, whether its answer is right, whether it missed a dispute. It
+  does not measure whether those definitions are the right ones.
 - **Marginal coverage.** Coverage from M7 is marginal over questions drafted
   like these, and it says nothing about other kinds of question (#144).

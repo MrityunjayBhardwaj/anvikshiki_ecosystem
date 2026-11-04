@@ -34,9 +34,11 @@ The sheet lists the items in a shuffled order. Each item shows:
 - **every other quote the model drew from the sources**, grouped by page.
 
 The other quotes are the rest of the evidence. They're where a second source, a
-rival view or a correction shows up. Every quote on the sheet was checked
-word for word against its page (`verbatim: ok`). Nothing else about them was decided
-for you.
+rival view or a correction shows up. Each quote shows the result of checking its words
+against its page. `verbatim: ok` means the words are there. Any other verdict, such as
+`absent`, means the model claimed words the page doesn't contain. **Give a quote that
+isn't `ok` no weight**, whatever it says. Nothing else about the quotes was decided for
+you.
 
 Fill in `traces/occam/pilot1-labels.jsonl`, one row per item, in the same order as the
 sheet. `calibrate` refuses the file until every `label` is one of the five words below,
