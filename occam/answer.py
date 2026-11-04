@@ -47,7 +47,7 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
 __all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
            "canonical", "stored_run", "contradicted_quotes", "derivation_nodes",
            "support_verdicts", "question_details", "what_if", "WhatIfRefused",
-           "unread_judge_pairs", "counted_sources", "replay_counted"]
+           "unread_judge_pairs", "counted_sources", "replay_counted", "gathered_quotes"]
 
 ARTIFACT_VERSION = 1
 
@@ -567,6 +567,23 @@ def derivation_nodes(answer: Answer) -> Iterator[tuple[int, dict[str, Any], bool
 
     if answer.derivation is not None:
         yield from walk(answer.derivation, 0)
+
+
+def gathered_quotes(artifact: Artifact) -> list[tuple[str, str, str, str, int, int]]:
+    """Every quote the model drew from the sources, as argued, before any
+    check dropped one: (id, quote, verbatim verdict, url, start, end).
+
+    The labeller's view needs these (#267). The answer's own chain shows one
+    page, but corroboration counts other pages' quotes toward `established`,
+    and the rival positions live in quotes the chain never reaches. A reader
+    shown only the chain judges a three-source answer as single-source. Taken
+    before support, attacks or the same-answer judge, so which quotes appear
+    is not something the pipeline decided."""
+    snaps, _, raw, _, _ = _argued(artifact)
+    url = {s.id: s.urls[0] for s in snaps}
+    return [(a.id, a.span.quote, a.span.verdict or "unchecked",
+             url.get(a.span.snapshot_id, a.span.snapshot_id), a.span.start, a.span.end)
+            for a in raw.arguments if a.kind == "quote" and a.span is not None]
 
 
 def support_verdicts(artifact: Artifact) -> dict[str, Optional[str]]:

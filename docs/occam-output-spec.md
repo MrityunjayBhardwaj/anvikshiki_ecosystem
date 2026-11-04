@@ -61,8 +61,17 @@ a rule needed the answer itself to change, which is gated by a field of `Params`
 
 `python -m occam replay FILE --blind` prints the question, the answer and its chain down
 to the quoted bytes, with nothing the pipeline decided about it: no status, bounds, meaning,
-attacks, judge verdicts, positions or counters. M7's labels must come from reading the
-answer and its quotes, not from seeing the status they are meant to check.
+attacks, judge verdicts, positions, counters or reason for an abstention. M7's labels must
+come from reading the answer and its quotes, not from seeing the status they are meant to
+check.
+
+It also lists every other quote the model drew from the sources, by page (#267). The chain
+alone is not the evidence: `established` is earned by other pages' quotes that share the
+answer's conclusion, and the rival positions live in quotes the chain never reaches. Shown
+only the chain, a labeller reads a three-source answer as single-source. The list is taken
+as argued, before support, attacks or the same-answer judge, so which quotes appear is not
+the pipeline's decision. `replay DIR --blind --template LABELS.jsonl` prints a directory as
+one sheet, in a seeded shuffled order, and writes a blank labels file in that order.
 
 The verbatim verdict stays, because it is a string comparison and not a judgement. The
 shown answer is itself the pipeline's choice; that can't be hidden from someone asked to
