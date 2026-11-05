@@ -633,7 +633,10 @@ def main(argv: list[str] | None = None) -> int:
     ct.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ct.add_argument("--out")
-    ct.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ct.add_argument("--model", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ct.add_argument("--v1", action="store_true",
+                    help="run the controls on Occam v1 as frozen (#278); refuses flags that "
+                         "would change it")
     sub.add_parser("probe-judge")
     ps = sub.add_parser("probe-same")
     ps.add_argument("--out")
@@ -692,16 +695,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "controls":
         from .controls import CONTROLS, run_control, verdict
+        from .frozen import V1
         from .model import make_model
+        refused = _settle(args)
+        if refused:
+            print(refused, file=sys.stderr)
+            return 2
         now = datetime.now(timezone.utc)
         outdir = Path(args.out or f"traces/occam/controls-{now:%Y%m%dT%H%M%SZ}")
         if _refuse_overwrite([outdir / f"control-{c.name}.json" for c in CONTROLS]):
             return 2
         model = make_model(args.model)
+        params = V1 if args.v1 else Params(judge_same=not args.no_judge_same)
+        # A control's only source is its planted page, so it records 0 web and
+        # 0 fact-check sources whatever it was given; v1 for a control is v1's
+        # params as a run given only that page records them (#278).
+        v1_here = recorded_params(V1, V1.model, web=False, factcheck=False)
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
-            r = run_control(c, model, as_of=now, params=Params(judge_same=not args.no_judge_same))
+            r = run_control(c, model, as_of=now, params=params)
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
@@ -711,6 +724,11 @@ def main(argv: list[str] | None = None) -> int:
                   f"(verified {vf.n:g} of {vf.of} quotes)")
             if not r.passed:
                 print(f"{'':13} → {c.failure_means}")
+        off = {r.name: _differ(r.artifact.params, v1_here) for r in results}
+        print("\n" + ("made under Occam v1, the planted page as each control's only source: "
+                      f"{len(results)} of {len(results)}" if not any(off.values()) else
+                      "NOT made under Occam v1: " + "; ".join(
+                          f"{n}: {', '.join(d)}" for n, d in off.items() if d)))
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
         print(f"artifacts: {outdir}/")
