@@ -70,7 +70,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .argue import ArgueResult, norm_conclusion
 from .equiv import DENIAL_MARKERS, NEGATIONS, _numbers, negation_veto
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 from .snapshot import host
 from .spans import states
 
@@ -154,14 +154,10 @@ def judge_covers(model: Model, pairs: Sequence[CoverPair], *,
                  temperature: float = 0.0) -> list[tuple[str, str, int, str]]:
     """Two fresh calls per pair no veto ruled out, stored as (answer, source,
     order shown, reply). No call when there is nothing to judge."""
-    out = []
-    for p in pairs:
-        if not p.veto:
-            for flip in (0, 1):
-                out.append((p.answer, p.source, flip,
-                            model.complete(covers_prompt(p, flip=bool(flip)),
-                                           temperature=temperature)))
-    return out
+    asked = [(p, flip) for p in pairs if not p.veto for flip in (0, 1)]
+    replies = complete_all(model, [covers_prompt(p, flip=bool(flip)) for p, flip in asked],
+                           temperature=temperature)
+    return [(p.answer, p.source, flip, r) for (p, flip), r in zip(asked, replies)]
 
 
 def _verdict(reply: Optional[str]) -> Optional[str]:

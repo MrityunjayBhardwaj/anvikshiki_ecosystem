@@ -43,7 +43,7 @@ from __future__ import annotations
 from typing import Mapping, Optional, Sequence
 
 from .argue import Argument, ArgueResult
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 
 __all__ = ["REASON_VERDICTS", "CAUSAL_LINKS", "AUXILIARIES", "WH_WORDS", "asks_for_a_cause",
            "states_a_link", "reason_candidates", "reason_prompt", "judge_reasons", "reason_bounds"]
@@ -166,8 +166,10 @@ def reason_prompt(question: str, statement: str) -> str:
 def judge_reasons(model: Model, argued: ArgueResult, question: str, *,
                   temperature: float = 0.0, rule: int = 3) -> list[tuple[str, str]]:
     """One fresh call per candidate, stored as (quote id, reply)."""
-    return [(a.id, model.complete(reason_prompt(question, a.conclusion), temperature=temperature))
-            for a in reason_candidates(argued, question, rule)]
+    asked = reason_candidates(argued, question, rule)
+    replies = complete_all(model, [reason_prompt(question, a.conclusion) for a in asked],
+                           temperature=temperature)
+    return [(a.id, r) for a, r in zip(asked, replies)]
 
 
 def _verdict(reply: Optional[str]) -> Optional[str]:
