@@ -29,6 +29,12 @@ Occam v1 (#264, occam.frozen) is the pipeline that made run 14. `ask --v1` and
 refuses a labelled answer that was not made under v1, since a calibration
 describes one pipeline; `--any-pipeline` lets it through, and says so.
 
+`ask` and `measure` send independent model calls together, up to
+`--concurrency` (default 8) at once, and store the replies in the order they
+were asked (#271). That changes how calls are made, not what is asked, so a
+run made with any concurrency is still Occam v1. A call that gets no reply
+at all waits for the network for up to 30 minutes, and says so (#272).
+
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
 `--blind` shows the answer as a labeller should read it: the question, the
