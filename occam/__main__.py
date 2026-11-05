@@ -656,7 +656,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="run Occam v1 as frozen (#264); refuses flags that would change it")
     ms.add_argument("--resume", action="store_true",
                     help="keep the questions already written to --out and run only the rest; "
-                         "refused if a kept one was made by another model")
+                         "refused if a kept one was made with other settings (model, "
+                         "sources, samples, rules), each named")
     ms.add_argument("--web", type=int,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     ms.add_argument("--factcheck", type=int,
