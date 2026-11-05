@@ -39,7 +39,7 @@ from typing import Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from .argue import Argument, ArgueResult
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 from .snapshot import Snapshot
 
 __all__ = ["SUPPORT_VERDICTS", "SupportResult", "support", "support_from_replies",
@@ -98,7 +98,7 @@ def support(model: Model, argued: ArgueResult, snapshots: Sequence[Snapshot], *,
     if not quotes:
         return [], support_from_replies([], argued)
     prompt = support_prompt(quotes, snapshots)
-    replies = [model.complete(prompt, temperature=temperature) for _ in range(k)]
+    replies = complete_all(model, [prompt] * k, temperature=temperature)
     return replies, support_from_replies(replies, argued)
 
 

@@ -41,7 +41,7 @@ from typing import Any, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 from .snapshot import Snapshot
 from .spans import ADMITTED, VERDICTS, Located, SpanRef, locate
 from .types import Pramana
@@ -212,7 +212,7 @@ def argue(model: Model, question: str, snapshots: Sequence[Snapshot], *,
     happens: `argue_from_replies` over them is the replay.
     """
     prompt = argue_prompt(question, snapshots, max_chars)
-    replies = [model.complete(prompt, temperature=temperature) for _ in range(k)]
+    replies = complete_all(model, [prompt] * k, temperature=temperature)
     return replies, argue_from_replies(replies, snapshots)
 
 

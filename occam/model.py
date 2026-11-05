@@ -16,12 +16,15 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.error
 import urllib.request
 from typing import Any, Callable, Optional, Protocol
 
-__all__ = ["Model", "OpenRouterModel", "ScriptedModel", "extract_json"]
+__all__ = ["Model", "OpenRouterModel", "ScriptedModel", "extract_json", "complete_all"]
 
 
 class Model(Protocol):
@@ -30,6 +33,23 @@ class Model(Protocol):
     name: str
 
     def complete(self, prompt: str, *, temperature: float) -> str: ...
+
+
+def complete_all(model: Model, prompts: list[str], *, temperature: float) -> list[str]:
+    """Every prompt's reply, in the order the prompts were given (#271).
+
+    Up to `model.concurrency` calls are in flight at once; a model without the
+    attribute, such as `ScriptedModel`, is asked one at a time, so a fixture's
+    scripted order still means what it says. The order of the replies is the
+    order of the prompts whatever order the calls finish in, because stored
+    replies are read by position (#201). If any call fails, the first failure
+    in prompt order is raised, after the calls already sent have returned."""
+    n = getattr(model, "concurrency", 1)
+    if n <= 1 or len(prompts) <= 1:
+        return [model.complete(p, temperature=temperature) for p in prompts]
+    with ThreadPoolExecutor(max_workers=min(n, len(prompts))) as ex:
+        futures = [ex.submit(model.complete, p, temperature=temperature) for p in prompts]
+        return [f.result() for f in futures]
 
 
 class OpenRouterModel:
@@ -52,6 +72,8 @@ class OpenRouterModel:
         self._timeout = timeout
         self._max_tokens = max_tokens
         self._empty_retries = empty_retries
+        # How many calls `complete_all` may have in flight at once (#271).
+        self.concurrency = 1
         # Who served each call, as OpenRouter reports it (#186): the model
         # slug and the provider that ran it. OpenRouter gives no version, so
         # the provider is the part that can vary under one model name.
@@ -177,7 +199,8 @@ class KieModel:
 
     def __init__(self, model: str = "gpt-5-2", *, api_key: Optional[str] = None,
                  timeout: float = 600.0, empty_retries: int = 2,
-                 busy_retries: int = 3, sleep: Callable[[float], None] = time.sleep) -> None:
+                 busy_retries: int = 3, sleep: Callable[[float], None] = time.sleep,
+                 unreachable_patience: float = 1800.0, concurrency: int = 1) -> None:
         self.name = f"kie/{model}"
         self._model = model
         self._key = api_key or os.environ.get("KIE_API_KEY", "")
@@ -191,24 +214,61 @@ class KieModel:
         self._empty_retries = empty_retries
         self._busy_retries = busy_retries
         self._sleep = sleep
+        self._patience = unreachable_patience
+        # How many calls `complete_all` may have in flight at once (#271).
+        self.concurrency = concurrency
+        self._lock = threading.Lock()
+        # Seconds per call that returned, for choosing a timeout from what
+        # was observed rather than guessed (#272).
+        self.durations: list[float] = []
+        # Each wait for an unreachable network: (seconds waited, why) (#272).
+        self.waits: list[tuple[float, str]] = []
         self.served: list[str] = []
         # kie.ai bills each call in credits and says how many; summed here so a
         # run can report what it spent from the provider's own count.
         self.credits = 0.0
 
     def _post(self, body: dict[str, Any]) -> dict[str, Any]:
-        """One call. A server-side failure (5xx or 429, as HTTP or as kie's own
-        code) is asked again after a pause, up to `busy_retries` times: one
-        "please try again later" must not end a ten-question run. Nothing from
-        a failed call is recorded, and after the last try it raises."""
-        for attempt in range(self._busy_retries + 1):
+        """One call. Two failures are asked again, each in its own way:
+
+        - a server that answered busy (5xx or 429, as HTTP or as kie's own
+          code), after 10, 20 and 30 s, `busy_retries` times: one "please
+          try again later" must not end a long run;
+        - no reply at all (a refused, reset or timed-out connection, or a
+          name that does not resolve) is the network, not the server. The
+          machine may have slept or the connection dropped, so it is waited
+          out for up to `unreachable_patience` seconds in total, 15 s at
+          first and doubling to 120 s, and each wait is said on stderr (#272).
+
+        Nothing from a failed call is recorded, and when either runs out it
+        raises."""
+        busy = 0
+        waited = 0.0
+        pause = 15.0
+        while True:
             out, code, why = self._post_once(body)
             if out is not None:
                 return out
-            if not (code == 429 or 500 <= code < 600) or attempt == self._busy_retries:
+            if code == self.NO_REPLY:
+                if waited + pause > self._patience:
+                    raise RuntimeError(f"{self.name}: {why} (no reply after waiting "
+                                       f"{waited:g} s for the network)")
+                with self._lock:
+                    self.waits.append((pause, why))
+                print(f"{self.name}: no reply ({why}); waiting {pause:g} s for the network, "
+                      f"{waited:g} s waited so far", file=sys.stderr, flush=True)
+                self._sleep(pause)
+                waited += pause
+                pause = min(pause * 2, 120.0)
+                continue
+            if not (code == 429 or 500 <= code < 600) or busy == self._busy_retries:
                 raise RuntimeError(f"{self.name}: {why}")
-            self._sleep(10.0 * (attempt + 1))
-        raise AssertionError("unreachable")
+            busy += 1
+            self._sleep(10.0 * busy)
+
+    # The code `_post_once` gives a call that got no reply at all, apart from
+    # any status a server can send, so the two are never confused (#272).
+    NO_REPLY = -1
 
     def _post_once(self, body: dict[str, Any]) -> tuple[Optional[dict[str, Any]], int, str]:
         req = urllib.request.Request(
@@ -216,22 +276,26 @@ class KieModel:
             data=json.dumps({**body, "stream": False}).encode(),
             headers={"Authorization": f"Bearer {self._key}",
                      "Content-Type": "application/json"})
+        started = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=self._timeout) as r:
                 out = json.loads(r.read())
         except urllib.error.HTTPError as e:
             return None, e.code, f"HTTP {e.code}: {e.read()[:300]!r}"
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
-            # No reply at all: as retryable as a busy server (run 5, q03: a read
-            # timed out), and as unrecorded.
-            return None, 503, f"no reply: {type(e).__name__}: {e}"
+            # No reply at all (run 5, q03: a read timed out; the pilot, q21: a
+            # name that did not resolve after the machine woke). Unrecorded,
+            # and waited out as the network, not retried as a busy server.
+            return None, self.NO_REPLY, f"{type(e).__name__}: {e}"
         if not isinstance(out, dict) or "choices" not in out:
             # kie.ai reports some failures as HTTP 200 with its own code.
             code = out.get("code") if isinstance(out, dict) else None
             return None, code if isinstance(code, int) else 0, \
                 f"unexpected response {str(out)[:300]}"
-        self.served.append(f"{out.get('model') or self._model} via kie.ai")
-        self.credits += float(out.get("credits_consumed") or 0)
+        with self._lock:
+            self.durations.append(time.monotonic() - started)
+            self.served.append(f"{out.get('model') or self._model} via kie.ai")
+            self.credits += float(out.get("credits_consumed") or 0)
         return out, 200, ""
 
     def complete(self, prompt: str, *, temperature: float) -> str:

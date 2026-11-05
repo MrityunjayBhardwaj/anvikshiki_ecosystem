@@ -29,6 +29,12 @@ Occam v1 (#264, occam.frozen) is the pipeline that made run 14. `ask --v1` and
 refuses a labelled answer that was not made under v1, since a calibration
 describes one pipeline; `--any-pipeline` lets it through, and says so.
 
+`ask` and `measure` send independent model calls together, up to
+`--concurrency` (default 8) at once, and store the replies in the order they
+were asked (#271). That changes how calls are made, not what is asked, so a
+run made with any concurrency is still Occam v1. A call that gets no reply
+at all waits for the network for up to 30 minutes, and says so (#272).
+
 `ask` needs OPENROUTER_API_KEY. `replay` needs nothing but the file: it
 recomputes the answer with no model and says whether it matches the stored one.
 `--blind` shows the answer as a labeller should read it: the question, the
@@ -389,6 +395,35 @@ def _relabel_agreement(rows: list[dict], relabels: Path) -> None:
         print(f"   first {a}, then {b}")
 
 
+CONCURRENCY = 8
+
+
+def _concurrent(model, n: int):
+    """Let `model` have up to n calls in flight (#271). Only a live model that
+    declares the attribute is changed, so a scripted test model keeps its
+    order. Changes how calls are made, never what is asked: a run made with
+    any n is the same pipeline, Occam v1 included."""
+    if n < 1:
+        raise SystemExit("--concurrency must be at least 1")
+    if hasattr(model, "concurrency"):
+        model.concurrency = n
+    return model
+
+
+def _calls(model) -> str:
+    """How long the model's calls took and how often the network was waited
+    for (#272), from what the client recorded. Said every time, zero included."""
+    d = sorted(getattr(model, "durations", []))
+    waits = getattr(model, "waits", [])
+    if not d:
+        return "model calls: none timed"
+    med = d[len(d) // 2]
+    p95 = d[min(len(d) - 1, int(len(d) * 0.95))]
+    return (f"model calls: {len(d)} returned; seconds per call median {med:.1f}, "
+            f"95th percentile {p95:.1f}, max {d[-1]:.1f}; network waits: {len(waits)}"
+            + (f" ({sum(w for w, _ in waits):g} s)" if waits else ""))
+
+
 def _refuse_overwrite(paths: list[Path]) -> bool:
     """True (and says so) if any artifact would be written over. Checked before
     a model is built: a registered run's artifacts are gitignored, so one
@@ -567,6 +602,8 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--model", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
     ask.add_argument("--out")
     ask.add_argument("--calibration")
+    ask.add_argument("--concurrency", type=int, default=CONCURRENCY,
+                     help="model calls in flight at once (#271); changes how calls are made, not what is asked")
     rp = sub.add_parser("replay")
     rp.add_argument("file")
     rp.add_argument("--calibration")
@@ -615,6 +652,8 @@ def main(argv: list[str] | None = None) -> int:
     ms.add_argument("--factcheck", type=int,
                     help="fact-check articles found by Google Fact Check Tools after the web "
                          "pages (#230); needs GOOGLE_FACTCHECK_API_KEY. 0 for none")
+    ms.add_argument("--concurrency", type=int, default=CONCURRENCY,
+                    help="model calls in flight at once (#271); changes how calls are made, not what is asked")
     ms.add_argument("--questions", metavar="FILE",
                     help="one question per line (blank and #-lines skipped) instead of the "
                          "built-in ten, e.g. a held-out set (#226)")
@@ -743,7 +782,7 @@ def main(argv: list[str] | None = None) -> int:
         fc_search, ok = _factcheck_search(args.factcheck)
         if not ok:
             return 2
-        model = make_model(args.model)
+        model = _concurrent(make_model(args.model), args.concurrency)
         # A resumed run keeps what it wrote and never writes over it. Every kept
         # question must come from this model: one run, one instrument.
         kept = {p: json.loads(p.read_text()) for p in paths if args.resume and p.exists()}
@@ -784,6 +823,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"pass stopped at q{i:02d}: spent {model.credits:g} kie.ai credits, as "
                           f"the provider counted them, over {written} question(s) written and "
                           f"q{i:02d}'s calls, which were discarded", file=sys.stderr, flush=True)
+                print(_calls(model), file=sys.stderr, flush=True)
                 raise
             if path in kept:
                 answer = Answer.model_validate(kept[path]["answer"])
@@ -810,6 +850,7 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(model, "credits"):
             print(f"spent: {model.credits:g} kie.ai credits in this pass, as the provider "
                   f"counted them ({len(kept)} question(s) kept from earlier passes not included)")
+        print(_calls(model))
         print(f"artifacts: {outdir}/")
         return 0
 
@@ -863,7 +904,7 @@ def main(argv: list[str] | None = None) -> int:
         fc_search, ok = _factcheck_search(args.factcheck)
         if not ok:
             return 2
-        model = make_model(args.model)
+        model = _concurrent(make_model(args.model), args.concurrency)
         answer, artifact = run(args.question, model, urls=args.url,
                                n_sources=args.sources,
                                params=_params(args),
@@ -874,6 +915,7 @@ def main(argv: list[str] | None = None) -> int:
         out.write_text(stored_run(answer, artifact))
         _show(answer, artifact)
         print(_v1_line(artifact))
+        print(_calls(model))
         print(f"\nartifact: {out}")
         return 0
 

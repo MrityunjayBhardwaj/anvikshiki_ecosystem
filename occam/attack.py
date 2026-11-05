@@ -38,7 +38,7 @@ from typing import Iterable, Literal, Sequence
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from .argue import Argument, ArgueResult
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 
 __all__ = [
     "Attack", "AttackResult", "ATTACK_TYPES", "FALLACY_OF_TYPE",
@@ -152,7 +152,7 @@ def attack(model: Model, question: str, argued: ArgueResult, *, k: int = 3,
     if not argued.arguments:
         return [], attack_from_replies([], argued.arguments)
     prompt = attack_prompt(question, argued.arguments)
-    replies = [model.complete(prompt, temperature=temperature) for _ in range(k)]
+    replies = complete_all(model, [prompt] * k, temperature=temperature)
     return replies, attack_from_replies(replies, argued.arguments)
 
 

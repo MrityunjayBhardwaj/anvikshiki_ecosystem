@@ -60,7 +60,7 @@ from typing import Literal, Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from .argue import ArgueResult, norm_conclusion
-from .model import Model, extract_json
+from .model import Model, complete_all, extract_json
 from .spans import states
 
 __all__ = ["Lens", "EQUIV_VERDICTS", "Pair", "Verdict", "EquivResult", "veto",
@@ -242,13 +242,9 @@ def judge_same(model: Model, question: str, pairs: Sequence[Pair], *,
                temperature: float = 0.0) -> list[str]:
     """Two fresh calls per pair no veto ruled out — X/Y, then Y/X — in pair
     order. No call at all when there is nothing to judge."""
-    replies: list[str] = []
-    for p in pairs:
-        if not p.veto:
-            for flip in (False, True):
-                replies.append(model.complete(equiv_prompt(question, p, flip=flip),
-                                              temperature=temperature))
-    return replies
+    prompts = [equiv_prompt(question, p, flip=flip)
+               for p in pairs if not p.veto for flip in (False, True)]
+    return complete_all(model, prompts, temperature=temperature)
 
 
 class Verdict(BaseModel):
