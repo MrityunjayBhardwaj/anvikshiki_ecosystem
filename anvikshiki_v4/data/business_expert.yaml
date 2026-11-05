@@ -244,6 +244,14 @@ hetvabhasas:
     correction_pattern: "Verify that metric improvement correlates with goal achievement; watch for gaming behavior"
     common_contexts: ["incentive_design", "kpi_setting", "performance_management"]
 
+# What a yes/no question asks when it names no predicate (#197). V01's own
+# statement defines survival as value creation, so "is it viable?" is asked of
+# value_creation; a "no" needs its contrary, not_value_creation, accepted.
+question_targets:
+  - concept: "viable, survives, a sustainable business"
+    predicate: "value_creation"
+    basis: "V01"
+
 threshold_concepts:
   - name: "Unit Economics as the Atomic Test of Value"
     reorganizes: ["growth_evaluation", "business_success_definition", "revenue_interpretation"]
