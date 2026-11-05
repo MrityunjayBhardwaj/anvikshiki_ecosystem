@@ -77,7 +77,8 @@ _SNAP = capture(url="https://example.org/leaves", body=b"leaves", text=_TEXT, fe
 # words around the quote, so a change to either cut changes a hash.
 _FILLER = "Trees respond to shorter days and cooler nights. " * 500
 _LONG_TEXT = _FILLER + _TEXT + " " + _FILLER
-assert len(_LONG_TEXT) > V1.max_chars
+if len(_LONG_TEXT) <= V1.max_chars:      # a raise: `python -O` drops asserts (#276)
+    raise RuntimeError("the long fixture no longer crosses v1's window, so its hash pins nothing")
 _LONG = capture(url="https://example.org/long", body=b"long", text=_LONG_TEXT, fetched_at=_T0)
 _STEPS = [
     {"id": "s1", "kind": "quote", "source": 1,
@@ -112,7 +113,8 @@ def rendered_prompts() -> dict[str, str]:
     in_long = argue_from_replies([json.dumps({"answer": "s2", "steps": long_steps})],
                                  [_SNAP, _LONG])
     long_quotes = [a for a in in_long.arguments if a.kind == "quote"]
-    assert long_quotes and long_quotes[0].span.snapshot_id == _LONG.id
+    if not (long_quotes and long_quotes[0].span.snapshot_id == _LONG.id):
+        raise RuntimeError("the quote past the window was not read from the long page")
     out = {
         "query": QUERY_PROMPT.format(question=_Q),
         "argue": argue_prompt(_Q, [_SNAP], V1.max_chars),

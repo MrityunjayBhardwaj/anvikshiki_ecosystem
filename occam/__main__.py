@@ -448,8 +448,11 @@ def _settle(args: argparse.Namespace) -> Optional[str]:
     """Fill each pipeline flag left unset — from v1 under `--v1`, else from its
     default — and return why `--v1` refuses, if a flag given would change v1."""
     from .frozen import V1, V1_RUN
-    assert (V1.model, V1.web_sources, V1.factcheck_sources, V1.k_argue, V1_RUN["n_sources"]) \
-        == tuple(v for _, v in _PIPELINE_FLAGS.values()) and V1.k_attack == V1.k_argue
+    # A raise, not an assert: `python -O` drops asserts, and this is what keeps
+    # `--v1` running the model and source counts v1 names (#276).
+    if (V1.model, V1.web_sources, V1.factcheck_sources, V1.k_argue, V1_RUN["n_sources"]) \
+            != tuple(v for _, v in _PIPELINE_FLAGS.values()) or V1.k_attack != V1.k_argue:
+        raise RuntimeError("the CLI's --v1 flag values differ from occam.frozen.V1")
     given = [f"--{f}" for f in _PIPELINE_FLAGS if getattr(args, f, None) is not None]
     given += ["--no-judge-same"] * bool(args.no_judge_same) + ["--url"] * bool(getattr(args, "url", None))
     for f, (default, v1) in _PIPELINE_FLAGS.items():
