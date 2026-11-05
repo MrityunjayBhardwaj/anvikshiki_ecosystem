@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from occam.answer import Params
 from occam.controls import (
     ADVERSARIAL_PAGE,
@@ -208,3 +210,73 @@ def test_a_rejection_that_names_the_premise_is_flagged_too_not_passed():
                  "s2")
     r = run_control(C["false_premise"], m, as_of=AS_OF, params=P)
     assert not r.passed and "MENTIONS" in r.observed
+
+
+# ── the controls on Occam v1 (#278) ────────────────────────
+
+class _Abstains:
+    """A model that never answers, under any name: every control abstains,
+    and each still records the params it ran under."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def complete(self, prompt: str, *, temperature: float) -> str:
+        return json.dumps({"answer": None, "steps": []})
+
+
+def _cli(monkeypatch):
+    import occam.model as om
+    built = []
+    monkeypatch.setattr(om, "make_model", lambda spec: (built.append(spec), _Abstains(spec))[1])
+    return built
+
+
+def test_controls_v1_runs_v1s_model_and_params_and_says_so(monkeypatch, tmp_path, capsys):
+    from occam.__main__ import main
+    from occam.answer import Artifact, recorded_params
+    from occam.frozen import V1
+    built = _cli(monkeypatch)
+    main(["controls", "--v1", "--out", str(tmp_path)])
+    assert built == ["kie/gemini-3-pro"]
+    out = capsys.readouterr().out
+    assert "made under Occam v1, the planted page as each control's only source: 4 of 4" in out
+    v1_here = recorded_params(V1, V1.model, web=False, factcheck=False)
+    for c in CONTROLS:
+        art = Artifact.model_validate(json.loads((tmp_path / f"control-{c.name}.json")
+                                                 .read_text())["artifact"])
+        assert art.params == v1_here, c.name
+
+
+def test_controls_without_v1_say_they_are_not_v1(monkeypatch, tmp_path, capsys):
+    from occam.__main__ import main
+    built = _cli(monkeypatch)
+    main(["controls", "--out", str(tmp_path)])
+    assert built == ["z-ai/glm-5.2"]                      # the default it always had
+    out = capsys.readouterr().out
+    assert "NOT made under Occam v1: positive: model: this 'z-ai/glm-5.2', v1 'kie/gemini-3-pro'" in out
+
+
+@pytest.mark.parametrize("flag", [["--no-judge-same"], ["--model", "kie/gpt-5-2"]])
+def test_controls_v1_refuses_a_flag_that_would_change_v1_before_any_model(monkeypatch, tmp_path,
+                                                                         capsys, flag):
+    from occam.__main__ import main
+    built = _cli(monkeypatch)
+    assert main(["controls", "--v1", *flag, "--out", str(tmp_path)]) == 2
+    assert built == [] and list(tmp_path.iterdir()) == []
+    assert "--v1 runs Occam v1 as frozen" in capsys.readouterr().err
+
+
+def test_controls_v1_run_v1s_params_not_todays_defaults(monkeypatch, tmp_path):
+    """Today the defaults equal v1 on every field a control records, so the
+    test above cannot tell them apart. When the defaults move on (a new rules
+    row), `--v1` must still run v1's own: a v1 that differs shows which ran."""
+    import occam.frozen as fz
+    from occam.__main__ import main
+    from occam.answer import Artifact
+    monkeypatch.setattr(fz, "V1", fz.V1.model_copy(update={"t_argue": 0.5}))
+    _cli(monkeypatch)
+    main(["controls", "--v1", "--out", str(tmp_path)])
+    art = Artifact.model_validate(json.loads((tmp_path / "control-positive.json")
+                                             .read_text())["artifact"])
+    assert art.params.t_argue == 0.5

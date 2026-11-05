@@ -4,7 +4,7 @@
     python -m occam replay FILE [--calibration CAL] [--blind]
     python -m occam replay DIR --blind [--template LABELS.jsonl] [--seed 0]  # a labeller's sheet
     python -m occam replay FILE --drop-attack A:T ... --reject-quote ID ...   # what if
-    python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
+    python -m occam controls [--out DIR] [--no-judge-same] [--v1]  # the validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam probe-same [--out FILE]  # the same-answer judge on its probe, live (#172)
@@ -474,10 +474,10 @@ def _params(args: argparse.Namespace) -> Params:
                   web_sources=args.web, factcheck_sources=args.factcheck)
 
 
-def _differ(kept: Params, mine: Params) -> list[str]:
+def _differ(kept: Params, mine: Params, names: tuple[str, str] = ("kept", "this")) -> list[str]:
     """Each setting a kept artifact recorded that this pass would record
-    differently, as "field: kept X, this Y"."""
-    return [f"{f}: kept {getattr(kept, f)!r}, this {getattr(mine, f)!r}"
+    differently, as "field: kept X, this Y" (or under the `names` given)."""
+    return [f"{f}: {names[0]} {getattr(kept, f)!r}, {names[1]} {getattr(mine, f)!r}"
             for f in Params.model_fields if getattr(kept, f) != getattr(mine, f)]
 
 
@@ -633,7 +633,10 @@ def main(argv: list[str] | None = None) -> int:
     ct.add_argument("--no-judge-same", action="store_true",
                     help="turn off the same-answer judge (on by default)")
     ct.add_argument("--out")
-    ct.add_argument("--model", default="z-ai/glm-5.2", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ct.add_argument("--model", help="kie/<slug> for kie.ai (e.g. kie/gpt-5-2); otherwise an OpenRouter slug")
+    ct.add_argument("--v1", action="store_true",
+                    help="run the controls on Occam v1 as frozen (#278); refuses flags that "
+                         "would change it")
     sub.add_parser("probe-judge")
     ps = sub.add_parser("probe-same")
     ps.add_argument("--out")
@@ -692,16 +695,26 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "controls":
         from .controls import CONTROLS, run_control, verdict
+        from .frozen import V1
         from .model import make_model
+        refused = _settle(args)
+        if refused:
+            print(refused, file=sys.stderr)
+            return 2
         now = datetime.now(timezone.utc)
         outdir = Path(args.out or f"traces/occam/controls-{now:%Y%m%dT%H%M%SZ}")
         if _refuse_overwrite([outdir / f"control-{c.name}.json" for c in CONTROLS]):
             return 2
         model = make_model(args.model)
+        params = V1 if args.v1 else Params(judge_same=not args.no_judge_same)
+        # A control's only source is its planted page, so it records 0 web and
+        # 0 fact-check sources whatever it was given; v1 for a control is v1's
+        # params as a run given only that page records them (#278).
+        v1_here = recorded_params(V1, V1.model, web=False, factcheck=False)
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
-            r = run_control(c, model, as_of=now, params=Params(judge_same=not args.no_judge_same))
+            r = run_control(c, model, as_of=now, params=params)
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
@@ -711,6 +724,11 @@ def main(argv: list[str] | None = None) -> int:
                   f"(verified {vf.n:g} of {vf.of} quotes)")
             if not r.passed:
                 print(f"{'':13} → {c.failure_means}")
+        off = {r.name: _differ(r.artifact.params, v1_here, ("this", "v1")) for r in results}
+        print("\n" + ("made under Occam v1, the planted page as each control's only source: "
+                      f"{len(results)} of {len(results)}" if not any(off.values()) else
+                      "NOT made under Occam v1: " + "; ".join(
+                          f"{n}: {', '.join(d)}" for n, d in off.items() if d)))
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
         print(f"artifacts: {outdir}/")
