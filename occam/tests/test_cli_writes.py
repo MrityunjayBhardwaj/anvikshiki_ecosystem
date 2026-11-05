@@ -93,6 +93,22 @@ def test_resume_refuses_a_question_another_model_made(monkeypatch, tmp_path):
     assert ran == [] and (tmp_path / "q01.json").read_text() == before
 
 
+@pytest.mark.parametrize("flags,named", [
+    (["--web", "0", "--no-judge-same"], "judge_same: kept True, this False"),
+    (["--v1"], "factcheck_sources: kept 0, this 3"),   # --v1 refuses --web; fact-check needs a key
+])
+def test_resume_refuses_a_question_made_with_other_settings(monkeypatch, tmp_path, capsys,
+                                                            flags, named):
+    """#275: the same model is not the same instrument. q01 was made with the
+    defaults; a pass with another setting must not finish the run with it."""
+    ran, before, _ = _resumable(monkeypatch, tmp_path, "scripted-xyz")
+    monkeypatch.setenv("GOOGLE_FACTCHECK_API_KEY", "unused")
+    assert main(["measure", "--resume", *flags, "--out", str(tmp_path)]) == 2
+    assert ran == [] and (tmp_path / "q01.json").read_text() == before
+    err = capsys.readouterr().err
+    assert "refusing to resume: made with other settings" in err and named in err
+
+
 # ── a question list from a file (#226) ─────────────────────
 
 HELD_OUT = "# a held-out set\n\nWhat causes ocean tides?\n  \nWho discovered penicillin?\n"

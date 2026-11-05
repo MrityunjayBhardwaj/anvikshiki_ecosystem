@@ -232,7 +232,8 @@ def probe_judge(model: Model, *, as_of: datetime, k: int = 1,
     args = []
     for i, (quote, claim, _, _) in enumerate(SUPPORT_PROBE):
         loc = locate(snap, quote)
-        assert loc.verdict == "ok", f"probe quote {i} is not on the page: {quote!r}"
+        if loc.verdict != "ok":         # a raise: `python -O` drops asserts (#276)
+            raise RuntimeError(f"probe quote {i} is not on the page: {quote!r}")
         args.append(Argument(id=f"A{i:04d}", conclusion=claim, kind="quote", span=loc.span,
                              pramana=Pramana.SABDA, sample_ids=(0,)))
     argued = ArgueResult(k=1, arguments=tuple(args), answers=(None,), answer_notes=("",),

@@ -60,7 +60,7 @@ from typing import Optional
 
 from .answer import (Answer, Artifact, Params, WhatIfRefused, canonical, contradicted_quotes,
                      counted_sources, derivation_nodes, gathered_quotes, question_details,
-                     replay, replay_counted,
+                     recorded_params, replay, replay_counted,
                      run, stored_run,
                      support_verdicts, unread_judge_pairs, what_if)
 from .conformal import ABSTAINED, Calibration, Example, fit
@@ -448,8 +448,11 @@ def _settle(args: argparse.Namespace) -> Optional[str]:
     """Fill each pipeline flag left unset — from v1 under `--v1`, else from its
     default — and return why `--v1` refuses, if a flag given would change v1."""
     from .frozen import V1, V1_RUN
-    assert (V1.model, V1.web_sources, V1.factcheck_sources, V1.k_argue, V1_RUN["n_sources"]) \
-        == tuple(v for _, v in _PIPELINE_FLAGS.values()) and V1.k_attack == V1.k_argue
+    # A raise, not an assert: `python -O` drops asserts, and this is what keeps
+    # `--v1` running the model and source counts v1 names (#276).
+    if (V1.model, V1.web_sources, V1.factcheck_sources, V1.k_argue, V1_RUN["n_sources"]) \
+            != tuple(v for _, v in _PIPELINE_FLAGS.values()) or V1.k_attack != V1.k_argue:
+        raise RuntimeError("the CLI's --v1 flag values differ from occam.frozen.V1")
     given = [f"--{f}" for f in _PIPELINE_FLAGS if getattr(args, f, None) is not None]
     given += ["--no-judge-same"] * bool(args.no_judge_same) + ["--url"] * bool(getattr(args, "url", None))
     for f, (default, v1) in _PIPELINE_FLAGS.items():
@@ -469,6 +472,13 @@ def _params(args: argparse.Namespace) -> Params:
     k = getattr(args, "k", 3)                 # measure has no --k: it always ran 3
     return Params(k_argue=k, k_attack=k, judge_same=not args.no_judge_same,
                   web_sources=args.web, factcheck_sources=args.factcheck)
+
+
+def _differ(kept: Params, mine: Params) -> list[str]:
+    """Each setting a kept artifact recorded that this pass would record
+    differently, as "field: kept X, this Y"."""
+    return [f"{f}: kept {getattr(kept, f)!r}, this {getattr(mine, f)!r}"
+            for f in Params.model_fields if getattr(kept, f) != getattr(mine, f)]
 
 
 def _v1_line(art: Artifact) -> str:
@@ -646,7 +656,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="run Occam v1 as frozen (#264); refuses flags that would change it")
     ms.add_argument("--resume", action="store_true",
                     help="keep the questions already written to --out and run only the rest; "
-                         "refused if a kept one was made by another model")
+                         "refused if a kept one was made with other settings (model, "
+                         "sources, samples, rules), each named")
     ms.add_argument("--web", type=int,
                     help="web pages found by search beside Wikipedia's; 0 for Wikipedia only")
     ms.add_argument("--factcheck", type=int,
@@ -783,13 +794,19 @@ def main(argv: list[str] | None = None) -> int:
         if not ok:
             return 2
         model = _concurrent(make_model(args.model), args.concurrency)
+        web_search = getattr(model, "web_search", None) if args.web else None
         # A resumed run keeps what it wrote and never writes over it. Every kept
-        # question must come from this model: one run, one instrument.
+        # question must have been made with the settings this pass records —
+        # model, sources, samples, rules — not only the same model (#275): one
+        # run, one instrument. (Wikipedia pages per question, which no artifact
+        # records, is not a measure flag: every pass gathers run's default.)
         kept = {p: json.loads(p.read_text()) for p in paths if args.resume and p.exists()}
-        other = [f"{p} ({d['artifact']['params']['model']})" for p, d in kept.items()
-                 if d["artifact"]["params"]["model"] != model.name]
+        mine = recorded_params(_params(args), model.name, web=web_search is not None,
+                               factcheck=fc_search is not None)
+        other = [f"{p} ({'; '.join(off)})" for p, d in kept.items()
+                 if (off := _differ(Artifact.model_validate(d["artifact"]).params, mine))]
         if other:
-            print(f"refusing to resume with {model.name}: made by another model: "
+            print(f"refusing to resume: made with other settings than this pass records: "
                   f"{', '.join(other)}", file=sys.stderr)
             return 2
         # Nor from another question list: one run, one set.
@@ -810,8 +827,7 @@ def main(argv: list[str] | None = None) -> int:
                 if path not in kept:
                     answer, artifact = run(q, model,
                                            params=_params(args),
-                                           web_search=getattr(model, "web_search", None)
-                                           if args.web else None,
+                                           web_search=web_search,
                                            factcheck_search=fc_search)
                     path.write_text(stored_run(answer, artifact))
                     written += 1
