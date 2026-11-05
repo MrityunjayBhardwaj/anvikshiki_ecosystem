@@ -254,7 +254,7 @@ def test_controls_without_v1_say_they_are_not_v1(monkeypatch, tmp_path, capsys):
     main(["controls", "--out", str(tmp_path)])
     assert built == ["z-ai/glm-5.2"]                      # the default it always had
     out = capsys.readouterr().out
-    assert "NOT made under Occam v1: positive: model: kept 'z-ai/glm-5.2'" in out
+    assert "NOT made under Occam v1: positive: model: this 'z-ai/glm-5.2', v1 'kie/gemini-3-pro'" in out
 
 
 @pytest.mark.parametrize("flag", [["--no-judge-same"], ["--model", "kie/gpt-5-2"]])

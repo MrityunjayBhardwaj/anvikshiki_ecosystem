@@ -4,7 +4,7 @@
     python -m occam replay FILE [--calibration CAL] [--blind]
     python -m occam replay DIR --blind [--template LABELS.jsonl] [--seed 0]  # a labeller's sheet
     python -m occam replay FILE --drop-attack A:T ... --reject-quote ID ...   # what if
-    python -m occam controls [--out DIR] [--no-judge-same]  # the three validation controls, live
+    python -m occam controls [--out DIR] [--no-judge-same] [--v1]  # the validation controls, live
     python -m occam measure [--out DIR] [--no-judge-same]   # the pre-registered factual set, live
     python -m occam probe-judge              # the support judge on its 12-pair probe, live
     python -m occam probe-same [--out FILE]  # the same-answer judge on its probe, live (#172)
@@ -474,10 +474,10 @@ def _params(args: argparse.Namespace) -> Params:
                   web_sources=args.web, factcheck_sources=args.factcheck)
 
 
-def _differ(kept: Params, mine: Params) -> list[str]:
+def _differ(kept: Params, mine: Params, names: tuple[str, str] = ("kept", "this")) -> list[str]:
     """Each setting a kept artifact recorded that this pass would record
-    differently, as "field: kept X, this Y"."""
-    return [f"{f}: kept {getattr(kept, f)!r}, this {getattr(mine, f)!r}"
+    differently, as "field: kept X, this Y" (or under the `names` given)."""
+    return [f"{f}: {names[0]} {getattr(kept, f)!r}, {names[1]} {getattr(mine, f)!r}"
             for f in Params.model_fields if getattr(kept, f) != getattr(mine, f)]
 
 
@@ -724,7 +724,7 @@ def main(argv: list[str] | None = None) -> int:
                   f"(verified {vf.n:g} of {vf.of} quotes)")
             if not r.passed:
                 print(f"{'':13} → {c.failure_means}")
-        off = {r.name: _differ(r.artifact.params, v1_here) for r in results}
+        off = {r.name: _differ(r.artifact.params, v1_here, ("this", "v1")) for r in results}
         print("\n" + ("made under Occam v1, the planted page as each control's only source: "
                       f"{len(results)} of {len(results)}" if not any(off.values()) else
                       "NOT made under Occam v1: " + "; ".join(
