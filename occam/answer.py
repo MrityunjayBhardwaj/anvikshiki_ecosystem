@@ -44,7 +44,8 @@ SHOWN_ORDER: dict[int, tuple[Status, ...]] = {
         Status.ESTABLISHED),
 }
 
-__all__ = ["Count", "Answer", "Artifact", "Params", "run", "replay", "rejudge", "assemble",
+__all__ = ["Count", "Answer", "Artifact", "Params", "recorded_params", "run", "replay", "rejudge",
+           "assemble",
            "canonical", "stored_run", "contradicted_quotes", "derivation_nodes",
            "support_verdicts", "question_details", "what_if", "WhatIfRefused",
            "unread_judge_pairs", "counted_sources", "replay_counted", "gathered_quotes"]
@@ -337,6 +338,19 @@ def _served_since(model: Model, start: int) -> Optional[tuple[str, ...]]:
     return None if served is None else tuple(sorted(set(served[start:])))
 
 
+def recorded_params(params: Params, model_name: str, *, web: bool, factcheck: bool) -> Params:
+    """The params a run records in its artifact: `params` with the model's
+    name in, and each search it was not given counted as 0 sources. One
+    function, so `run` and a resume's check of what it keeps (#275) cannot
+    disagree about what a run with these settings would have stored."""
+    params = params.model_copy(update={"model": model_name})
+    if not web:
+        params = params.model_copy(update={"web_sources": 0})
+    if not factcheck:
+        params = params.model_copy(update={"factcheck_sources": 0})
+    return params
+
+
 def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
         n_sources: int = 3, params: Optional[Params] = None,
         as_of: Optional[datetime] = None, http_get: HttpGet = urllib_get,
@@ -348,11 +362,9 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
     With `web_search`, `params.web_sources` web pages are gathered beside
     Wikipedia's (#209); without it, none are, and the params say 0. The same
     holds for `factcheck_search` and `params.factcheck_sources` (#230)."""
-    params = (params or Params()).model_copy(update={"model": model.name})
-    if web_search is None or urls:
-        params = params.model_copy(update={"web_sources": 0})
-    if factcheck_search is None or urls:
-        params = params.model_copy(update={"factcheck_sources": 0})
+    params = recorded_params(params or Params(), model.name,
+                             web=web_search is not None and not urls,
+                             factcheck=factcheck_search is not None and not urls)
     as_of = as_of or datetime.now(timezone.utc)
     start = len(getattr(model, "served", ()))
     snaps, notes, gather_replies = gather(question, at=as_of, urls=urls, n=n_sources,
