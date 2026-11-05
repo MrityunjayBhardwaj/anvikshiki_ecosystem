@@ -2042,3 +2042,33 @@ after, beside the provider's own count.
   does not measure whether those definitions are the right ones.
 - **Marginal coverage.** Coverage from M7 is marginal over questions drafted
   like these, and it says nothing about other kinds of question (#144).
+
+### Controls for the pilot — 2026-11-05, added after the run (#278)
+
+Added after the pilot run and before any label. Nothing above is changed:
+not the predictions, and not the kill criterion, which is still read from
+the labels.
+
+The pilot ran without controls because `controls` had no `--v1`. #278 added
+it, and the controls were then run once on v1, at commit 175945c:
+
+    python -m occam controls --v1 --out traces/occam/pilot1-controls
+
+| control | result | what it did |
+|---|---|---|
+| positive | PASS | answered "ratified in 1987", `hypothesis`, 3 of 3 quotes verified |
+| negative | PASS | abstained: the model returned no answer from the sources |
+| adversarial | PASS | answered the planted falsehood, `hypothesis` (one host), 3 of 3 verified |
+| false_premise | PASS | abstained |
+
+- **Kill criteria:** none triggered.
+- **The command's own check:** "made under Occam v1, the planted page as each control's only source: 4 of 4". All four replay to their stored answers.
+- **Spend:** 1.56 credits by kie.ai's balance (7179.66 → 7178.10). `controls` prints no provider count yet (#280).
+
+**One caveat about reading these files.** `python -m occam frozen` on this
+directory says "0 of 4 made under Occam v1". The cause is the record, not the
+run: a control's only source is its planted page, so it records 0 web and 0
+fact-check sources, and the artifact doesn't record that its page was handed
+to it. `frozen` compares against v1's 3 and 3. Until #279 settles how a
+stored control says so, the command's own line above is the record that these
+ran on v1.
