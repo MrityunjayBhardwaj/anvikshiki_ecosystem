@@ -280,3 +280,69 @@ def test_controls_v1_run_v1s_params_not_todays_defaults(monkeypatch, tmp_path):
     art = Artifact.model_validate(json.loads((tmp_path / "control-positive.json")
                                              .read_text())["artifact"])
     assert art.params.t_argue == 0.5
+
+
+# ── what a control run cost (#280) ─────────────────────────
+
+class _Billed(_Abstains):
+    """A model that counts credits the way the kie.ai client does."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
+        self.credits = 0.0
+
+    def complete(self, prompt: str, *, temperature: float) -> str:
+        self.credits += 0.25
+        return super().complete(prompt, temperature=temperature)
+
+
+def test_controls_say_what_they_spent(monkeypatch, tmp_path, capsys):
+    import occam.model as om
+    from occam.__main__ import main
+    model = _Billed("kie/gemini-3-pro")
+    monkeypatch.setattr(om, "make_model", lambda spec: model)
+    main(["controls", "--v1", "--out", str(tmp_path)])
+    assert model.credits > 0
+    assert (f"spent: {model.credits:g} kie.ai credits in this pass, as the provider counted them"
+            in capsys.readouterr().out)
+
+
+def test_controls_say_zero_when_nothing_was_billed(monkeypatch, tmp_path, capsys):
+    import occam.model as om
+    from occam.__main__ import main
+    model = _Abstains("kie/gemini-3-pro")
+    model.credits = 0.0
+    monkeypatch.setattr(om, "make_model", lambda spec: model)
+    main(["controls", "--v1", "--out", str(tmp_path)])
+    assert "spent: 0 kie.ai credits" in capsys.readouterr().out
+
+
+def test_a_model_with_no_count_says_so_rather_than_saying_nothing(monkeypatch, tmp_path, capsys):
+    from occam.__main__ import main
+    _cli(monkeypatch)
+    main(["controls", "--out", str(tmp_path)])
+    assert "spent: not counted; z-ai/glm-5.2 reports no credits" in capsys.readouterr().out
+
+
+def test_controls_that_stop_still_say_what_they_spent(monkeypatch, tmp_path, capsys):
+    """The calls were billed whether or not the control ended, and what was
+    written stays written."""
+    import occam.controls as oc
+    import occam.model as om
+    from occam.__main__ import main
+    model = _Billed("kie/gemini-3-pro")
+    monkeypatch.setattr(om, "make_model", lambda spec: model)
+    real = oc.run_control
+
+    def stops_on_the_second(c, m, **kw):
+        if c.name == CONTROLS[1].name:
+            m.credits += 1.5
+            raise RuntimeError("kie/x: unexpected response {'code': 524}")
+        return real(c, m, **kw)
+    monkeypatch.setattr(oc, "run_control", stops_on_the_second)
+    with pytest.raises(RuntimeError):
+        main(["controls", "--v1", "--out", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert (f"controls stopped at {CONTROLS[1].name}, after 1 written. "
+            f"spent: {model.credits:g} kie.ai credits so far") in err
+    assert [p.name for p in tmp_path.iterdir()] == [f"control-{CONTROLS[0].name}.json"]

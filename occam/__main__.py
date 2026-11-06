@@ -410,6 +410,15 @@ def _concurrent(model, n: int):
     return model
 
 
+def _spent(model, where: str = "in this pass") -> str:
+    """What the provider counted for `model`'s calls, said every time (#280):
+    zero included, and a model with no count says so, since a missing line
+    would read as nothing spent."""
+    if not hasattr(model, "credits"):
+        return f"spent: not counted; {model.name} reports no credits"
+    return f"spent: {model.credits:g} kie.ai credits {where}, as the provider counted them"
+
+
 def _calls(model) -> str:
     """How long the model's calls took and how often the network was waited
     for (#272), from what the client recorded. Said every time, zero included."""
@@ -714,7 +723,14 @@ def main(argv: list[str] | None = None) -> int:
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
-            r = run_control(c, model, as_of=now, params=params)
+            try:
+                r = run_control(c, model, as_of=now, params=params)
+            except BaseException:
+                # As in measure (#233): the calls were billed whether or not it ended.
+                print(f"controls stopped at {c.name}, after {len(results)} written. "
+                      f"{_spent(model, 'so far')}", file=sys.stderr, flush=True)
+                print(_calls(model), file=sys.stderr, flush=True)
+                raise
             results.append(r)
             (outdir / f"control-{c.name}.json").write_text(stored_run(r.answer, r.artifact))
             vf = r.answer.counters["verified_frac"]
@@ -731,6 +747,8 @@ def main(argv: list[str] | None = None) -> int:
                           f"{n}: {', '.join(d)}" for n, d in off.items() if d)))
         gates = verdict(results)
         print("\nkill criteria: " + ("none triggered" if not gates else "; ".join(gates)))
+        print(_spent(model))
+        print(_calls(model))
         print(f"artifacts: {outdir}/")
         return 1 if any(g.startswith(("VOID", "STOP")) for g in gates) else 0
 
@@ -881,9 +899,7 @@ def main(argv: list[str] | None = None) -> int:
         v1 = sum(not made_under_v1(Artifact.model_validate(json.loads(p.read_text())["artifact"])
                                    .params) for p in made)
         print(f"made under Occam v1: {v1} of {len(made)}")
-        if hasattr(model, "credits"):
-            print(f"spent: {model.credits:g} kie.ai credits in this pass, as the provider "
-                  f"counted them ({len(kept)} question(s) kept from earlier passes not included)")
+        print(f"{_spent(model)} ({len(kept)} question(s) kept from earlier passes not included)")
         print(_calls(model))
         print(f"artifacts: {outdir}/")
         return 0
@@ -949,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
         out.write_text(stored_run(answer, artifact))
         _show(answer, artifact)
         print(_v1_line(artifact))
+        print(_spent(model, "on this question"))
         print(_calls(model))
         print(f"\nartifact: {out}")
         return 0
