@@ -2072,3 +2072,9 @@ fact-check sources, and the artifact doesn't record that its page was handed
 to it. `frozen` compares against v1's 3 and 3. Until #279 settles how a
 stored control says so, the command's own line above is the record that these
 ran on v1.
+
+**Added 2026-11-06 (#280).** `controls` now prints the provider's count, so the
+"no provider count yet" above no longer holds for new runs. A second control run
+under v1 (`traces/occam/obs-280-controls/`, made only to observe this, not counted
+as the pilot's controls) gave the same four results. The provider counted 1.54
+credits and the balance fell by 1.54 (7178.10 → 7176.56).

@@ -180,3 +180,11 @@ def test_ask_says_what_it_spent(monkeypatch, tmp_path, capsys):
     assert main(["ask", "q?", "--web", "0", "--out", str(tmp_path / "a.json")]) == 0
     assert ("spent: 1.25 kie.ai credits on this question, as the provider counted them"
             in capsys.readouterr().out)
+
+
+def test_measure_says_what_it_spent_and_what_that_leaves_out(monkeypatch, tmp_path, capsys):
+    """#280: the shared line keeps what only `measure` has to say."""
+    ran, _, _ = _resumable(monkeypatch, tmp_path, "scripted-xyz")
+    assert main(["measure", "--resume", "--web", "0", "--out", str(tmp_path)]) == 0
+    assert ("spent: not counted; scripted-xyz reports no credits "
+            "(1 question(s) kept from earlier passes not included)") in capsys.readouterr().out
