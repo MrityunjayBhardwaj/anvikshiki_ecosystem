@@ -165,3 +165,26 @@ def test_a_pass_that_stops_on_a_failed_call_says_what_it_spent(monkeypatch, tmp_
     assert ("pass stopped at q03: spent 7.5 kie.ai credits, as the provider counted them, "
             "over 2 question(s) written and q03's calls, which were discarded") in err
     assert sorted(p.name for p in (tmp_path / "run").iterdir()) == ["q01.json", "q02.json"]
+
+
+def test_ask_says_what_it_spent(monkeypatch, tmp_path, capsys):
+    """#280: `ask` spends credits like `measure` and `controls`, and says so."""
+    import occam.__main__ as cli
+    from occam.model import ScriptedModel
+    from occam.tests.test_answer import AGREE, NO_ATTACKS, ask
+    ans, art = ask(AGREE, NO_ATTACKS)
+    model = ScriptedModel([], name="scripted-xyz")
+    model.credits = 1.25
+    monkeypatch.setattr(om, "make_model", lambda spec: model)
+    monkeypatch.setattr(cli, "run", lambda q, m, **kw: (ans, art))
+    assert main(["ask", "q?", "--web", "0", "--out", str(tmp_path / "a.json")]) == 0
+    assert ("spent: 1.25 kie.ai credits on this question, as the provider counted them"
+            in capsys.readouterr().out)
+
+
+def test_measure_says_what_it_spent_and_what_that_leaves_out(monkeypatch, tmp_path, capsys):
+    """#280: the shared line keeps what only `measure` has to say."""
+    ran, _, _ = _resumable(monkeypatch, tmp_path, "scripted-xyz")
+    assert main(["measure", "--resume", "--web", "0", "--out", str(tmp_path)]) == 0
+    assert ("spent: not counted; scripted-xyz reports no credits "
+            "(1 question(s) kept from earlier passes not included)") in capsys.readouterr().out
