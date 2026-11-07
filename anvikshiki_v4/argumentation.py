@@ -76,59 +76,69 @@ class ArgumentationFramework:
         """
         Compute grounded labeling via iterative propagation.
 
-        Algorithm (Wu, Caminada & Gabbay 2009):
-        1. Label all unattacked arguments IN
-        2. Label attacked-by-IN arguments OUT (if defeat succeeds)
-        3. Label arguments with all-attackers-OUT as IN
-        4. Repeat until fixpoint
-        5. Everything unlabeled is UNDECIDED
+        Algorithm (Wu, Caminada & Gabbay 2009), over `defeat_map`:
+        1. IN when every defeater is OUT (none at all included)
+        2. OUT when some defeater is IN
+        3. Repeat until fixpoint
+        4. Everything unlabeled is UNDECIDED
 
         Complexity: O(|arguments| × |attacks|) — polynomial.
         """
-        labels = {}
-        remaining = set(self.arguments.keys())
-
+        defeaters = self.defeat_map()
+        labels: dict[str, Label] = {}
         changed = True
         while changed:
             changed = False
-
-            for arg_id in list(remaining):
-                # Filter to only defeating attackers (ASPIC+ preference)
-                defeating_attackers = []
-                for atk in self._attacks_on.get(arg_id, []):
-                    attacker_arg = self.arguments[atk.attacker]
-                    target_arg = self.arguments[arg_id]
-                    if self._defeats(attacker_arg, target_arg, atk):
-                        defeating_attackers.append(atk.attacker)
-
-                # No defeating attackers → IN (effectively unattacked)
-                if not defeating_attackers:
-                    labels[arg_id] = Label.IN
-                    remaining.discard(arg_id)
-                    changed = True
+            for arg_id in self.arguments:
+                if arg_id in labels:
                     continue
-
-                # All defeating attackers OUT → IN (defended)
-                if all(labels.get(a) == Label.OUT
-                       for a in defeating_attackers):
+                ds = defeaters[arg_id]
+                if all(labels.get(d) == Label.OUT for d in ds):
                     labels[arg_id] = Label.IN
-                    remaining.discard(arg_id)
                     changed = True
-                    continue
-
-                # Any defeating attacker IN → OUT
-                if any(labels.get(a) == Label.IN
-                       for a in defeating_attackers):
+                elif any(labels.get(d) == Label.IN for d in ds):
                     labels[arg_id] = Label.OUT
-                    remaining.discard(arg_id)
                     changed = True
-
-        # Everything remaining is UNDECIDED
-        for arg_id in remaining:
-            labels[arg_id] = Label.UNDECIDED
-
+        labels = {aid: labels.get(aid, Label.UNDECIDED) for aid in self.arguments}
         self.labels = labels
         return labels
+
+    def supers(self) -> dict[str, set[str]]:
+        """Every argument that contains each one, itself included, through
+        any depth of sub-arguments."""
+        out = {aid: {aid} for aid in self.arguments}
+        changed = True
+        while changed:
+            changed = False
+            for a in self.arguments.values():
+                for s in a.sub_arguments:
+                    if s not in out:
+                        continue           # a dangling id contains nothing
+                    new = out[a.id] - out[s]
+                    if new:
+                        out[s] |= new
+                        changed = True
+        return out
+
+    def reaching_attacks(self) -> list[tuple[Attack, str]]:
+        """Each attack with every argument it reaches: its target and every
+        argument built on the target (#287). In ASPIC+ an attack on a
+        sub-argument is an attack on whatever contains it, so a conclusion
+        cannot stand on a premise that has fallen."""
+        supers = self.supers()
+        return [(atk, b) for atk in self.attacks for b in sorted(supers[atk.target])]
+
+    def defeat_map(self) -> dict[str, set[str]]:
+        """Each argument's defeaters: the attackers whose attack reaches it
+        and succeeds. Success is decided against the argument attacked, not
+        the one built on it — a strict rule on top does not shield a
+        defeasible premise underneath."""
+        out: dict[str, set[str]] = {aid: set() for aid in self.arguments}
+        for atk, reached in self.reaching_attacks():
+            if self._defeats(self.arguments[atk.attacker],
+                             self.arguments[atk.target], atk):
+                out[reached].add(atk.attacker)
+        return out
 
     def _defeats(
         self, attacker: Argument, target: Argument, attack: Attack
@@ -179,26 +189,21 @@ class ArgumentationFramework:
         """What the question supposed that one argument rests on, as
         alternatives: the argument holds given any one of the returned sets.
 
-        A supposed premise rests on itself. A rule argument needs every
+        A supposed premise rests on itself. An argument needs every
         sub-argument, so its alternatives are the unions across one choice
-        from each. An argument with no rule but with sub-arguments accrues
-        them (the scope undercutter is exactly as good as the best argument
-        for the excluding fact), so it holds given any one. Anything else —
-        a computed fact, a typed contestation — rests on no supposition.
-        Redundant sets are left in; `given` drops them, once.
+        from each. That holds with or without a rule: a defeat on any
+        sub-argument reaches it (#287), so it cannot hold given only one.
+        Anything else — a computed fact, a typed contestation — rests on no
+        supposition. Redundant sets are left in; `given` drops them, once.
         """
         arg = self.arguments[arg_id]
         if arg_id in self.supposed:
             return [frozenset([arg.conclusion])]
         if not arg.sub_arguments:
             return [frozenset()]
-        parts = [self.supposed_under(s) for s in arg.sub_arguments]
-        if arg.top_rule is None:
-            alts = [alt for part in parts for alt in part]
-        else:
-            alts = [frozenset()]
-            for part in parts:
-                alts = [a | b for a in alts for b in part]
+        alts = [frozenset()]
+        for part in (self.supposed_under(s) for s in arg.sub_arguments):
+            alts = [a | b for a in alts for b in part]
         return sorted(set(alts), key=lambda s: (len(s), sorted(s)))
 
     def given(self, conclusion: str) -> list[frozenset[str]]:
@@ -314,7 +319,7 @@ class ArgumentationFramework:
         base = frozenset(
             aid for aid, lbl in grounded.items() if lbl == Label.IN
         )
-        defeaters = {aid: self._defeaters(aid) for aid in self.arguments}
+        defeaters = self.defeat_map()
 
         # Every preferred extension contains the grounded extension and
         # excludes what it labels OUT, so only the undecided are searched.
@@ -338,14 +343,6 @@ class ArgumentationFramework:
             }
             for ext in sorted(found, key=sorted)
         ]
-
-    def _defeaters(self, aid: str) -> set[str]:
-        """The arguments whose attack on `aid` succeeds as a defeat."""
-        target = self.arguments[aid]
-        return {
-            atk.attacker for atk in self._attacks_on.get(aid, [])
-            if self._defeats(self.arguments[atk.attacker], target, atk)
-        }
 
     # ── Stable Semantics (Phase 4) ──
 

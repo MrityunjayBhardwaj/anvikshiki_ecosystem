@@ -255,11 +255,11 @@ def test_the_combination_cap_keeps_the_supposition_over_a_weaker_derivation():
 
 
 def test_an_exclusion_the_base_also_derives_undercuts_at_the_derivations_grade():
-    """The undercutter accrues over every argument for the excluding fact.
-    Here `ex` is both supposed and derived by V02, an established rule; the
-    supposition alone would put the undercutter at PROVISIONAL and SABDA, the
-    derivation lifts it to what the base actually concludes — and it is the
-    derivation, not the supposition, that holds it there."""
+    """One undercutter per argument for the excluding fact (#255). Here `ex`
+    is both supposed and derived by V02, an established rule: the supposition
+    builds one at PROVISIONAL and SABDA, the derivation one at what the base
+    actually concludes, and the conclusion accrues them — the derivation, not
+    the supposition, is what holds it there."""
     from anvikshiki_v4.schema import EpistemicStatus as KB
     store = _store(
         _rule("V01", ["a"], "b", KB.ESTABLISHED, scope_exclusions=["ex"]),
@@ -267,12 +267,16 @@ def test_an_exclusion_the_base_also_derives_undercuts_at_the_derivations_grade()
     )
     af = compile_t2(store, [{"predicate": p, "confidence": 1.0}
                             for p in ("ex", "a", "c")])
-    (undercutter,) = [x for x in af.arguments.values()
-                      if x.conclusion == "inapplicable_V01"]
     (derived_ex,) = [x for x in af.arguments.values() if x.top_rule == "V02"]
-    assert undercutter.status is EpistemicStatus.ESTABLISHED
-    assert undercutter.tag.pramana_type is PramanaType.ANUMANA
-    assert undercutter.status_bound_by == (f"sub:{derived_ex.id}",)
+    undercutters = {x.sub_arguments: x for x in af.arguments.values()
+                    if x.conclusion == "inapplicable_V01"}
+    assert len(undercutters) == 2
+    from_derived = undercutters[(derived_ex.id,)]
+    assert from_derived.status is EpistemicStatus.ESTABLISHED
+    assert from_derived.tag.pramana_type is PramanaType.ANUMANA
+    assert from_derived.status_bound_by == (f"sub:{derived_ex.id}",)
+    af.compute_grounded()
+    assert af.get_epistemic_status("inapplicable_V01")[0] is EpistemicStatus.ESTABLISHED
 
 
 # ── what a conclusion holds only given (#195) ──────────────────
@@ -361,9 +365,9 @@ def _hand_af():
     ("weaker_free", [{"s1"}]),         # a weaker free argument does not lift it
     ("out_free", [{"s1"}]),            # nor a defeated one
     ("defeated", []),                  # nothing IN: nothing to be conditional
-    ("undercut", [{"s1"}, {"s2"}]),    # no rule: accrues, any one carries it
-    ("undercut_redundant", [{"s1"}]),  # accrual drops the superset too
-    ("chained", [{"s1"}, {"s2"}]),     # alternatives travel through a rule
+    ("undercut", [{"s1", "s2"}]),      # no rule still needs every sub (#287)
+    ("undercut_redundant", [{"s1", "s2"}]),
+    ("chained", [{"s1", "s2"}]),       # and that travels through a rule
 ], ids=lambda x: x if isinstance(x, str) else None)
 def test_given_reads_every_shape(conclusion, expected):
     assert _hand_af().given(conclusion) == [frozenset(s) for s in expected]

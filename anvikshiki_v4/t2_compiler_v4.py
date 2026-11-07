@@ -427,6 +427,44 @@ def _rule_arguments_reached_by_exclusion(
     ]
 
 
+def _undercutter_for(af: ArgumentationFramework, conclusion: str,
+                     excluding: Argument, premise: str) -> str:
+    """The undercutter one argument for an excluding fact builds, made once.
+
+    It is exactly as good as that argument and no better (#255). It used to
+    enter as PRATYAKSA at ESTABLISHED whatever the fact was, and later as a
+    strict argument accrued over every argument for the fact. Strict meant
+    nothing could rebut it, and accrued meant a defeat on the fact could not
+    reach it, so a supposed exclusion switched the rule off even when the
+    question also denied it. One undercutter per argument, with that
+    argument's status, provenance and strictness, stands or falls with it:
+    a defeat on the fact reaches the undercutter built on it (#287). Accrual
+    still happens, where it does for every conclusion, in
+    `get_epistemic_status`.
+    """
+    for a in af.arguments.values():
+        if a.conclusion == conclusion and a.sub_arguments == (excluding.id,):
+            return a.id
+    aid = af.next_arg_id()
+    af.add_argument(Argument(
+        id=aid,
+        conclusion=conclusion,
+        top_rule=None,
+        # What it rests on, so `af.given` can read back what the exclusion
+        # was supposed on (#195), and a defeat on it reaches this (#287).
+        sub_arguments=(excluding.id,),
+        # Not a rule bound: the status is the excluding argument's.
+        status_bound_by=(f"sub:{excluding.id}",),
+        # The fact that excluded the rule, as observed rather than as the
+        # base declares it: what vāda offers back as evidence to check.
+        premises=frozenset([premise]),
+        is_strict=excluding.is_strict,
+        tag=excluding.tag,
+        status=excluding.status,
+    ))
+    return aid
+
+
 def _derive_attacks(
     af: ArgumentationFramework,
     ks: KnowledgeStore,
@@ -501,66 +539,28 @@ def _derive_attacks(
                 if not rule_args:
                     continue
                 # Renamed from _undercut_ to inapplicable_ (III-11), and bound,
-                # so two entities excluded from one rule do not collide on a
-                # single argument — the dedup guard below is per-entity for the
-                # same reason.
+                # so two entities excluded from one rule do not collide.
                 target_conclusion = with_entity(
                     f"inapplicable_{vid}", entity
                 )
-                if any(arg.conclusion == target_conclusion
-                       for arg in af.arguments.values()):
-                    continue
-                # The undercutter is exactly as good as the fact that
-                # excluded the rule, and no better. It used to enter as
-                # PRATYAKSA at ESTABLISHED whatever that fact was — and the
-                # fact is almost always one the question supplied, so this
-                # was a second door through which the question's word reached
-                # the top of L. Accrued over every argument for the fact, as
-                # `get_epistemic_status` accrues a conclusion: the best one
-                # carries it.
                 excluding = [
                     arg for arg in af.arguments.values()
                     if predicate_name(arg.conclusion) == excl_name
                     and predicate_entity(arg.conclusion) == entity
                 ]
-                scope_status = join(a.status for a in excluding)
-                scope_tag = excluding[0].tag
-                for a in excluding[1:]:
-                    scope_tag = ProvenanceTag.oplus(scope_tag, a.tag)
-                best = tuple(a.id for a in excluding
-                             if rank(a.status) == rank(scope_status))
-                scope_arg_id = af.next_arg_id()
-                af.add_argument(Argument(
-                    id=scope_arg_id,
-                    conclusion=target_conclusion,
-                    top_rule=None,
-                    # The arguments its status was taken from, so what rests
-                    # beneath it can be read back — `af.given` would otherwise
-                    # call it unconditional when the exclusion was only
-                    # supposed (#195). No rule, so they are accrued, not
-                    # conjoined: any one of them carries it.
-                    sub_arguments=best,
-                    # Not a rule bound: the status is the excluding fact's,
-                    # so that fact is what holds it where it is.
-                    status_bound_by=tuple(f"sub:{aid}" for aid in best),
-                    # The fact that excluded the rule, as observed rather than
-                    # as the base declares it. With one undercutter per entity
-                    # the bare name would read identically on all of them, and
-                    # this premise is what vāda offers back as evidence to
-                    # check.
-                    premises=frozenset([with_entity(excl_name, entity)]),
-                    is_strict=True,
-                    tag=scope_tag,
-                    status=scope_status,
-                ))
-                # Attack every argument this rule derived for this entity
-                for rule_arg in rule_args:
-                    if (scope_arg_id, rule_arg.id) not in existing_attacks:
-                        af.add_attack(Attack(
-                            attacker=scope_arg_id, target=rule_arg.id,
-                            attack_type="undercutting",
-                            hetvabhasa="savyabhicara"))
-                        existing_attacks.add((scope_arg_id, rule_arg.id))
+                for ex in excluding:
+                    scope_arg_id = _undercutter_for(
+                        af, target_conclusion, ex, with_entity(excl_name, entity)
+                    )
+                    # Every argument this rule derived for this entity,
+                    # including one derived after the undercutter was built.
+                    for rule_arg in rule_args:
+                        if (scope_arg_id, rule_arg.id) not in existing_attacks:
+                            af.add_attack(Attack(
+                                attacker=scope_arg_id, target=rule_arg.id,
+                                attack_type="undercutting",
+                                hetvabhasa="savyabhicara"))
+                            existing_attacks.add((scope_arg_id, rule_arg.id))
 
     # 3c. Undermining attacks (asiddha): decay-expired premises
     for a in list(af.arguments.values()):

@@ -205,6 +205,42 @@ def test_preferred_matches_the_engine_on_300_random_flat_frameworks():
         assert theirs == set(ours), trial
 
 
+@pytest.mark.parametrize("which", ["grounded", "preferred"])
+def test_the_engine_matches_on_300_random_frameworks_with_sub_arguments(which):
+    """#287: the engine now carries a defeat up to every argument built on its
+    target, as this solver does, so the two agree on trees, not only on flat
+    frameworks. Each argument keeps its own pramāṇa here, since the engine
+    reads its own tag."""
+    from anvikshiki_v4.argumentation import ArgumentationFramework
+    from anvikshiki_v4.lattice import STATUS_ORDER
+    from anvikshiki_v4.schema_v4 import Argument as EArg, Attack as EAtk
+    from anvikshiki_v4.schema_v4 import Label as ELabel, PramanaType, ProvenanceTag
+
+    rng = random.Random(287)
+    trees = 0
+    for trial in range(300):
+        subs, attacks, pramana, strength, strict = _random_graph(rng, rng.randint(2, 8), flat=False)
+        trees += any(subs.values())
+        af = ArgumentationFramework()
+        for i in subs:
+            af.add_argument(EArg(id=i, conclusion=i, top_rule="r" if subs[i] else None,
+                                 sub_arguments=tuple(subs[i]), is_strict=i in strict,
+                                 tag=ProvenanceTag(pramana_type=PramanaType(pramana[i])),
+                                 status=STATUS_ORDER[strength[i]]))
+        for a in attacks:
+            af.add_attack(EAtk(attacker=a.attacker, target=a.target,
+                               attack_type=a.type, hetvabhasa=a.fallacy))
+        ours = solve_graph(subs, attacks, pramana=pramana, strength=strength, strict=strict)
+        if which == "grounded":
+            theirs = {k: v.value for k, v in af.compute_grounded().items()}
+            assert theirs == {k: v.value for k, v in ours.grounded.items()}, trial
+        else:
+            theirs = {frozenset(k for k, v in e.items() if v == ELabel.IN)
+                      for e in af.compute_preferred()}
+            assert theirs == set(ours.preferred), trial
+    assert trees > 150                         # most frameworks really were trees
+
+
 def test_grounded_out_is_never_credulously_accepted():
     """The theorem the status stage rests on, over trees and flat graphs:
     `OUT in grounded, IN in preferred` cannot happen."""

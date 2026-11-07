@@ -20,6 +20,7 @@ from .advisories import (
     unestablished_scope_advisories,
 )
 from .schema import KnowledgeStore
+from .argumentation import ArgumentationFramework
 from .schema_v4 import EpistemicStatus, Label
 from .t2_compiler_v4 import compile_t2
 from .predicate_contrariness import (
@@ -305,6 +306,27 @@ def af_view(af=None, status_by_conclusion: dict | None = None) -> dict:
         "attacks": attacks,
         "labels": {aid: lbl.value for aid, lbl in labels.items()},
     }
+
+
+def attack_violations(af: ArgumentationFramework, labels: dict) -> list[dict]:
+    """Each attack by an accepted argument, once for every argument it
+    reaches (#287): its target, and everything built on the target. A
+    conclusion that falls because its premise fell is named here too, so the
+    answer does not show it gone with no attack against it."""
+    out = []
+    for atk, reached in af.reaching_attacks():
+        if labels.get(atk.attacker) != Label.IN:
+            continue
+        target_arg = af.arguments.get(reached)
+        if target_arg and not target_arg.conclusion.startswith("_"):
+            out.append({
+                "hetvabhasa": atk.hetvabhasa,
+                "type": atk.attack_type,
+                "attacker": atk.attacker,
+                "target": reached,
+                "target_conclusion": target_arg.conclusion,
+            })
+    return out
 
 
 def accepted_line(conclusion: str, info: dict) -> str:
@@ -608,18 +630,7 @@ class AnvikshikiEngineV4(dspy.Module):
             )
 
         # STEP 7: Collect defeated arguments (hetvābhāsas)
-        violations = []
-        for atk in af.attacks:
-            if labels.get(atk.attacker) == Label.IN:
-                target_arg = af.arguments.get(atk.target)
-                if target_arg and not target_arg.conclusion.startswith("_"):
-                    violations.append({
-                        "hetvabhasa": atk.hetvabhasa,
-                        "type": atk.attack_type,
-                        "attacker": atk.attacker,
-                        "target": atk.target,
-                        "target_conclusion": target_arg.conclusion,
-                    })
+        violations = attack_violations(af, labels)
 
         # STEP 8: Synthesize response
         advisories = collect_advisories(self.ks, af, labels, grounding)
@@ -839,18 +850,7 @@ class AnvikshikiEngineV4(dspy.Module):
                 conc, info["status"],
             )
 
-        violations = []
-        for atk in af.attacks:
-            if labels.get(atk.attacker) == Label.IN:
-                target_arg = af.arguments.get(atk.target)
-                if target_arg and not target_arg.conclusion.startswith("_"):
-                    violations.append({
-                        "hetvabhasa": atk.hetvabhasa,
-                        "type": atk.attack_type,
-                        "attacker": atk.attacker,
-                        "target": atk.target,
-                        "target_conclusion": target_arg.conclusion,
-                    })
+        violations = attack_violations(af, labels)
 
         # STEP 8: Synthesize
         #
