@@ -1915,8 +1915,8 @@ without anyone noticing.
 | Command | What it does |
 |---|---|
 | `python -m occam measure --v1 …` / `ask --v1 …` | Runs v1. Refuses any flag that would change it, even one set to v1's own value. |
-| `python -m occam frozen DIR` | For each stored run: whether it was made under v1, and whether it replays to its stored answer. Exits 0 only when every run is both. |
-| `python -m occam calibrate …` | Refuses a labelled answer not made under v1. `--any-pipeline` lets it through, and prints how many came from elsewhere. |
+| `python -m occam frozen DIR` | For each stored run: whether it was made under v1, and whether it replays to its stored answer. Exits 0 only when every run is both. A run handed its pages (a control) is compared with v1 at 0 web and 0 fact-check sources and reads "v1 on given pages" (#279). |
+| `python -m occam calibrate …` | Refuses a labelled answer not made under v1, and one made on given pages. `--any-pipeline` lets it through, and prints how many came from elsewhere. |
 
 The settings check, against run 14 and run 13 on 2026-11-03:
 - run 14 gave "20 of 20 made under Occam v1; 20 of 20 replay to their stored answer";
@@ -2078,3 +2078,19 @@ ran on v1.
 under v1 (`traces/occam/obs-280-controls/`, made only to observe this, not counted
 as the pilot's controls) gave the same four results. The provider counted 1.54
 credits and the balance fell by 1.54 (7178.10 → 7176.56).
+
+**Added 2026-11-07 (#279).** The caveat above is settled for new runs. An artifact
+now records the URLs it was handed (`given_urls`), and `frozen` compares such a
+run with v1 at 0 web and 0 fact-check sources. No setting, prompt or reading rule
+changed, so this is still v1. A third control run, at commit a5a82d5
+(`traces/occam/obs-279-controls/`, made only to observe this and not counted as
+the pilot's controls), gave the same four results, and `frozen` said "4 of 4 made
+under Occam v1; 4 of 4 replay to their stored answer; 4 of 4 on pages they were
+given". The provider counted 1.55 credits and the balance fell by 1.55
+(7176.56 → 7175.01).
+
+The pilot's own controls were not rewritten, because stored artifacts are never
+edited. `frozen` still says "0 of 4" on `traces/occam/pilot1-controls/`, so for
+those four files the command's own line above stays the record. `calibrate` still
+refuses a run on given pages: labels describe v1 gathering its own pages, not v1
+reading a page someone chose.
