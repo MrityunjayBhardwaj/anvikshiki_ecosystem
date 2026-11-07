@@ -30,7 +30,7 @@ def test_vada_returns_grounded():
 def test_jalpa_returns_preferred():
     cm = ContestationManager()
     af = _simple_af()
-    result = cm.jalpa(af, timeout_seconds=5.0)
+    result = cm.jalpa(af)
     assert len(result.preferred_extensions) >= 1
 
 

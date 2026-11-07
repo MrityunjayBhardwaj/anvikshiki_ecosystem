@@ -112,7 +112,7 @@ print(f"Accepted: {list(vada.accepted.keys())}")
 print(f"Open questions: {vada.open_questions}")
 
 # Adversarial stress test — what could be challenged?
-jalpa = cm.jalpa(af, timeout_seconds=10.0)
+jalpa = cm.jalpa(af)
 print(f"Defensible: {jalpa.defensible_positions}")
 
 # Vulnerability audit — where are the weaknesses?

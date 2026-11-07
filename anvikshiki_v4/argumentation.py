@@ -10,11 +10,28 @@ References:
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from itertools import combinations
+from typing import Mapping, Optional
 from .schema_v4 import (
     Argument, Attack, Label, ProvenanceTag, EpistemicStatus
 )
 from .lattice import BOUND_ASSERTED, join, rank
+
+# Preferred semantics is exponential in the grounded-UNDECIDED arguments. Past
+# this many it is not computed, and the result says so. Occam's solver holds
+# the same limit, and a law holds the two solvers' answers equal.
+MAX_UNDECIDED = 16
+
+
+def _admissible(s: frozenset[str], defeaters: Mapping[str, set[str]]) -> bool:
+    """Conflict-free over defeats, and every defeater of a member is defeated
+    by some member."""
+    for aid in s:
+        if defeaters[aid] & s:
+            return False
+        if any(not defeaters[d] & s for d in defeaters[aid]):
+            return False
+    return True
 
 
 @dataclass
@@ -272,113 +289,63 @@ class ArgumentationFramework:
 
     # ── Preferred Semantics (Phase 4) ──
 
-    def compute_preferred(
-        self, timeout_seconds: float = 30.0
-    ) -> list[dict[str, Label]]:
+    def compute_preferred(self) -> Optional[list[dict[str, Label]]]:
         """
-        Compute preferred extensions (maximally admissible sets).
-        NP-hard — for offline jalpa analysis only.
+        Preferred extensions: the maximal admissible sets, over defeats.
+        Exponential in the undecided arguments, so for offline jalpa only.
 
-        Falls back to grounded extension if timeout exceeded.
+        Conflict and defence are both read from defeats, as the grounded
+        labelling is, because that is the framework ASPIC+ builds: an attack
+        that does not succeed is not a conflict. Read from attacks instead,
+        the grounded extension itself can fail to be conflict-free (#153).
+
+        Each extension is a labelling of every argument: IN if a member, OUT
+        if a member defeats it, otherwise UNDECIDED.
+
+        Returns None past MAX_UNDECIDED undecided arguments: not computed,
+        which must not read as "these are all of them".
         """
-        import time
-        start = time.time()
-
         grounded = self.compute_grounded()
-        grounded_in = {
-            aid for aid, lbl in grounded.items() if lbl == Label.IN
-        }
-
-        # Start from grounded extension and try to extend
-        extensions = []
-        self._enumerate_preferred(
-            grounded_in, set(), extensions, start, timeout_seconds
+        undecided = sorted(
+            aid for aid, lbl in grounded.items() if lbl == Label.UNDECIDED
         )
+        if len(undecided) > MAX_UNDECIDED:
+            return None
+        base = frozenset(
+            aid for aid, lbl in grounded.items() if lbl == Label.IN
+        )
+        defeaters = {aid: self._defeaters(aid) for aid in self.arguments}
 
-        if not extensions:
-            # Timeout or no additional extensions — return grounded
-            return [grounded]
+        # Every preferred extension contains the grounded extension and
+        # excludes what it labels OUT, so only the undecided are searched.
+        # Largest first: a set found at a size is maximal unless it sits
+        # inside one already found.
+        found: list[frozenset[str]] = []
+        for size in range(len(undecided), -1, -1):
+            for combo in combinations(undecided, size):
+                candidate = base | frozenset(combo)
+                if any(candidate <= f for f in found):
+                    continue
+                if _admissible(candidate, defeaters):
+                    found.append(candidate)
 
-        # Convert sets to label dicts
-        results = []
-        for ext in extensions:
-            labeling = {}
-            for aid in self.arguments:
-                if aid in ext:
-                    labeling[aid] = Label.IN
-                elif any(
-                    a in ext for a in self._attackers_of.get(aid, [])
-                ):
-                    labeling[aid] = Label.OUT
-                else:
-                    labeling[aid] = Label.UNDECIDED
-            results.append(labeling)
+        return [
+            {
+                aid: Label.IN if aid in ext
+                else Label.OUT if defeaters[aid] & ext
+                else Label.UNDECIDED
+                for aid in self.arguments
+            }
+            for ext in sorted(found, key=sorted)
+        ]
 
-        return results
-
-    def _enumerate_preferred(
-        self, current: set, tried: set,
-        results: list, start: float, timeout: float
-    ):
-        """Backtracking search for maximal admissible supersets."""
-        import time
-        if time.time() - start > timeout:
-            return
-
-        # Check if current is admissible
-        if not self._is_admissible(current):
-            return
-
-        # Try extending with each UNDECIDED argument
-        extended = False
-        for aid in self.arguments:
-            if aid in current or aid in tried:
-                continue
-            if time.time() - start > timeout:
-                break
-            candidate = current | {aid}
-            if self._is_admissible(candidate):
-                self._enumerate_preferred(
-                    candidate, tried | {aid}, results, start, timeout
-                )
-                extended = True
-            tried.add(aid)
-
-        if not extended:
-            # Current is maximal admissible
-            if current not in [set(r) for r in results]:
-                results.append(current.copy())
-
-    def _is_admissible(self, s: set) -> bool:
-        """Check if set s is conflict-free and defends all its members."""
-        # Conflict-free: no two arguments in s attack each other
-        for aid in s:
-            for attacker_id in self._attackers_of.get(aid, []):
-                if attacker_id in s:
-                    return False
-
-        # Defends all members: for every defeating attacker of s-member,
-        # some s-member counter-defeats it
-        for aid in s:
-            for atk in self._attacks_on.get(aid, []):
-                attacker = self.arguments[atk.attacker]
-                target = self.arguments[aid]
-                if not self._defeats(attacker, target, atk):
-                    continue  # Attack doesn't succeed as defeat
-                # Need some s-member to defeat the attacker
-                defended = False
-                for defender_id in s:
-                    for def_atk in self._attacks_on.get(atk.attacker, []):
-                        if def_atk.attacker == defender_id:
-                            defender = self.arguments[defender_id]
-                            if self._defeats(defender, attacker, def_atk):
-                                defended = True
-                                break
-                    if defended:
-                        break
-                if not defended:
-                    return False
-        return True
+    def _defeaters(self, aid: str) -> set[str]:
+        """The arguments whose attack on `aid` succeeds as a defeat."""
+        target = self.arguments[aid]
+        return {
+            atk.attacker for atk in self._attacks_on.get(aid, [])
+            if self._defeats(self.arguments[atk.attacker], target, atk)
+        }
 
     # ── Stable Semantics (Phase 4) ──
 

@@ -8,7 +8,8 @@ Vitaṇḍā (pure critique)     → stable semantics   → coNP-hard (offline)
 """
 
 from dataclasses import dataclass, field
-from .argumentation import ArgumentationFramework
+from typing import Optional
+from .argumentation import MAX_UNDECIDED, ArgumentationFramework
 from .schema_v4 import (
     ProvenanceTag, PramanaType, Label, Argument, Attack, EpistemicStatus
 )
@@ -26,9 +27,11 @@ class VadaResult:
 @dataclass
 class JalpaResult:
     """Result of adversarial stress-testing (preferred semantics)."""
-    preferred_extensions: list[dict[str, Label]]
-    defensible_positions: list[str]  # IN preferred but OUT grounded
+    # Both None: too many undecided arguments to compute, said in preferred_note.
+    preferred_extensions: Optional[list[dict[str, Label]]]
+    defensible_positions: Optional[list[str]]  # IN some preferred, not IN grounded
     counter_arguments: dict[str, list[str]]  # conclusion → attack summaries
+    preferred_note: str = ""
 
 
 @dataclass
@@ -80,20 +83,20 @@ class ContestationManager:
             ),
         )
 
-    def jalpa(
-        self, af: ArgumentationFramework, timeout_seconds: float = 30.0
-    ) -> JalpaResult:
+    def jalpa(self, af: ArgumentationFramework) -> JalpaResult:
         """Adversarial disputation — preferred semantics (NP-hard, offline)."""
         grounded = af.compute_grounded()
         grounded_in = {
             aid for aid, lbl in grounded.items() if lbl == Label.IN
         }
 
-        preferred = af.compute_preferred(timeout_seconds=timeout_seconds)
+        preferred = af.compute_preferred()
 
-        # Find defensible positions: IN in some preferred but OUT in grounded
+        # Find defensible positions: IN in some preferred but not in grounded.
+        # Grounded UNDECIDED, always: what grounded labels OUT is in no
+        # preferred extension.
         defensible = set()
-        for ext in preferred:
+        for ext in preferred or ():
             for aid, lbl in ext.items():
                 if lbl == Label.IN and aid not in grounded_in:
                     arg = af.arguments[aid]
@@ -121,8 +124,12 @@ class ContestationManager:
 
         return JalpaResult(
             preferred_extensions=preferred,
-            defensible_positions=sorted(defensible),
+            defensible_positions=None if preferred is None else sorted(defensible),
             counter_arguments=counter_args,
+            preferred_note="" if preferred is not None else (
+                f"preferred not computed: more than {MAX_UNDECIDED} "
+                f"undecided arguments"
+            ),
         )
 
     def vitanda(

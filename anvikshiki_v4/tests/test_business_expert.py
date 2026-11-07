@@ -359,7 +359,7 @@ class TestContestationProtocols:
         """Jalpa (preferred) should produce at least one extension."""
         af = compile_t2(business_ks, growing_startup_facts)
         cm = ContestationManager()
-        result = cm.jalpa(af, timeout_seconds=5.0)
+        result = cm.jalpa(af)
 
         assert len(result.preferred_extensions) >= 1
         # Should identify counter-arguments for the value_creation conflict
