@@ -179,6 +179,32 @@ def test_grounded_matches_the_engine_on_300_random_flat_frameworks():
         assert {k: v.value for k, v in ours.items()} == theirs, trial
 
 
+def test_preferred_matches_the_engine_on_300_random_flat_frameworks():
+    """#153: two implementations, one answer. Random frameworks at seed 11 are
+    the population the engine's old search failed on 25 of 300 times."""
+    from anvikshiki_v4.argumentation import ArgumentationFramework
+    from anvikshiki_v4.lattice import STATUS_ORDER
+    from anvikshiki_v4.schema_v4 import Argument as EArg, Attack as EAtk
+    from anvikshiki_v4.schema_v4 import Label as ELabel, PramanaType, ProvenanceTag
+
+    rng = random.Random(11)
+    for trial in range(300):
+        subs, attacks, pramana, strength, strict = _random_graph(rng, rng.randint(2, 8), flat=True)
+        af = ArgumentationFramework()
+        for i in subs:
+            af.add_argument(EArg(id=i, conclusion=i, top_rule="r", is_strict=i in strict,
+                                 tag=ProvenanceTag(pramana_type=PramanaType(pramana[i])),
+                                 status=STATUS_ORDER[strength[i]]))
+        for a in attacks:
+            af.add_attack(EAtk(attacker=a.attacker, target=a.target,
+                               attack_type=a.type, hetvabhasa=a.fallacy))
+        theirs = {frozenset(k for k, v in e.items() if v == ELabel.IN)
+                  for e in af.compute_preferred()}
+        ours = solve_graph(subs, attacks, pramana=pramana, strength=strength,
+                           strict=strict).preferred
+        assert theirs == set(ours), trial
+
+
 def test_grounded_out_is_never_credulously_accepted():
     """The theorem the status stage rests on, over trees and flat graphs:
     `OUT in grounded, IN in preferred` cannot happen."""

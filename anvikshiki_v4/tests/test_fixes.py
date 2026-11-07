@@ -260,7 +260,7 @@ class TestPreferredWithNewDefeats:
         af.add_argument(_make_arg("A0", "p"))
         af.add_argument(_make_arg("A1", "q"))
         af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
-        preferred = af.compute_preferred(timeout_seconds=5.0)
+        preferred = af.compute_preferred()
         grounded = af.compute_grounded()
         grounded_in = {a for a, l in grounded.items() if l == Label.IN}
         for ext in preferred:
@@ -273,7 +273,7 @@ class TestPreferredWithNewDefeats:
         af.add_argument(_make_arg("A0", "p", pramana=PramanaType.PRATYAKSA))
         af.add_argument(_make_arg("A1", "_uc", pramana=PramanaType.UPAMANA))
         af.add_attack(Attack("A1", "A0", "undercutting", "savyabhicara"))
-        preferred = af.compute_preferred(timeout_seconds=5.0)
+        preferred = af.compute_preferred()
         # A1 should be IN in all preferred extensions (undercutting always succeeds)
         for ext in preferred:
             assert ext.get("A1") == Label.IN

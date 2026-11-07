@@ -69,7 +69,7 @@ print(f"Open questions: {vada.open_questions}")
 print(f"Suggested evidence: {vada.suggested_evidence}")
 
 # Jalpa — adversarial stress test (what could be challenged?)
-jalpa = cm.jalpa(af, timeout_seconds=10.0)
+jalpa = cm.jalpa(af)
 print(f"Defensible positions: {jalpa.defensible_positions}")
 print(f"Counter-arguments: {jalpa.counter_arguments}")
 

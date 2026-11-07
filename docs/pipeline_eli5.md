@@ -858,7 +858,7 @@ Three attack types, each a direct implementation of the Nyāya-to-ASPIC+ mapping
 
 **Implementation:** The engine supports all three:
 - `compute_grounded()` → vāda (default, polynomial, used for routine queries)
-- `compute_preferred()` → jalpa (NP-hard, for stress-testing — `argumentation.py:200-242`)
+- `compute_preferred()` → jalpa (NP-hard, for stress-testing; says when it was not computed — `ArgumentationFramework.compute_preferred`)
 - `compute_stable()` → vitaṇḍā (coNP-hard, for formal audit — `argumentation.py:310-327`)
 
 **Thesis (§8.6, line 942):** "The cost hierarchy matches the use case hierarchy: routine queries are cheap, deep analysis is expensive, and exhaustive audit is most expensive."
