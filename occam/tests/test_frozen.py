@@ -146,6 +146,67 @@ def test_frozen_fails_on_one_run_from_elsewhere_or_one_that_no_longer_replays(tm
     assert said in capsys.readouterr().out
 
 
+def _given(path, given_urls=("https://a.test/1",), web=0, factcheck=0):
+    """A v1 run's file, as a run handed `given_urls` would record it."""
+    ans, art = ask(AGREE, NO_ATTACKS)
+    art = art.model_copy(update={"given_urls": given_urls, "params": art.params.model_copy(update={
+        "model": V1.model, "web_sources": web, "factcheck_sources": factcheck})})
+    path.write_text(stored_run(ans, art))
+
+
+def test_no_searches_are_not_v1_unless_the_artifact_says_its_pages_were_given(tmp_path, capsys):
+    """#279: 0 and 0 with no pages given is a run whose searches were off. It
+    reads as an older control does, because nothing says otherwise."""
+    _given(tmp_path / "q01.json", given_urls=())
+    assert cli.main(["frozen", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "q01.json: NOT v1; replay matches — web_sources: v1 3, this 0" in out
+    assert "0 of 1 on pages they were given" in out
+
+
+def test_a_run_given_its_pages_that_still_records_searches_is_not_v1(tmp_path, capsys):
+    """Given pages move v1 to 0 and 0; they do not excuse any other count."""
+    _given(tmp_path / "q01.json", web=3, factcheck=3)
+    assert cli.main(["frozen", str(tmp_path)]) == 1
+    assert "NOT v1 on given pages; replay matches — web_sources: v1 0, this 3" \
+        in capsys.readouterr().out
+
+
+def test_an_artifact_from_before_the_field_reads_as_not_given(tmp_path, capsys):
+    _given(tmp_path / "q01.json", given_urls=())
+    stored = json.loads((tmp_path / "q01.json").read_text())
+    del stored["artifact"]["given_urls"]
+    (tmp_path / "q01.json").write_text(json.dumps(stored))
+    assert cli.main(["frozen", str(tmp_path)]) == 1
+    assert "0 of 1 on pages they were given" in capsys.readouterr().out
+
+
+def test_given_pages_do_not_change_the_answer_a_run_replays_to(tmp_path, capsys):
+    _given(tmp_path / "q01.json")
+    assert cli.main(["frozen", str(tmp_path)]) == 0
+    assert "q01.json: v1 on given pages; replay matches" in capsys.readouterr().out
+
+
+def test_ask_given_a_url_says_it_ran_v1_on_the_page_it_was_given(monkeypatch, tmp_path, capsys):
+    """`ask --url` with v1's own settings is the other door to a given page.
+    `--v1` refuses `--url`, so this door is reached with the settings spelled."""
+    from occam.answer import run as real_run
+    from occam.tests.test_controls import _Abstains
+    monkeypatch.setattr(om, "make_model", lambda spec: _Abstains(spec))
+    monkeypatch.setattr(cli, "run", lambda q, m, **kw: real_run(
+        q, m, http_get=lambda url: (200, "text/plain; charset=utf-8", b"a page"), **kw))
+    out = tmp_path / "a.json"
+    assert cli.main(["ask", "q?", "--url", "https://a.test/1", "--model", V1.model,
+                     "--factcheck", "0", "--out", str(out)]) == 0
+    assert "made under Occam v1, on the pages it was given" in capsys.readouterr().out
+    assert json.loads(out.read_text())["artifact"]["given_urls"] == ["https://a.test/1"]
+
+
+def test_v1_line_says_nothing_of_given_pages_on_a_run_that_gathered_its_own():
+    _, art = ask(AGREE, NO_ATTACKS)
+    assert cli._v1_line(art.model_copy(update={"params": V1})) == "made under Occam v1"
+
+
 def test_frozen_fails_on_an_empty_directory(tmp_path):
     assert cli.main(["frozen", str(tmp_path)]) == 1
 
@@ -172,6 +233,18 @@ def test_calibrate_refuses_an_answer_not_made_under_v1(tmp_path, capsys):
 def test_calibrate_accepts_v1_answers_and_counts_zero_from_elsewhere(tmp_path, capsys):
     assert cli.main(_labels(tmp_path, 4, 0)) == 0
     assert "labelled answers not made under Occam v1: 0 of 4" in capsys.readouterr().out
+
+
+def test_calibrate_refuses_a_v1_run_on_given_pages(tmp_path, capsys):
+    """#279: `frozen` calls it v1 on given pages, and that is v1's reading of a
+    page someone chose, not v1's gathering. Labels describe v1 as it gathers."""
+    f = tmp_path / "control.json"
+    _given(f)
+    (tmp_path / "labels.jsonl").write_text(json.dumps({"artifact": str(f), "label": "hypothesis"}))
+    assert cli.main(["calibrate", str(tmp_path / "labels.jsonl"), "--population", "test",
+                     "--out", str(tmp_path / "cal.json")]) == 2
+    assert "not made under Occam v1 (web_sources: v1 3, this 0" in capsys.readouterr().err
+    assert not (tmp_path / "cal.json").exists()
 
 
 def test_any_pipeline_lets_them_through_and_says_how_many(tmp_path, capsys):

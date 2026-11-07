@@ -483,42 +483,47 @@ def _params(args: argparse.Namespace) -> Params:
                   web_sources=args.web, factcheck_sources=args.factcheck)
 
 
-def _differ(kept: Params, mine: Params, names: tuple[str, str] = ("kept", "this")) -> list[str]:
+def _differ(kept: Params, mine: Params) -> list[str]:
     """Each setting a kept artifact recorded that this pass would record
-    differently, as "field: kept X, this Y" (or under the `names` given)."""
-    return [f"{f}: {names[0]} {getattr(kept, f)!r}, {names[1]} {getattr(mine, f)!r}"
+    differently, as "field: kept X, this Y"."""
+    return [f"{f}: kept {getattr(kept, f)!r}, this {getattr(mine, f)!r}"
             for f in Params.model_fields if getattr(kept, f) != getattr(mine, f)]
 
 
 def _v1_line(art: Artifact) -> str:
     """Whether a run was made under Occam v1, said every time."""
     from .frozen import made_under_v1
-    off = made_under_v1(art.params)
-    return "made under Occam v1" if not off else \
-        f"NOT made under Occam v1: {'; '.join(off)}"
+    off = made_under_v1(art.params, given_pages=bool(art.given_urls))
+    if off:
+        return f"NOT made under Occam v1: {'; '.join(off)}"
+    return "made under Occam v1, on the pages it was given" if art.given_urls \
+        else "made under Occam v1"
 
 
 def _frozen(directory: Path) -> int:
     """Each stored run in DIR: made under v1 or not, and whether it replays to
-    its stored answer. Exit 0 only when every one is v1 and replays."""
+    its stored answer. Exit 0 only when every one is v1 and replays. A run
+    handed its pages is said to be, each time and in the count (#279)."""
     from .frozen import made_under_v1
     files = sorted(directory.glob("*.json"))
-    v1 = replays = 0
+    v1 = replays = given = 0
     for f in files:
         stored = json.loads(f.read_text())
         if "artifact" not in stored:
             print(f"{f.name}: not a stored run")
             continue
         art = Artifact.model_validate(stored["artifact"])
-        off = made_under_v1(art.params)
+        off = made_under_v1(art.params, given_pages=bool(art.given_urls))
         same = canonical(replay(art)) == json.dumps(stored["answer"], sort_keys=True,
                                                     ensure_ascii=False)
         v1 += not off
         replays += same
-        print(f"{f.name}: {'v1' if not off else 'NOT v1'}; replay "
+        given += bool(art.given_urls)
+        pages = " on given pages" if art.given_urls else ""
+        print(f"{f.name}: {'v1' if not off else 'NOT v1'}{pages}; replay "
               f"{'matches' if same else 'DIFFERS'}" + (f" — {'; '.join(off)}" if off else ""))
     print(f"\n{v1} of {len(files)} made under Occam v1; {replays} of {len(files)} replay to "
-          f"their stored answer")
+          f"their stored answer; {given} of {len(files)} on pages they were given")
     return 0 if files and v1 == replays == len(files) else 1
 
 
@@ -704,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "controls":
         from .controls import CONTROLS, run_control, verdict
-        from .frozen import V1
+        from .frozen import V1, made_under_v1
         from .model import make_model
         refused = _settle(args)
         if refused:
@@ -716,10 +721,6 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         model = make_model(args.model)
         params = V1 if args.v1 else Params(judge_same=not args.no_judge_same)
-        # A control's only source is its planted page, so it records 0 web and
-        # 0 fact-check sources whatever it was given; v1 for a control is v1's
-        # params as a run given only that page records them (#278).
-        v1_here = recorded_params(V1, V1.model, web=False, factcheck=False)
         outdir.mkdir(parents=True, exist_ok=True)
         results = []
         for c in CONTROLS:
@@ -740,7 +741,9 @@ def main(argv: list[str] | None = None) -> int:
                   f"(verified {vf.n:g} of {vf.of} quotes)")
             if not r.passed:
                 print(f"{'':13} → {c.failure_means}")
-        off = {r.name: _differ(r.artifact.params, v1_here, ("this", "v1")) for r in results}
+        # Read from what each artifact recorded, as `frozen` reads it (#279).
+        off = {r.name: made_under_v1(r.artifact.params,
+                                     given_pages=bool(r.artifact.given_urls)) for r in results}
         print("\n" + ("made under Occam v1, the planted page as each control's only source: "
                       f"{len(results)} of {len(results)}" if not any(off.values()) else
                       "NOT made under Occam v1: " + "; ".join(

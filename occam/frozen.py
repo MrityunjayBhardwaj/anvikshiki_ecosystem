@@ -6,7 +6,11 @@ v1 is named here, once, in two halves:
 
 - `V1`, the settings a run records in its artifact. `made_under_v1` lists
   every one an artifact holds that differs, so an artifact from another
-  pipeline says so instead of passing for v1.
+  pipeline says so instead of passing for v1. A run handed its pages (a
+  control, #279) has no searches to count, so it is compared with v1 at 0 web
+  and 0 fact-check sources; the artifact's `given_urls` says it was handed
+  them. Such a run is v1's reading of those pages, not v1's gathering, so a
+  calibration still refuses it.
 - `V1_PROMPTS`, the sha256 of every prompt the model is sent, rendered on the
   fixed inputs in `rendered_prompts`. The text lives in the code and is not
   stored in any artifact, so an edit to it would change what the model is
@@ -32,7 +36,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from .answer import Params
+from .answer import Params, recorded_params
 from .argue import argue_from_replies, argue_prompt
 from .attack import attack_prompt
 from .covers import CoverPair, covers_prompt
@@ -59,10 +63,12 @@ def _settings(p: Params) -> dict[str, Any]:
     return {f: getattr(p, f) for f in Params.model_fields}
 
 
-def made_under_v1(params: Params) -> list[str]:
+def made_under_v1(params: Params, *, given_pages: bool = False) -> list[str]:
     """Each stored setting that differs from v1, as "field: v1 X, this Y".
-    Empty means the artifact was made under v1's settings."""
-    v1, mine = _settings(V1), _settings(params)
+    Empty means the artifact was made under v1's settings. With `given_pages`,
+    v1 is what v1 records when it is handed its pages and searches for none."""
+    v1 = recorded_params(V1, V1.model, web=not given_pages, factcheck=not given_pages)
+    v1, mine = _settings(v1), _settings(params)
     return [f"{f}: v1 {v1[f]!r}, this {mine[f]!r}" for f in v1 if mine[f] != v1[f]]
 
 

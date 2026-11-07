@@ -292,6 +292,11 @@ class Artifact(BaseModel):
     # no call was made. Audit only, like same_judged_at.
     served_by: Optional[tuple[str, ...]] = None
     same_served_by: Optional[tuple[str, ...]] = None
+    # The URLs the run was handed instead of searching (#279). A run given its
+    # pages records 0 web and 0 fact-check sources, which alone reads like a
+    # run whose searches were turned off; this says which it was. Empty: it
+    # gathered its own, or it predates the field. Replay ignores it.
+    given_urls: tuple[str, ...] = ()
 
     @model_validator(mode="before")
     @classmethod
@@ -411,7 +416,8 @@ def run(question: str, model: Model, *, urls: Optional[Sequence[str]] = None,
                         reason_replies=tuple(reason_replies),
                         cover_replies=tuple(cover_replies),
                         same_judged_at=as_of if params.judge_same else None,
-                        served_by=_served_since(model, start))
+                        served_by=_served_since(model, start),
+                        given_urls=tuple(urls or ()))
     return replay(artifact, calibration), artifact
 
 
