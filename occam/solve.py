@@ -23,9 +23,10 @@ was built from.
 Attacks on sub-arguments (ASPIC+ proper)
 ────────────────────────────────────────
 An attack on B′ is an attack on every argument that contains B′, and whether
-it succeeds is decided against B′. The engine's frameworks are flat, so it
-never needed this; Occam's derivations are trees, and without it a rebutted
-premise would leave the inference built on it standing.
+it succeeds is decided against B′. Without it a rebutted premise would leave
+the inference built on it standing. The engine once lacked it, and a
+conclusion stood on a premise the question also denied; it now does the same
+(#287), and a law holds the two equal on trees.
 
 Two semantics, because the difference is a finding
 ──────────────────────────────────────────────────

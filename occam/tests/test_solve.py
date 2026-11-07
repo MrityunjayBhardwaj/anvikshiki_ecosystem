@@ -155,8 +155,8 @@ def _random_graph(rng, n, flat):
 
 
 def test_grounded_matches_the_engine_on_300_random_flat_frameworks():
-    """The copy is held to the original. The engine's frameworks are flat, so
-    the comparison is over flat ones; lifting is Occam's own and tested above."""
+    """The copy is held to the original on flat frameworks. Trees are held
+    equal by the law below, since the engine carries defeats up too (#287)."""
     from anvikshiki_v4.argumentation import ArgumentationFramework
     from anvikshiki_v4.lattice import STATUS_ORDER
     from anvikshiki_v4.schema_v4 import Argument as EArg, Attack as EAtk
