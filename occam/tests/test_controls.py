@@ -254,7 +254,7 @@ def test_controls_without_v1_say_they_are_not_v1(monkeypatch, tmp_path, capsys):
     main(["controls", "--out", str(tmp_path)])
     assert built == ["z-ai/glm-5.2"]                      # the default it always had
     out = capsys.readouterr().out
-    assert "NOT made under Occam v1: positive: model: this 'z-ai/glm-5.2', v1 'kie/gemini-3-pro'" in out
+    assert "NOT made under Occam v1: positive: model: v1 'kie/gemini-3-pro', this 'z-ai/glm-5.2'" in out
 
 
 @pytest.mark.parametrize("flag", [["--no-judge-same"], ["--model", "kie/gpt-5-2"]])
@@ -280,6 +280,41 @@ def test_controls_v1_run_v1s_params_not_todays_defaults(monkeypatch, tmp_path):
     art = Artifact.model_validate(json.loads((tmp_path / "control-positive.json")
                                              .read_text())["artifact"])
     assert art.params.t_argue == 0.5
+
+
+# ── a stored control says its page was given (#279) ────────
+
+def test_a_control_records_the_page_it_was_given_and_frozen_reads_it_as_v1(monkeypatch, tmp_path,
+                                                                           capsys):
+    """`controls --v1` and `frozen` read the same files and must say the same."""
+    from occam.__main__ import main
+    from occam.answer import Artifact
+    from occam.controls import PLANTED_URL
+    _cli(monkeypatch)
+    main(["controls", "--v1", "--out", str(tmp_path)])
+    capsys.readouterr()
+    for c in CONTROLS:
+        art = Artifact.model_validate(json.loads((tmp_path / f"control-{c.name}.json")
+                                                 .read_text())["artifact"])
+        assert art.given_urls == (PLANTED_URL.format(name=c.name),)
+    assert main(["frozen", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "control-positive.json: v1 on given pages; replay matches" in out
+    assert "4 of 4 made under Occam v1; 4 of 4 replay to their stored answer; " \
+           "4 of 4 on pages they were given" in out
+
+
+def test_frozen_still_names_what_differs_in_a_control_not_made_under_v1(monkeypatch, tmp_path,
+                                                                        capsys):
+    from occam.__main__ import main
+    _cli(monkeypatch)
+    main(["controls", "--out", str(tmp_path)])
+    capsys.readouterr()
+    assert main(["frozen", str(tmp_path)]) == 1
+    out = capsys.readouterr().out
+    assert "control-positive.json: NOT v1 on given pages; replay matches — " \
+           "model: v1 'kie/gemini-3-pro', this 'z-ai/glm-5.2'" in out
+    assert "web_sources" not in out                       # 0 is v1's, on given pages
 
 
 # ── what a control run cost (#280) ─────────────────────────
