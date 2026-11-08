@@ -209,8 +209,8 @@ class Argument:
     Premise arguments: top_rule=None, conclusion=predicate, sub_arguments=()
     Rule arguments: top_rule=vyapti_id, sub_arguments=(sub_arg_ids...), all
         of which the rule needs
-    Scope undercutters: top_rule=None, sub_arguments=(the best arguments for
-        the excluding fact), any one of which carries it
+    Scope undercutters: top_rule=None, sub_arguments=(one argument for the
+        excluding fact) — one undercutter per such argument (#255)
     """
     id: str
     conclusion: str                    # Predicate concluded
