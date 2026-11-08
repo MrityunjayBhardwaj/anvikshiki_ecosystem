@@ -369,7 +369,7 @@ class TestContestationProtocols:
         """Vitaṇḍā (stable) should identify vulnerabilities."""
         af = compile_t2(business_ks, growing_startup_facts)
         cm = ContestationManager()
-        result = cm.vitanda(af, timeout_seconds=5.0)
+        result = cm.vitanda(af)
 
         # Should identify vulnerability for value_creation (attacked by V11)
         assert len(result.vulnerability_inventory) >= 1

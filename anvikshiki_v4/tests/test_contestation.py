@@ -45,7 +45,7 @@ def test_vitanda_returns_vulnerabilities():
     ))
     af.add_attack(Attack("A1", "A0", "rebutting", "viruddha"))
     af.add_attack(Attack("A0", "A1", "rebutting", "viruddha"))
-    result = cm.vitanda(af, timeout_seconds=5.0)
+    result = cm.vitanda(af)
     assert "p" in result.vulnerability_inventory or \
            "not_p" in result.vulnerability_inventory
 
