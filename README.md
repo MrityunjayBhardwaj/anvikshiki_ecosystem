@@ -116,7 +116,7 @@ jalpa = cm.jalpa(af)
 print(f"Defensible: {jalpa.defensible_positions}")
 
 # Vulnerability audit — where are the weaknesses?
-vitanda = cm.vitanda(af, timeout_seconds=10.0)
+vitanda = cm.vitanda(af)
 print(f"Vulnerabilities: {list(vitanda.vulnerability_inventory.keys())}")
 ```
 

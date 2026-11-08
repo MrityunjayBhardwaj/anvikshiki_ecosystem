@@ -346,73 +346,22 @@ class ArgumentationFramework:
 
     # ── Stable Semantics (Phase 4) ──
 
-    def compute_stable(
-        self, timeout_seconds: float = 60.0
-    ) -> list[dict[str, Label]]:
+    def compute_stable(self) -> Optional[list[dict[str, Label]]]:
         """
-        Compute stable extensions (conflict-free sets attacking everything outside).
-        coNP-hard — for formal vitaṇḍā audit only.
+        Stable extensions: conflict-free sets that defeat every argument
+        outside them, over `defeat_map` as grounded and preferred are (#284).
+        For offline vitaṇḍā audit only.
 
-        Returns list of labelings. May be empty if no stable extension exists.
+        Every stable extension is preferred, and a preferred extension is
+        stable exactly when it leaves nothing UNDECIDED, so this reads them
+        off `compute_preferred` and shares its search and its limit. An empty
+        list means there is none (an odd cycle has none); None means past
+        MAX_UNDECIDED it was not computed.
         """
-        import time
-        start = time.time()
-
-        results = []
-        self._enumerate_stable(
-            set(), 0, list(self.arguments.keys()),
-            results, start, timeout_seconds
-        )
-        return results
-
-    def _enumerate_stable(
-        self, current: set, idx: int, all_args: list,
-        results: list, start: float, timeout: float
-    ):
-        """Enumerate-and-check with pruning for stable extensions."""
-        import time
-        if time.time() - start > timeout:
-            return
-
-        if idx == len(all_args):
-            # Check if current is stable: conflict-free + attacks everything outside
-            if not self._is_conflict_free(current):
-                return
-            for aid in all_args:
-                if aid in current:
-                    continue
-                # aid must be attacked by some member of current
-                attacked = any(
-                    a in current
-                    for a in self._attackers_of.get(aid, [])
-                )
-                if not attacked:
-                    return
-            labeling = {}
-            for aid in all_args:
-                labeling[aid] = Label.IN if aid in current else Label.OUT
-            results.append(labeling)
-            return
-
-        aid = all_args[idx]
-        # Try including aid
-        self._enumerate_stable(
-            current | {aid}, idx + 1, all_args,
-            results, start, timeout
-        )
-        # Try excluding aid
-        self._enumerate_stable(
-            current, idx + 1, all_args,
-            results, start, timeout
-        )
-
-    def _is_conflict_free(self, s: set) -> bool:
-        """No two arguments in s attack each other."""
-        for aid in s:
-            for attacker_id in self._attackers_of.get(aid, []):
-                if attacker_id in s:
-                    return False
-        return True
+        preferred = self.compute_preferred()
+        if preferred is None:
+            return None
+        return [e for e in preferred if Label.UNDECIDED not in e.values()]
 
     # ── Contestation Support ──
 

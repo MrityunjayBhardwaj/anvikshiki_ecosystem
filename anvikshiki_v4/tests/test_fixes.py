@@ -171,7 +171,7 @@ class TestVitandaLabelsPreservation:
 
         # Run vitanda — should not permanently change af.labels
         cm = ContestationManager()
-        cm.vitanda(af, timeout_seconds=5.0)
+        cm.vitanda(af)
 
         assert af.labels == original_labels
 

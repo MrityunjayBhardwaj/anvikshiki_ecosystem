@@ -37,9 +37,11 @@ class JalpaResult:
 @dataclass
 class VitandaResult:
     """Result of pure critique / audit (stable semantics)."""
-    stable_extensions: list[dict[str, Label]]
+    # None: too many undecided arguments to compute, said in stable_note.
+    stable_extensions: Optional[list[dict[str, Label]]]
     vulnerability_inventory: dict[str, list[Attack]]  # conclusion → attacks
     undefended: list[str]  # Arguments with no counter-attack to their attackers
+    stable_note: str = ""
 
 
 class ContestationManager:
@@ -132,11 +134,9 @@ class ContestationManager:
             ),
         )
 
-    def vitanda(
-        self, af: ArgumentationFramework, timeout_seconds: float = 60.0
-    ) -> VitandaResult:
+    def vitanda(self, af: ArgumentationFramework) -> VitandaResult:
         """Pure critique — stable semantics (coNP-hard, offline)."""
-        stable = af.compute_stable(timeout_seconds=timeout_seconds)
+        stable = af.compute_stable()
 
         # Vulnerability inventory: all attacks per conclusion
         vuln = {}
@@ -165,6 +165,10 @@ class ContestationManager:
             stable_extensions=stable,
             vulnerability_inventory=vuln,
             undefended=undefended,
+            stable_note="" if stable is not None else (
+                f"stable not computed: more than {MAX_UNDECIDED} "
+                f"undecided arguments"
+            ),
         )
 
     def apply_contestation(

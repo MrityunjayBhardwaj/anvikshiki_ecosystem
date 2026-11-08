@@ -205,7 +205,7 @@ def test_preferred_matches_the_engine_on_300_random_flat_frameworks():
         assert theirs == set(ours), trial
 
 
-@pytest.mark.parametrize("which", ["grounded", "preferred"])
+@pytest.mark.parametrize("which", ["grounded", "preferred", "stable"])
 def test_the_engine_matches_on_300_random_frameworks_with_sub_arguments(which):
     """#287: the engine now carries a defeat up to every argument built on its
     target, as this solver does, so the two agree on trees, not only on flat
@@ -234,10 +234,19 @@ def test_the_engine_matches_on_300_random_frameworks_with_sub_arguments(which):
         if which == "grounded":
             theirs = {k: v.value for k, v in af.compute_grounded().items()}
             assert theirs == {k: v.value for k, v in ours.grounded.items()}, trial
-        else:
+        elif which == "preferred":
             theirs = {frozenset(k for k, v in e.items() if v == ELabel.IN)
                       for e in af.compute_preferred()}
             assert theirs == set(ours.preferred), trial
+        else:
+            # Stable from first principles over this solver's defeats: no
+            # member defeats a member, and members defeat everything outside.
+            beaten = {b: {x for x, y in ours.defeats if y == b} for b in subs}
+            exact = {s for s in ours.preferred
+                     if all(beaten[b] & s for b in subs if b not in s)}
+            theirs = {frozenset(k for k, v in e.items() if v == ELabel.IN)
+                      for e in af.compute_stable()}
+            assert theirs == exact, trial
     assert trees > 150                         # most frameworks really were trees
 
 

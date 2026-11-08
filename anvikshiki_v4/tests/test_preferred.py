@@ -172,3 +172,64 @@ def test_jalpa_names_each_side_of_a_real_dispute_as_defensible():
     # one has to defend it.
     assert result.defensible_positions == ["a", "b"]
     assert result.preferred_note == ""
+
+
+# ── stable extensions read off preferred (#284) ────────────────
+
+def _brute_force_stable(af):
+    ids = list(af.arguments)
+    defeats = {(a.attacker, a.target) for a in af.attacks
+               if af._defeats(af.arguments[a.attacker], af.arguments[a.target], a)}
+    return {frozenset(c) for r in range(len(ids) + 1) for c in combinations(ids, r)
+            if not any((x, y) in defeats for x in c for y in c)
+            and all(any((x, y) in defeats for x in c) for y in ids if y not in c)}
+
+
+def test_stable_extensions_match_brute_force_on_300_random_frameworks():
+    rng = random.Random(284)
+    none = several = 0
+    for trial in range(300):
+        af = _random_af(rng)
+        got = _sets(af.compute_stable())
+        assert got == _brute_force_stable(af), trial
+        none += not got
+        several += len(got) > 1
+    assert none > 0 and several > 10           # the law saw both kinds of framework
+
+
+def test_a_failed_attack_does_not_count_as_defeating_what_is_outside():
+    """Read from attacks, {weak} looked stable: it 'attacked' strong. The
+    rebuttal fails, so the only stable extension holds both."""
+    af = _af([_arg("weak", PramanaType.UPAMANA), _arg("strong", PramanaType.PRATYAKSA)],
+             [("weak", "strong", "rebutting")])
+    assert _sets(af.compute_stable()) == {frozenset({"weak", "strong"})}
+
+
+def test_an_odd_cycle_has_no_stable_extension():
+    af = _af(["a", "b", "c"], [("a", "b", "undercutting"), ("b", "c", "undercutting"),
+                               ("c", "a", "undercutting")])
+    assert af.compute_stable() == []
+
+
+def test_every_stable_extension_labels_every_argument_in_or_out():
+    af = _af(["a", "b", "c"], [("a", "b", "undercutting"), ("b", "a", "undercutting"),
+                               ("b", "c", "undercutting")])
+    stable = af.compute_stable()
+    assert _sets(stable) == {frozenset({"a", "c"}), frozenset({"b"})}
+    assert all(set(e.values()) <= {Label.IN, Label.OUT} for e in stable)
+
+
+def test_a_defeat_on_a_premise_reaches_stable_through_what_is_built_on_it():
+    """S is built on P; X defeats P. S must be outside every stable extension."""
+    af = _af([_arg("P"), _arg("X")], [("X", "P", "undercutting")])
+    af.add_argument(Argument(id="S", conclusion="s", top_rule="r", sub_arguments=("P",),
+                             tag=ProvenanceTag(pramana_type=PramanaType.ANUMANA),
+                             status=EpistemicStatus.HYPOTHESIS))
+    assert _sets(af.compute_stable()) == {frozenset({"X"})}
+
+
+def test_vitanda_says_when_stable_was_not_computed():
+    result = ContestationManager().vitanda(_mutual_pairs(MAX_UNDECIDED // 2 + 1))
+    assert result.stable_extensions is None
+    assert result.stable_note.startswith("stable not computed")
+    assert ContestationManager().vitanda(_mutual_pairs(1)).stable_note == ""

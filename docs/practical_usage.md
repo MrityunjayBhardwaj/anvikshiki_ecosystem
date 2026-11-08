@@ -74,7 +74,7 @@ print(f"Defensible positions: {jalpa.defensible_positions}")
 print(f"Counter-arguments: {jalpa.counter_arguments}")
 
 # Vitaṇḍā — vulnerability audit (where are the weaknesses?)
-vitanda = cm.vitanda(af, timeout_seconds=10.0)
+vitanda = cm.vitanda(af)
 print(f"Vulnerabilities: {vitanda.vulnerability_inventory.keys()}")
 print(f"Undefended: {vitanda.undefended}")
 
