@@ -15,11 +15,11 @@ import { toast } from "sonner";
 const EXAMPLE_KBS = [
   {
     label: "Business Expert",
-    path: "anvikshiki_v4/knowledge_bases/business_expert_kb.yaml",
+    path: "anvikshiki_v4/data/business_expert.yaml",
   },
   {
-    label: "Philosophy",
-    path: "anvikshiki_v4/knowledge_bases/philosophy_kb.yaml",
+    label: "Sample Architecture",
+    path: "anvikshiki_v4/data/sample_architecture.yaml",
   },
 ];
 

@@ -28,6 +28,9 @@ from .models import (
 from . import engine_state as _es
 from .sse_pipeline import stream_query, _prediction_to_dict
 
+# Project root = directory containing `backend/` (i.e. anvikshiki_ecosystem/)
+_PROJECT_ROOT = Path(__file__).parent.parent
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,10 +69,16 @@ async def health() -> HealthResponse:
 
 @app.post("/kb/load", response_model=KBInfo)
 async def kb_load(req: KBLoadRequest) -> KBInfo:
-    if not Path(req.kb_yaml_path).exists():
-        raise HTTPException(status_code=404, detail=f"KB file not found: {req.kb_yaml_path}")
+    # A relative path is the repo's, as the loader reads it, never the
+    # process's cwd: otherwise a backend started elsewhere 404s on a path the
+    # loader would have found, naming the file as missing (#108).
+    kb_path = Path(req.kb_yaml_path)
+    if not kb_path.is_absolute():
+        kb_path = _PROJECT_ROOT / kb_path
+    if not kb_path.exists():
+        raise HTTPException(status_code=404, detail=f"KB file not found: {kb_path}")
     try:
-        info = _es.state.load(kb_yaml_path=req.kb_yaml_path, guide_dir=req.guide_dir)
+        info = _es.state.load(kb_yaml_path=str(kb_path), guide_dir=req.guide_dir)
         engine = _es.state.require()
         # Best-effort: get vyapti count from engine artifacts
         vyapti_count = 0
