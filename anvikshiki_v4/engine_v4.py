@@ -329,6 +329,21 @@ def attack_violations(af: ArgumentationFramework, labels: dict) -> list[dict]:
     return out
 
 
+def clarification_response(warnings: list[str]) -> str:
+    """What the user reads when grounding asks them to clarify (#102).
+
+    The warnings used to go in as a Python list, brackets and quotes
+    included, in the one response whose whole job is to be answered by a
+    person. One warning reads as a sentence, several as one line each, and
+    none says so rather than leaving the user to guess.
+    """
+    if not warnings:
+        return "Clarification needed, but grounding gave no reason."
+    if len(warnings) == 1:
+        return f"Clarification needed: {warnings[0]}"
+    return "Clarification needed:\n" + "\n".join(f"- {w}" for w in warnings)
+
+
 def accepted_line(conclusion: str, info: dict) -> str:
     """One accepted conclusion as the synthesizer reads it.
 
@@ -560,7 +575,7 @@ class AnvikshikiEngineV4(dspy.Module):
         if grounding.clarification_needed:
             return dspy.Prediction(
                 verdict=None,
-                response=f"Clarification needed: {grounding.warnings}",
+                response=clarification_response(grounding.warnings),
                 sources=[], uncertainty={}, provenance={},
                 violations=[], advisories=as_wire(grounding.advisories),
                 grounding_confidence=grounding.confidence,
@@ -717,7 +732,7 @@ class AnvikshikiEngineV4(dspy.Module):
         if grounding.clarification_needed:
             return dspy.Prediction(
                 verdict=None,
-                response=f"Clarification needed: {grounding.warnings}",
+                response=clarification_response(grounding.warnings),
                 sources=[], uncertainty={}, provenance={},
                 violations=[], advisories=as_wire(grounding.advisories),
                 grounding_confidence=grounding.confidence,
