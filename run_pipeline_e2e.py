@@ -209,7 +209,7 @@ def main():
         for ch in chunks[:2]:
             print(f"  {ch.chunk_id}:")
             print(f"    Vyapti anchors: {ch.vyapti_anchors}")
-            print(f"    Concept anchors: {ch.concept_anchors[:5]}")
+            print(f"    Concept anchors: {ch.concept_anchors[:5] if ch.concept_anchors is not None else 'not searched (no concept names)'}")
             print(f"    Epistemic status: {ch.epistemic_status}")
             print(f"    Text: {ch.text[:100]}...")
             print()
