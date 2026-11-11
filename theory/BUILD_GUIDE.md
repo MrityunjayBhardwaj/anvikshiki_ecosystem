@@ -958,6 +958,9 @@ def _split_sections(text: str, max_tokens: int = 512) -> list[str]:
     return sections
 
 
+# Sketch only. The shipped matcher in anvikshiki_v4/t3_compiler.py differs:
+# one title word anchored most of the corpus (#135), and the guides write
+# ids as V5 / VYĀPTI 5 where the base stores V05 (#293).
 def _detect_vyapti_refs(text, vyaptis):
     refs = []
     for vid, v in vyaptis.items():

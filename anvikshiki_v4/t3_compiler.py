@@ -11,6 +11,7 @@ Output: NetworkX DiGraph (knowledge graph) + list of TextChunk
 
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 import networkx as nx
@@ -220,32 +221,63 @@ def _split_sections(text: str, max_tokens: int = 512) -> list[str]:
 # ─── Reference Detection ─────────────────────────────────────
 
 
+def _id_pattern(item_id: str, spelled: str) -> re.Pattern:
+    """Every way the guides write an id: `V05`, `V5` and `VYĀPTI 5`.
+
+    The base pads ids (`V05`, `H03`) and the guides do not (`V5`, `H3`), so a
+    plain substring test missed nearly every mention (#293). The digit boundary
+    keeps `V1` from matching inside `V10`.
+    """
+    m = re.fullmatch(r"([A-Za-z]+)0*(\d+)", item_id)
+    if not m:
+        return re.compile(rf"(?<![A-Za-z0-9]){re.escape(item_id)}(?![A-Za-z0-9])")
+    prefix, number = m.groups()
+    return re.compile(
+        rf"(?<![A-Za-z0-9])(?:{re.escape(prefix)}|(?i:{spelled})\s+)0*{number}(?![0-9])"
+    )
+
+
+def _title_pattern(name: str, words: int = 2) -> Optional[re.Pattern]:
+    """The opening words of an item's title, as one phrase.
+
+    `The Market Signal Decay Law` matches on "market signal", not on "market"
+    alone: a single title word anchored 89% of chunks (#135). Two words, not the
+    whole title, because the guides shorten titles ("Market Signal Decay",
+    "Organizational Entropy").
+    """
+    terms = name.split()
+    if terms and terms[0].lower() == "the":
+        terms = terms[1:]
+    if not terms:
+        return None
+    phrase = r"\s+".join(re.escape(t) for t in terms[:words])
+    # A plural still names the item ("Moat Mirages"); a longer word does not.
+    return re.compile(rf"(?<![\w-]){phrase}(?:s|es)?(?![\w-])", re.IGNORECASE)
+
+
+def _detect_refs(text: str, items: dict, spelled: str) -> list[str]:
+    refs = []
+    for item_id, item in items.items():
+        title = _title_pattern(item.name)
+        if _id_pattern(item_id, spelled).search(text) or (
+            title is not None and title.search(text)
+        ):
+            refs.append(item_id)
+    return refs
+
+
 def _detect_vyapti_refs(
     text: str, vyaptis: dict[str, Vyapti]
 ) -> list[str]:
-    """Detect which vyāptis a text chunk references."""
-    refs: list[str] = []
-    text_lower = text.lower()
-    for vid, v in vyaptis.items():
-        # Check for explicit ID references (V01, V02, etc.)
-        if vid in text:
-            refs.append(vid)
-        # Check for key terms from the vyāpti name
-        elif any(term.lower() in text_lower for term in v.name.split()[:3] if len(term) > 3):
-            refs.append(vid)
-    return refs
+    """Detect which vyāptis a text chunk references: by id, or by its title."""
+    return _detect_refs(text, vyaptis, "VY[AĀ]PTI")
 
 
 def _detect_hetvabhasa_refs(
     text: str, hetvabhasas: dict[str, Hetvabhasa]
 ) -> list[str]:
-    """Detect which hetvābhāsas a text chunk references."""
-    text_lower = text.lower()
-    return [
-        hid
-        for hid, h in hetvabhasas.items()
-        if hid in text or h.name.lower() in text_lower
-    ]
+    """Detect which hetvābhāsas a text chunk references: by id, or by its title."""
+    return _detect_refs(text, hetvabhasas, "HETV[AĀ]BH[AĀ]SA")
 
 
 def _detect_concept_refs(

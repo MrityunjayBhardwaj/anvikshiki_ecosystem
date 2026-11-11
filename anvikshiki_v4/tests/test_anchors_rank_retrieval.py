@@ -155,7 +155,9 @@ def test_the_tier_actually_reorders_the_real_corpus():
     first, the answer was "no change" — that rule was V05, which anchors 52% of
     all chunks, so the two tiers held nearly the same set and the sample of one
     was the worst case in the base. Over all eleven the tier reorders nine.
-    A denominator would have said so immediately.
+    A denominator would have said so immediately. Since #135 tightened the
+    matcher it reorders 10 of 10; V11 is no longer anchored anywhere, because
+    its only anchors came from the words "growth" and "trap".
 
     WHICH PATH THIS EXERCISES, because it is not the one the name suggests.
     With a bogus embedding model there is no index, and `retrieve` hands off to
@@ -190,7 +192,7 @@ def test_the_tier_actually_reorders_the_real_corpus():
         f"the anchor tier reordered {changed} of {examined} rules on the real "
         f"base; it was 9 of 11 when #129 landed. A collapse toward zero means "
         f"anchors have become uniform enough to stop separating anything — see "
-        f"#135, where they already cover 89% of chunks."
+        f"#135, where they covered 116 of 130 chunks before the matcher was fixed."
     )
 
 
