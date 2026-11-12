@@ -32,9 +32,9 @@ oversight:
                       is a larger change than connecting a field.
 
   concept_anchors     has no activation signal either — there is no
-                      `relevant_concepts` — and the matcher that fills it cannot
-                      currently match anything (#126: it searches chapter prose
-                      for the literal `c01`). Fixing that matcher first would
+                      `relevant_concepts` — and no shipped base names its
+                      concepts, so the field is None ("not searched") on every
+                      chunk and the compiler warns (#126). Fixing that matcher first would
                       have produced a correct signal on a channel with no
                       consumer, which is why #129 comes first.
 

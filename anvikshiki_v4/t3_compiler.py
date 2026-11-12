@@ -11,6 +11,7 @@ Output: NetworkX DiGraph (knowledge graph) + list of TextChunk
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Optional
 
@@ -18,6 +19,8 @@ import networkx as nx
 from pydantic import BaseModel, Field
 
 from .schema import EpistemicStatus, Hetvabhasa, KnowledgeStore, Vyapti
+
+log = logging.getLogger(__name__)
 
 
 # ─── Text Chunk ──────────────────────────────────────────────
@@ -31,7 +34,9 @@ class TextChunk(BaseModel):
     text: str
     vyapti_anchors: list[str] = Field(default_factory=list)
     hetvabhasa_anchors: list[str] = Field(default_factory=list)
-    concept_anchors: list[str] = Field(default_factory=list)
+    # None means the base gave no concept names to search for, so nothing was
+    # looked for; [] means the names were searched and none occur here (#126).
+    concept_anchors: Optional[list[str]] = None
     prerequisites: list[str] = Field(default_factory=list)
     epistemic_status: str = "established"
     sourced: bool = False
@@ -138,6 +143,14 @@ def _chunk_guide_text(
     """Chunk guide text with metadata from chapter fingerprints."""
     chunks: list[TextChunk] = []
 
+    concepts, unnamed = _concept_vocabulary(ks)
+    if unnamed:
+        log.warning(
+            "%d of %d concepts have only an id, not a name (e.g. %s), so no "
+            "passage can be linked to them (#126)",
+            len(unnamed), len(unnamed) + len(concepts), unnamed[0],
+        )
+
     for chapter_id, text in guide_text.items():
         fp = ks.chapter_fingerprints.get(chapter_id)
         sections = _split_sections(text)
@@ -149,7 +162,7 @@ def _chunk_guide_text(
             # Detect references to vyāptis, hetvābhāsas, and concepts
             vyapti_refs = _detect_vyapti_refs(section_text, ks.vyaptis)
             het_refs = _detect_hetvabhasa_refs(section_text, ks.hetvabhasas)
-            concept_refs = _detect_concept_refs(section_text, ks.dependency_graph)
+            concept_refs = _detect_concept_refs(section_text, concepts)
 
             # Determine epistemic status from chapter fingerprint
             ep_status = "established"
@@ -280,13 +293,45 @@ def _detect_hetvabhasa_refs(
     return _detect_refs(text, hetvabhasas, "HETV[AĀ]BH[AĀ]SA")
 
 
+def _concept_vocabulary(
+    ks: KnowledgeStore,
+) -> tuple[dict[str, re.Pattern], list[str]]:
+    """The concepts a passage can be linked to, and the ones it cannot.
+
+    Concepts are the dependency graph's keys and values, less the rule ids the
+    graph also carries. A concept keyed by a readable phrase (`unit_economics`)
+    is searched as that phrase. One keyed by an opaque id (`C01`) has no name to
+    search prose for: every shipped base is keyed that way, and the guides never
+    write the ids (#126). Those are returned as unnamed rather than searched for
+    a token that cannot occur.
+    """
+    ids = set(ks.dependency_graph)
+    for dependents in ks.dependency_graph.values():
+        ids.update(dependents)
+    ids -= set(ks.vyaptis)
+
+    named: dict[str, re.Pattern] = {}
+    unnamed: list[str] = []
+    for cid in sorted(ids):
+        if re.fullmatch(r"[A-Za-z]+\d+", cid):
+            unnamed.append(cid)
+            continue
+        pattern = _title_pattern(cid.replace("_", " "), words=len(cid.split("_")))
+        if pattern is None:
+            unnamed.append(cid)
+        else:
+            named[cid] = pattern
+    return named, unnamed
+
+
 def _detect_concept_refs(
-    text: str, dep_graph: dict[str, list[str]]
-) -> list[str]:
-    """Detect which concepts a text chunk references."""
-    text_lower = text.lower()
-    return [
-        concept
-        for concept in dep_graph
-        if concept.replace("_", " ").lower() in text_lower
-    ]
+    text: str, concepts: dict[str, re.Pattern]
+) -> Optional[list[str]]:
+    """Detect which concepts a text chunk references.
+
+    None when there is no concept name to look for, so "could not look" never
+    reads as "this passage names no concept".
+    """
+    if not concepts:
+        return None
+    return [cid for cid, pattern in concepts.items() if pattern.search(text)]
