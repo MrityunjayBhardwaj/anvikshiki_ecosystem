@@ -16,7 +16,7 @@ import re
 from typing import Optional
 
 import networkx as nx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .schema import EpistemicStatus, Hetvabhasa, KnowledgeStore, Vyapti
 
@@ -27,22 +27,31 @@ log = logging.getLogger(__name__)
 
 
 class TextChunk(BaseModel):
-    """A retrievable unit of guide text with rich metadata."""
+    """A retrievable unit of guide text and what its own words point at.
 
+    Chapter-level facts (prerequisites, difficulty) are not copied here: they
+    live on the chapter node of the knowledge graph and on the base's chapter
+    fingerprint, both reachable through `chapter_id` (#134).
+    """
+
+    # A field dropped from the model must fail its callers, not be silently
+    # ignored as pydantic does by default (#134).
+    model_config = ConfigDict(extra="forbid")
+
+    # An identifier for diagnostics and tests; nothing ranks on it (#134).
     chunk_id: str
     chapter_id: str
     text: str
     vyapti_anchors: list[str] = Field(default_factory=list)
+    # Computed, accurate (#293) and not yet read: its consumer is fallacy
+    # routing after T2 runs, which does not exist yet (#296).
     hetvabhasa_anchors: list[str] = Field(default_factory=list)
     # None means the base gave no concept names to search for, so nothing was
     # looked for; [] means the names were searched and none occur here (#126).
     concept_anchors: Optional[list[str]] = None
-    prerequisites: list[str] = Field(default_factory=list)
+    # The chapter's weakest authored status. Not read yet: the thesis's
+    # inheritance from T2 results is not built (#296).
     epistemic_status: str = "established"
-    sourced: bool = False
-    source_ids: list[str] = Field(default_factory=list)
-    difficulty_tier: str = "intermediate"
-    embedding: Optional[list[float]] = None
 
 
 # ─── T3 Compiler ─────────────────────────────────────────────
@@ -182,10 +191,7 @@ def _chunk_guide_text(
                 vyapti_anchors=vyapti_refs,
                 hetvabhasa_anchors=het_refs,
                 concept_anchors=concept_refs,
-                prerequisites=fp.prerequisites if fp else [],
                 epistemic_status=ep_status,
-                sourced=bool(fp and fp.decay_markers),
-                difficulty_tier=fp.difficulty_tier if fp else "intermediate",
             )
             chunks.append(chunk)
 
