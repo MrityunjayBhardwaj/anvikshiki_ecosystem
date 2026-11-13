@@ -992,7 +992,10 @@ class StageDConstructor(dspy.Module):
                     f"Consequent: {parent_vyapti.consequent}"
                 )
 
-            sources_str = ", ".join(sorted(self.ks.reference_bank.keys())[:30])
+            # Every id, uncut. A `[:30]` here dropped whichever sources sorted
+            # last once a bank passed thirty, with nothing in the prompt saying
+            # the list was partial (#105). All 29 business ids are ~600 chars.
+            sources_str = ", ".join(sorted(self.ks.reference_bank))
 
             try:
                 result = self.constructor(
