@@ -854,6 +854,10 @@ from .schema import KnowledgeStore
 
 class TextChunk(BaseModel):
     """A retrievable unit of guide text with rich metadata."""
+    # Sketch only. The shipped model in anvikshiki_v4/t3_compiler.py dropped
+    # prerequisites, sourced, source_ids, difficulty_tier and embedding: none
+    # was read, two were never assigned, and the chapter-level ones live on the
+    # graph's chapter node (#134).
     chunk_id: str
     chapter_id: str
     text: str

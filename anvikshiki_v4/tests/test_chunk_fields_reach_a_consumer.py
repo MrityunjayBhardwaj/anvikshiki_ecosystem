@@ -1,93 +1,71 @@
-"""Every field computed onto a TextChunk is read by something (#129).
+"""Every field on a TextChunk is written by the compiler and read by something (#129, #134).
 
-`_chunk_guide_text` computes three anchor fields in one loop, from one kind of
-matcher, and stores them side by side. Only one of them was ever read:
+A field nobody reads produces no symptom: it is computed correctly, stored
+correctly and never consulted, which looks identical to a field that works.
+#129 noticed two such anchor fields. Writing the check over every field found
+seven, and #134 decided them one by one:
 
-    vyapti_anchors        t3a_retriever.py — a scoring boost
-    hetvabhasa_anchors    nothing; the name occurred nowhere else in the package
-    concept_anchors       nothing (a `print` in run_pipeline_e2e.py)
+    embedding        dropped — never assigned by any code path, never read
+    source_ids       dropped — never assigned, so [] on every chunk
+    sourced          dropped — derived from the chapter's decay markers, which
+                     no shipped base has, so False on all 130 business chunks;
+                     and decay markers say a claim ages, not that it is sourced
+    prerequisites,   dropped — copies of chapter-level facts. The chapter node
+    difficulty_tier  of the knowledge graph already carries both, keyed by the
+                     chunk's `chapter_id`, and so does the chapter fingerprint
+    chunk_id         kept — an identifier for diagnostics and tests
+    hetvabhasa_anchors,
+    concept_anchors  kept — see KNOWN_UNREAD below
 
-None of that failed anything, because a field nobody reads produces no symptom.
-The value is computed correctly, stored correctly, and never consulted — which
-looks identical to a field that is working. This module makes the absence
-fail instead of staying quiet, and does it over *every* field rather than the
-three that happened to be noticed: the same check that would have caught these
-catches the next one for free.
+Two of the dropped or kept-unread fields were never on #129's list:
+`source_ids` and `epistemic_status`. The old scan matched attribute reads by
+NAME, and both names are also fields of other models (`Tag.source_ids`,
+`Vyapti.epistemic_status`), so reads of those counted as reads of the chunk's.
+The scan now treats a shared name as "could not tell" rather than "read", and
+every such field carries a verdict that was checked by hand (HAND_CHECKED).
 
-The known-unread set is asserted EXACTLY, not as an upper bound. A new unread
-field fails the law (it is not in the set), and wiring one of the known two up
-also fails it (it is in the set and should not be) — so the list cannot rot in
-either direction, and removing a field from it is a deliberate edit rather than
-a silent drift.
-
-Why the two are still unread after #129, which is the honest answer and not an
-oversight:
-
-  hetvabhasa_anchors  has no producer at retrieval time. Retrieval is STEP 5 of
-                      `EngineV4.query`; hetvābhāsa violations are computed at
-                      STEP 7 (engine_v4.py, "Collect defeated arguments"), two
-                      steps later, from the evaluated argumentation framework.
-                      There is no `relevant_hetvabhasas` anywhere in the package
-                      to boost on. Wiring it needs the pipeline reordered, which
-                      is a larger change than connecting a field.
-
-  concept_anchors     has no activation signal either — there is no
-                      `relevant_concepts` — and no shipped base names its
-                      concepts, so the field is None ("not searched") on every
-                      chunk and the compiler warns (#126). Fixing that matcher first would
-                      have produced a correct signal on a channel with no
-                      consumer, which is why #129 comes first.
-
-Five further fields are unread for reasons of their own and are tracked in
-#134 — `prerequisites`, `sourced` and `difficulty_tier` are populated on every
-chunk and consulted by nothing; `chunk_id` is read only by diagnostics; and
-`embedding` is never read AND never assigned by any code path in the repository.
-#129 noticed the two anchor fields; writing this check generally is what found
-the other five, which is the whole argument for checking the property rather
-than the instances.
-
-WHAT THIS CHECK CANNOT SEE, stated so it is not trusted further than it goes:
-attribute reads are matched by NAME, with no type information. `v.epistemic_status`
-on a `Vyapti` counts as a read of the chunk field of the same name. So the check
-UNDER-reports — every field it flags is genuinely unread, but a field it passes
-may still be dead if another class shares the attribute name. It is a lower
-bound on the problem, not a measurement of it.
-
-Both anchor fields are left in place rather than deleted. They are computed by a working
-matcher and are plausibly wanted by the source-anchored review surface (#29);
-"I don't see why this is needed" is not the same as "this is not needed". What
-changes here is that their absence is recorded and enforced instead of implied.
+WHAT THIS CHECK STILL CANNOT SEE. Shared names are found from attributes that
+other classes in the package declare or assign. An object from outside the
+package with a same-named attribute (a dspy prediction's `.text`, say) is not
+found, so a passing field can still be dead. It is a lower bound.
 """
 
 import ast
+from collections import Counter
 from pathlib import Path
+
+import pytest
 
 from anvikshiki_v4.t3_compiler import TextChunk
 
 PACKAGE = Path(__file__).resolve().parents[1]
 DEFINING_MODULE = PACKAGE / "t3_compiler.py"
 
-# Fields on a chunk that nothing in the engine package reads. Seven of twelve
-# (#134) — #129 noticed the two anchor fields, and writing the general check is
-# what found the other five. The set is asserted EXACTLY below, so this list
-# cannot quietly grow or quietly shrink.
+# Fields nothing in the engine reads, each with the reason it is kept anyway.
+# Asserted EXACTLY: a new unread field fails, and so does wiring one of these up
+# without removing it here.
 KNOWN_UNREAD = {
-    # #129 — no producer at retrieval time; see this module's docstring.
-    "hetvabhasa_anchors",
-    "concept_anchors",
-    # #134 — populated by the compiler at t3_compiler.py:171-174 and never
-    # consulted. Real pedagogical signal from the chapter fingerprints, paid
-    # for on every chapter of every base, and looked at by nothing.
-    "prerequisites",
-    "sourced",
-    "difficulty_tier",
-    # #134 — read only by run_pipeline_e2e.py and two scripts/ tracers. That
-    # may be right for an identifier, but nothing says so.
-    "chunk_id",
-    # #134 — the sharpest one: never READ and never ASSIGNED, by any code path
-    # in the repository including tests and scripts. It has been None on every
-    # chunk ever constructed.
-    "embedding",
+    "chunk_id": "an identifier; read by run_pipeline_e2e.py, scripts/ and tests, "
+                "which is what an identifier is for",
+    "hetvabhasa_anchors": "accurate since #293, but its consumer is fallacy "
+                          "routing after T2 runs, which is not built (#296)",
+    "concept_anchors": "None on every shipped base, which names no concepts; "
+                       "the matcher works for a base that does (#126)",
+    "epistemic_status": "the chapter's weakest authored status; the thesis's "
+                        "inheritance from T2 results that would read it is not "
+                        "built (#296)",
+}
+
+# Chunk fields whose name another class in the package also uses, so a
+# name-matched read proves nothing. Each verdict was checked by reading every
+# match. Asserted exactly against the scan, so a new collision needs a verdict.
+HAND_CHECKED = {
+    "chapter_id": ("read", "t3a_retriever.py compares c.chapter_id to the "
+                           "boosted chapters in both ranking paths"),
+    "epistemic_status": ("unread", "every .epistemic_status read in the package "
+                                   "is on a Vyapti or a proposed vyapti"),
+    "text": ("read", "t3a_retriever.py indexes chunk.text and engine_v4.py "
+                     "passes c.text to synthesis"),
 }
 
 
@@ -96,8 +74,7 @@ def _engine_modules() -> list[Path]:
 
     A field read solely by a test is not connected to anything a query runs
     through, and `scripts/` hand-builds chunks rather than consuming them, so
-    counting either would let a dead field look live. That is the mistake this
-    module exists to catch, and it would be an easy one to make here.
+    counting either would let a dead field look live.
     """
     return sorted(
         p for p in PACKAGE.glob("*.py")
@@ -105,115 +82,161 @@ def _engine_modules() -> list[Path]:
     )
 
 
-def _reads_of(field: str) -> list[str]:
-    """Modules that read `chunk.<field>` as an attribute.
-
-    Matched on the AST rather than on text, so a field named only in a comment
-    or docstring does not count as a read — that conflation is exactly what
-    made #130 flag a module which performs no file access at all.
-    """
-    found = []
+def _trees():
     for path in _engine_modules():
-        try:
-            tree = ast.parse(path.read_text())
-        except SyntaxError:  # pragma: no cover - would fail the suite elsewhere
-            continue
+        yield path, ast.parse(path.read_text())
+
+
+def _reads_of(field: str) -> list[str]:
+    """Modules that read `<something>.<field>` as an attribute, matched on the
+    AST so a name in a comment or docstring does not count (#130)."""
+    found = set()
+    for path, tree in _trees():
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and node.attr == field:
-                # An assignment target is a write, not a read.
-                if not isinstance(node.ctx, ast.Store):
-                    found.append(path.name)
-                    break
-    return sorted(set(found))
+            if (isinstance(node, ast.Attribute) and node.attr == field
+                    and not isinstance(node.ctx, ast.Store)):
+                found.add(path.name)
+                break
+    return sorted(found)
 
 
-def test_there_are_fields_to_check():
-    """Denominator. An empty field list passes every law below."""
-    assert len(TextChunk.model_fields) >= 8, sorted(TextChunk.model_fields)
+def _names_other_classes_use() -> set[str]:
+    """Attribute names that some other class declares in its body or assigns
+    on `self`. A read of one of these is not evidence about chunks."""
+    names = set()
+    for path in sorted(PACKAGE.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for cls in ast.walk(tree):
+            if not isinstance(cls, ast.ClassDef) or cls.name == "TextChunk":
+                continue
+            for node in ast.walk(cls):
+                if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    names.add(node.target.id)
+                elif isinstance(node, ast.Assign):
+                    for t in node.targets:
+                        if isinstance(t, ast.Name):
+                            names.add(t.id)
+                        elif (isinstance(t, ast.Attribute)
+                              and isinstance(t.value, ast.Name)
+                              and t.value.id == "self"):
+                            names.add(t.attr)
+    return names
 
+
+def _ambiguous() -> set[str]:
+    return set(TextChunk.model_fields) & _names_other_classes_use()
+
+
+def _unread() -> set[str]:
+    unread = set()
+    for f in TextChunk.model_fields:
+        if f in HAND_CHECKED:
+            if HAND_CHECKED[f][0] == "unread":
+                unread.add(f)
+        elif not _reads_of(f):
+            unread.add(f)
+    return unread
+
+
+# ── the scan can fail ─────────────────────────────────────────
 
 def test_the_scan_looks_at_more_than_one_module():
-    """A glob that matched nothing would report every field as unread, which
-    reads as a catastrophic finding rather than as a broken scan."""
+    """A glob that matched nothing would report every field unread, which reads
+    as a catastrophic finding rather than a broken scan."""
     mods = _engine_modules()
     assert len(mods) > 10, [p.name for p in mods]
     assert DEFINING_MODULE not in mods
 
 
 def test_the_scan_can_see_a_read_that_exists():
-    """The direction that matters more. A matcher that never matches reports
-    every field unread and looks like a discovery — #126's shape exactly — so
-    the positive case is pinned before the negative one is trusted."""
+    """A matcher that never matches reports everything unread and looks like a
+    discovery (#126's shape), so the positive case is pinned first."""
     assert "t3a_retriever.py" in _reads_of("vyapti_anchors")
-    assert "t3a_retriever.py" in _reads_of("chapter_id")
+
+
+def test_the_collision_that_hid_a_field_is_detected():
+    """`Vyapti.epistemic_status` is what made the chunk field look read. If the
+    shared-name scan stopped seeing it, the old blind spot is back."""
+    assert "epistemic_status" in _ambiguous()
+    assert _reads_of("epistemic_status"), "the name-matched read is the trap"
+
+
+# ── the laws ──────────────────────────────────────────────────
+
+def test_every_shared_name_has_a_hand_checked_verdict():
+    """A name another class also uses cannot be settled by the scan. A new one
+    must get a verdict here; a stale one must be removed."""
+    assert _ambiguous() == set(HAND_CHECKED), (
+        f"chunk fields sharing a name with another class: {sorted(_ambiguous())}; "
+        f"verdicts recorded for: {sorted(HAND_CHECKED)}"
+    )
+
+
+def test_a_field_the_scan_cannot_find_read_is_not_verdicted_read():
+    """A hand verdict of 'read' must not cover for a field nothing reads even by
+    name — that would be the verdict hiding a dead field."""
+    for f, (verdict, _) in HAND_CHECKED.items():
+        if verdict == "read":
+            assert _reads_of(f), f"{f} is marked read but nothing reads it by name"
 
 
 def test_every_chunk_field_is_read_or_is_a_known_absence():
-    """The law. A field computed onto a chunk and consulted by nothing is
-    machinery connected to nothing, and it produces no symptom on its own."""
-    unread = sorted(
-        f for f in TextChunk.model_fields if not _reads_of(f)
-    )
-    assert set(unread) == KNOWN_UNREAD, (
-        f"unread chunk fields are {unread}, expected exactly "
-        f"{sorted(KNOWN_UNREAD)} — a new name here is a field nothing "
-        f"consults; a name that disappeared has found a consumer and should "
-        f"be removed from KNOWN_UNREAD, with the docstring's reason deleted."
+    unread = _unread()
+    assert unread == set(KNOWN_UNREAD), (
+        f"unread chunk fields are {sorted(unread)}, expected exactly "
+        f"{sorted(KNOWN_UNREAD)} — a new name is a field nothing consults; a "
+        f"missing one has found a consumer and should leave KNOWN_UNREAD"
     )
 
 
-# Of the unread fields, the one that is not even written. Kept separate from
-# the rest because "computed and ignored" and "declared and never produced" are
-# different defects and collapsing them loses the sharper one.
-NEVER_WRITTEN = {"embedding"}
+def _compiler_writes() -> set[str]:
+    """Keyword arguments of every `TextChunk(...)` call in the compiler."""
+    written = set()
+    calls = 0
+    for node in ast.walk(ast.parse(DEFINING_MODULE.read_text())):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "TextChunk"):
+            calls += 1
+            written |= {k.arg for k in node.keywords}
+    assert calls, "the compiler no longer constructs a TextChunk by name"
+    return written
 
 
-def test_the_computed_absences_are_still_computed():
-    """Unread is not the same as unwritten. If the compiler stopped populating
-    these, the right finding is 'the field is gone', not 'the field is quiet',
-    and the two must not be confusable."""
-    src = DEFINING_MODULE.read_text()
-    for field in sorted(KNOWN_UNREAD - NEVER_WRITTEN):
-        assert f"{field}=" in src, f"{field} is no longer assigned in the compiler"
+def test_the_compiler_writes_every_field():
+    """`embedding` and `source_ids` were declared and never assigned anywhere,
+    so the model promised values no code kept. Any field the compiler does not
+    pass is the same defect."""
+    missing = set(TextChunk.model_fields) - _compiler_writes()
+    assert not missing, f"declared on TextChunk but never written: {sorted(missing)}"
 
 
-def test_the_never_written_field_is_still_never_written():
-    """`embedding` is declared on the model and assigned by NOTHING — not the
-    compiler, not the retriever, not a script, not a test. It has been None on
-    every chunk ever constructed, so the model promises a cached vector that no
-    code path keeps (#134).
-
-    Asserted as a standing zero rather than left implicit: if something starts
-    populating it, this fails and the field graduates out of both lists — which
-    is the point at which somebody has to decide whether anything reads it.
-    """
-    writers = []
-    for path in sorted(PACKAGE.parent.rglob("*.py")):
-        if ".venv" in path.parts or "site-packages" in path.parts:
-            continue
-        try:
-            tree = ast.parse(path.read_text())
-        except (SyntaxError, UnicodeDecodeError):  # pragma: no cover
-            continue
-        for node in ast.walk(tree):
-            # `embedding=...` as a keyword argument or an attribute assignment.
-            if isinstance(node, ast.keyword) and node.arg in NEVER_WRITTEN:
-                writers.append(path.name)
-            elif (isinstance(node, ast.Attribute)
-                  and node.attr in NEVER_WRITTEN
-                  and isinstance(node.ctx, ast.Store)):
-                writers.append(path.name)
-    assert not writers, (
-        f"{sorted(NEVER_WRITTEN)} is now assigned in {sorted(set(writers))}; "
-        f"it had no producer at all when #134 was filed"
-    )
+def test_a_dropped_field_is_refused_not_ignored():
+    """Pydantic ignores unknown keywords by default, so a caller still passing
+    `sourced=` would lose it without a sound."""
+    with pytest.raises(ValueError):
+        TextChunk(chunk_id="x", chapter_id="ch01", text="t", sourced=True)
 
 
-def test_the_never_written_field_is_among_the_unread():
-    """The two lists must stay consistent. A field that is never written and
-    yet counted as read would mean the scan is wrong, not that the field is
-    fine."""
-    assert NEVER_WRITTEN <= KNOWN_UNREAD
+# ── on the real corpus ────────────────────────────────────────
+
+def test_every_field_varies_on_the_real_corpus():
+    """`sourced` was written on every chunk and False on all of them. A field
+    constant across a real corpus tells a reader nothing. `concept_anchors` is
+    the known exception, None on every shipped base and pinned in #126's test."""
+    from anvikshiki_v4.engine_factory import load_guide_dir
+    from anvikshiki_v4.t2_compiler_v4 import load_knowledge_store
+    from anvikshiki_v4.t3_compiler import compile_t3
+
+    ks = load_knowledge_store("anvikshiki_v4/data/business_expert.yaml")
+    _, chunks = compile_t3(load_guide_dir("guides/business_expert"), ks)
+    assert len(chunks) > 100, f"only {len(chunks)} chunks — corpus did not load"
+
+    constant = []
+    for f in TextChunk.model_fields:
+        values = Counter(repr(getattr(c, f)) for c in chunks)
+        if len(values) < 2:
+            constant.append((f, next(iter(values))))
+    assert constant == [("concept_anchors", "None")], constant
 
 
 def test_the_vyapti_anchor_is_read_on_the_primary_path():
