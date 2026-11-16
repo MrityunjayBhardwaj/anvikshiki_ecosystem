@@ -571,14 +571,14 @@ Active design documents for the current (v4/ASPIC+) system. All created in Sessi
 
 ---
 
-#### `scripts/test_glm5.py`
-- **What:** Quick test script for GLM-5 integration. Verifies the ReasoningLM wrapper, JSON routing, and basic engine forward pass. One-off compatibility test.
+#### `scripts/glm5_smoke.py`
+- **What:** Quick test script for GLM-5 integration. Verifies the ReasoningLM wrapper, JSON routing, and basic engine forward pass. One-off compatibility test. Makes live DeepInfra calls; run it by path. Was `scripts/test_glm5.py`, renamed (#61) so pytest never collects it.
 - **Created:** `60a4ac4` · 2026-03-06 · Session 11 (`31879926`)
 
 ---
 
-#### `scripts/test_glm5_discrepancy.py`
-- **What:** Discrepancy investigation script — isolates specific behaviors where GLM-5 output differed from expected. One-off diagnostic.
+#### `scripts/glm5_discrepancy.py`
+- **What:** Discrepancy investigation script — isolates specific behaviors where GLM-5 output differed from expected. One-off diagnostic. Was `scripts/test_glm5_discrepancy.py`, renamed (#61): its import-time `sys.exit(1)` took down any collection run without the key.
 - **Created:** `60a4ac4` · 2026-03-06 · Session 11 (`31879926`)
 
 ---
