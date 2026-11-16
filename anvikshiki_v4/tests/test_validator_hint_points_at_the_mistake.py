@@ -3,7 +3,7 @@
 Grounding feeds rejected predicates back to a model and asks it to fix them
 "using ONLY predicates from the ontology". The hint it was handed was
 `sorted(known)[:10]` after the word `valid:` — the ten names nearest the start
-of the alphabet, 10 of 34, with nothing saying so. Now it is the names that
+of the alphabet, 10 of 39 on the business base, with nothing saying so. Now it is the names that
 share the most words with what was written, never one that says the opposite,
 and always with the size of the vocabulary beside it.
 """
