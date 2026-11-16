@@ -18,7 +18,12 @@ from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Callable, Iterable, Optional
 
-from .predicate_contrariness import affirmative, normalize_negation
+from .predicate_contrariness import (
+    NEGATION_PREFIX,
+    affirmative,
+    normalize_negation,
+    polarity_opposed,
+)
 
 
 # ─── Heyting Lattice ─────────────────────────────────────────
@@ -106,6 +111,63 @@ class Violation:
 
 
 # ─── The Engine ──────────────────────────────────────────────
+
+
+HINT_SIZE = 5
+
+
+def _words(name: str) -> frozenset[str]:
+    return frozenset(t for t in affirmative(name).split("_") if t)
+
+
+def nearest_known(written: str, known: Iterable[str], k: int = HINT_SIZE) -> list[str]:
+    """The valid names closest to a rejected one, by shared words.
+
+    This hint is fed back to a model told to fix its predicates "using ONLY
+    predicates from the ontology" (grounding, layer 5). It used to be the
+    alphabetically first ten names, presented as `valid:` with nothing saying
+    it was ten of 34 — so the list was about the alphabet, not the mistake,
+    and read as the whole vocabulary (#59).
+
+    Scored by Jaccard overlap of underscore-split words, on affirmative forms.
+    A name whose words oppose the written one (positive/negative and the
+    domain antonyms) is never offered: the nearest name by overlap is often
+    exactly the opposite claim. Declared whole-name contraries are not
+    checked, since the engine holds no knowledge base; the full ontology the
+    grounder also receives is the authority, this is a pointer into it.
+
+    Polarity follows what was written: a rejected `not_X` is offered `not_Y`,
+    which the validator accepts whenever `Y` is known.
+    """
+    target = _words(written)
+    if not target:
+        return []
+    negated = normalize_negation(written).startswith(NEGATION_PREFIX)
+    scored: dict[str, float] = {}
+    for name in known:
+        base = affirmative(normalize_negation(name))
+        words = _words(base)
+        if not words or polarity_opposed(affirmative(written), base):
+            continue
+        score = len(target & words) / len(target | words)
+        if score > 0:
+            scored[base] = max(score, scored.get(base, 0.0))
+    ranked = sorted(scored, key=lambda n: (-scored[n], n))[:k]
+    return [f"{NEGATION_PREFIX}{n}" if negated else n for n in ranked]
+
+
+def _nearest_hint(written: str, known: set[str]) -> str:
+    """The hint text, always with its denominator, so a short list is never
+    read as the vocabulary and an empty one never reads as 'no names exist'."""
+    # Every accepted name counts, `value_creation` and `not_value_creation`
+    # both, so the figure matches the vocabulary the grounder is shown.
+    total = len(known)
+    near = nearest_known(written, known)
+    if not near:
+        return f"no valid name shares a word with it ({total} valid names exist)"
+    return (
+        f"nearest valid names ({len(near)} of {total}, by shared words): {near}"
+    )
 
 
 class DatalogEngine:
@@ -350,7 +412,6 @@ class DatalogEngine:
                 forms.append(affirmative(written))
 
             if not any(form in known_preds for form in forms):
-                hint = sorted(known_preds)[:10]
                 # Double negation is the one case where the name looked up is
                 # not the name typed, so say both — the complaint that opened
                 # this was an error naming a string absent from its own input.
@@ -359,7 +420,7 @@ class DatalogEngine:
                 )
                 errors.append(
                     f"Unknown predicate: '{written}'{as_written}"
-                    f" — valid: {hint}"
+                    f" — {_nearest_hint(written, known_preds)}"
                 )
 
         return errors
