@@ -315,7 +315,7 @@ def test_an_untargeted_run_collects_only_the_suite(pytestconfig):
     patterns = pytestconfig.getini("python_files")
     stray = [
         str(p.relative_to(REPO_ROOT)) for p in collectible(pytestconfig)
-        if any(p.name == pat or fnmatch(p.name, pat) for pat in patterns)
+        if any(fnmatch(p.name, pat) for pat in patterns)
         and not any(t in p.parents for t in testpaths)
     ]
     assert stray == [], (
