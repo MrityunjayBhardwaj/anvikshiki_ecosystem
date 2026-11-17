@@ -138,7 +138,6 @@ def main():
         ensemble_n=1,                    # reduced for speed with local LLM
         decomposition_max_depth=1,
         max_new_vyaptis_per_chapter=8,   # cap for demo
-        min_confidence=0.3,
     )
 
     extraction_pipeline = PredicateExtractionPipeline(ks, config=config)

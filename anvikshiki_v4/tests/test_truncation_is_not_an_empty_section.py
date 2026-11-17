@@ -170,7 +170,7 @@ def test_an_unverifiable_run_names_the_component_as_unmeasured():
     stage_a = StageAOutput(
         candidates=[CandidatePredicate(
             name="x", description="d", claim_type=ClaimType.CAUSAL,
-            provenance=Provenance(chapter_id="ch02", confidence=0.7),
+            provenance=Provenance(chapter_id="ch02"),
         )],
         section_count=4,
         zero_predicate_sections=1,
@@ -187,7 +187,7 @@ def test_a_checked_run_with_real_input_is_not_flagged():
     stage_a = StageAOutput(
         candidates=[CandidatePredicate(
             name="x", description="d", claim_type=ClaimType.CAUSAL,
-            provenance=Provenance(chapter_id="ch02", confidence=0.7),
+            provenance=Provenance(chapter_id="ch02"),
         )],
         section_count=4,
         zero_predicate_sections=1,

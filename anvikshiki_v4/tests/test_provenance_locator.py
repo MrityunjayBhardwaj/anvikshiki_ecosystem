@@ -82,7 +82,7 @@ def test_a_dumped_record_reparses():
         chapter_id="ch02", section_header="Coordination", paragraph_index=3,
         doc_url="https://example.com/a", content_sha256=DIGEST,
         retrieved_at=datetime(2026, 8, 17, tzinfo=timezone.utc),
-        quote="Growth hides waste.", confidence=0.7,
+        quote="Growth hides waste.",
     )
     assert Provenance.model_validate(original.model_dump()) == original
 

@@ -96,7 +96,7 @@ class Provenance(BaseModel):
     section_header: str = ""
     paragraph_index: int = 0
     sentence: str               # Exact source sentence
-    confidence: float           # 0.0-1.0
+    # confidence was here; removed in #63, it was always 0.5
 
 class CandidatePredicate(BaseModel):
     name: str                   # snake_case
@@ -158,7 +158,7 @@ class ExtractionConfig(BaseModel):
     ensemble_n: int = 3
     decomposition_max_depth: int = 2
     similarity_threshold: float = 0.85
-    min_confidence: float = 0.3
+    # min_confidence was here; removed in #63, it gated on a constant
     max_new_vyaptis_per_chapter: int = 15
     model_tier: str = "large"  # "large" for API, "small" for 3-7B local
 ```
