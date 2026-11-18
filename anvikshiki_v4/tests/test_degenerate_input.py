@@ -101,7 +101,7 @@ def test_a_real_run_reports_nothing_unmeasured():
                 name="ltv_exceeds_cac",
                 description="Lifetime value exceeds customer acquisition cost",
                 claim_type=ClaimType.METRIC,
-                provenance=Provenance(chapter_id="ch02", confidence=0.7),
+                provenance=Provenance(chapter_id="ch02"),
             )
         ],
         chapter_id="ch02",

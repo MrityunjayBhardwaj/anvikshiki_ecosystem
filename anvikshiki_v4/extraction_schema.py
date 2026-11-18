@@ -141,7 +141,11 @@ class Provenance(BaseModel):
             "authorises deletion must not fire on an absence."
         ),
     )
-    confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+    # No `confidence` (#63). Every candidate was built with 0.5 and filtered
+    # on `>= min_confidence` (0.3), so the gate compared two constants and
+    # never dropped one; the 48 records in saved traces all read 0.5. Old
+    # records still carry the key and still load: unknown keys are ignored
+    # here, and a test refuses any code that still passes it.
 
     @field_validator("content_sha256")
     @classmethod
@@ -515,7 +519,13 @@ class ReviewItem(BaseModel):
 
 
 class ExtractionConfig(BaseModel):
-    """Configuration for the extraction pipeline."""
+    """Configuration for the extraction pipeline.
+
+    An unknown setting is refused, so a dropped one (`min_confidence`, #63)
+    fails at the call site instead of being accepted and doing nothing.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     ensemble_n: int = Field(default=3, description="Ensemble size for extraction")
     decomposition_max_depth: int = Field(
@@ -523,9 +533,6 @@ class ExtractionConfig(BaseModel):
     )
     similarity_threshold: float = Field(
         default=0.85, description="Cosine threshold for deduplication"
-    )
-    min_confidence: float = Field(
-        default=0.3, description="Minimum confidence to keep a candidate"
     )
     max_new_vyaptis_per_chapter: int = Field(
         default=15, description="Cap on new vyaptis per chapter"

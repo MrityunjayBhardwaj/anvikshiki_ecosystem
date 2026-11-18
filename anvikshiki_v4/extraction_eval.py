@@ -506,7 +506,7 @@ def build_dspy_metric(
                     name=p,
                     description=descriptions[i] if i < len(descriptions) else "",
                     claim_type=ClaimType.CAUSAL,
-                    provenance=Provenance(chapter_id="eval", confidence=0.5),
+                    provenance=Provenance(chapter_id="eval"),
                 )
             )
 

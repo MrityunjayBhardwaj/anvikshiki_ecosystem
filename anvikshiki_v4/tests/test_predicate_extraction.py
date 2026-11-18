@@ -117,21 +117,21 @@ def sample_stage_a():
                 name="ltv_exceeds_cac",
                 description="Lifetime value exceeds customer acquisition cost",
                 claim_type=ClaimType.METRIC,
-                provenance=Provenance(chapter_id="ch02", confidence=0.7),
+                provenance=Provenance(chapter_id="ch02"),
                 related_existing_vyapti="V01",
             ),
             CandidatePredicate(
                 name="positive_contribution_margin",
                 description="Revenue minus variable costs is positive",
                 claim_type=ClaimType.METRIC,
-                provenance=Provenance(chapter_id="ch02", confidence=0.8),
+                provenance=Provenance(chapter_id="ch02"),
                 related_existing_vyapti="V01",
             ),
             CandidatePredicate(
                 name="payback_within_runway",
                 description="CAC payback period is within funding runway",
                 claim_type=ClaimType.CONDITIONAL,
-                provenance=Provenance(chapter_id="ch02", confidence=0.65),
+                provenance=Provenance(chapter_id="ch02"),
             ),
         ],
         chapter_id="ch02",
@@ -264,17 +264,10 @@ class TestExtractionSchemaModels:
             name="test_pred",
             description="A test predicate",
             claim_type=ClaimType.CAUSAL,
-            provenance=Provenance(chapter_id="ch01", confidence=0.7),
+            provenance=Provenance(chapter_id="ch01"),
         )
         assert cp.name == "test_pred"
         assert cp.claim_type == ClaimType.CAUSAL
-
-    def test_provenance_confidence_bounds(self):
-        with pytest.raises(Exception):
-            Provenance(chapter_id="ch01", confidence=1.5)
-
-        with pytest.raises(Exception):
-            Provenance(chapter_id="ch01", confidence=-0.1)
 
     def test_proposed_vyapti_defaults(self):
         pv = ProposedVyapti()
@@ -292,7 +285,6 @@ class TestExtractionSchemaModels:
         cfg = ExtractionConfig()
         assert cfg.ensemble_n == 3
         assert cfg.similarity_threshold == 0.85
-        assert cfg.min_confidence == 0.3
 
     def test_predicate_node_tree(self):
         parent = PredicateNode(

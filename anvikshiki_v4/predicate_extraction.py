@@ -598,13 +598,11 @@ class StageAExtractor(dspy.Module):
                         # to tell a dropped asterisk from an invented
                         # sentence, and the bool above cannot.
                         quote_verdict=verdict,
-                        confidence=0.5,
                     ),
                     related_existing_vyapti=rel if rel != "none" else None,
                 )
 
-                if candidate.provenance.confidence >= self.config.min_confidence:
-                    all_candidates.append(candidate)
+                all_candidates.append(candidate)
 
         return StageAOutput(
             candidates=all_candidates,
@@ -908,8 +906,8 @@ def _dedupe_provenance(records: list[Provenance]) -> list[Provenance]:
     walked belief upward.
 
     Equality is on the locator and the quote rather than on the whole model,
-    because `confidence` is a per-candidate score and two records of the same
-    span disagreeing about it are still the same span.
+    because the quote's verdict and `quote_found_in_source` describe a
+    reading of the span, and two readings of one span are still one span.
     """
     seen: set[tuple] = set()
     unique: list[Provenance] = []
