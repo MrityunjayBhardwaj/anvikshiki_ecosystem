@@ -262,25 +262,47 @@ class StageAOutput(BaseModel):
             "from the ones whose quote could not be found, because 'declined "
             "to cite' and 'cited something that is not there' are different "
             "facts about the model and only the second is evidence of "
-            "fabrication. Counts only positions the model actually answered — "
-            "see `unquoted_by_short_list` for the ones it never reached."
+            "fabrication. Counts only quotes the model actually offered, in a "
+            "list that lined up — see `unquoted_by_misaligned_list` for the rest."
         ),
     )
-    unquoted_by_short_list: int = Field(
+    unquoted_by_misaligned_list: int = Field(
         default=0,
+        validation_alias=AliasChoices(
+            "unquoted_by_misaligned_list", "unquoted_by_short_list"
+        ),
         description=(
-            "Candidates that got no quote because the `quotes` list came back "
-            "shorter than the `predicates` list, so the index fell off the end "
-            "and padded with an empty string. This is our zip running out, not "
-            "the model declining to cite, and folding the two together makes "
-            "the quoteless rate a statement about our plumbing wearing the "
-            "signature of a statement about the model. Separated so the "
-            "headline figure can be read.\n\n"
-            "It does not detect a *missing middle* element, which shifts every "
-            "quote after it onto the wrong predicate while leaving the lengths "
-            "equal — a shifted quote still passes the verbatim check, because "
-            "it is a real span attached to the wrong claim. That is the wider "
-            "defect and it is tracked separately."
+            "Candidates that got no quote because the section's `quotes` list "
+            "was not the same length as its `predicates` list, so none of its "
+            "quotes were attached (#69). A list one short could be missing its "
+            "last entry or any middle one, and a missing middle entry shifts "
+            "every quote after it onto the wrong predicate, where it still "
+            "passes the verbatim check because it is a real span. Which one "
+            "it was cannot be told from the lengths, so nothing is attached "
+            "rather than something wrong.\n\n"
+            "This is the lists not lining up, not the model declining to cite, "
+            "and is counted apart from `quoteless_candidates` so the headline "
+            "figure can be read. Read from `unquoted_by_short_list` on records "
+            "written before the rename, which counted only the padded tail."
+        ),
+    )
+    misaligned_sections: int | None = Field(
+        default=None,
+        description=(
+            "Sections where any of the model's per-predicate lists "
+            "(descriptions, quotes, claim types, related vyaptis) differed in "
+            "length from `predicates`. Nothing from a misaligned list is "
+            "attached to any predicate of that section; see `misalignments`.\n\n"
+            "None on a record written before this was counted: a default of 0 "
+            "would claim a clean measurement nobody made."
+        ),
+    )
+    misalignments: list[str] = Field(
+        default_factory=list,
+        description=(
+            "One line per misaligned section, giving every list's length "
+            "beside the predicate count, so a run that answered in the wrong "
+            "shape is visible rather than padded into a clean-looking one."
         ),
     )
     unverified_quote_candidates: int = Field(

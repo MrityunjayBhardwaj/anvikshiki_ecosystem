@@ -141,6 +141,13 @@ section failed, so nothing scripting it can read "wrote the report" as
   real span from the section — attached to a claim it does not support. That is
   the wider parallel-list defect and it is unfixed. There is a test asserting
   this blind spot exists, which fails the day something closes it.
+  *Update 2026-11-19 (#69):* closed. A `quotes` list of any other length
+  than `predicates` is no longer read by index; none of its quotes are
+  attached, and the section is counted in `misaligned_sections`. The counter
+  is now `unquoted_by_misaligned_list`. The test that asserted the blind spot
+  failed as promised and now asserts the fix. The figures above are
+  unaffected: this run had no short list. A list of the right length in the
+  wrong order is still undetected.
 - **Two notions of "verbatim" appear on the same page.** The verdict table
   scores the markup quote as `markup` and reports `absent: 0 / 24`. The
   threshold sweep's "of those, verbatim in source" column uses the strict
