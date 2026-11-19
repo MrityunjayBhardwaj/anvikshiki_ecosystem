@@ -252,33 +252,41 @@ def report(out: StageAOutput, rows: list[dict], sections: list[str],
         w(f"- model returned an empty quote: **not measured** "
           f"(this run predates the counter; {empty_seen} of {n} quotes are "
           f"empty, but nothing recorded why)")
-        w("- our zip ran off a short `quotes` list: **not measured**, same reason")
+        w("- the `quotes` list did not line up with `predicates`: **not measured**, same reason")
     else:
         w(f"- model returned an empty quote: "
           f"{pct(out.quoteless_candidates, n)}")
-        w(f"- our zip ran off a short `quotes` list: "
-          f"{pct(out.unquoted_by_short_list, n)}")
+        if out.misaligned_sections is None:
+            w(f"- a `quotes` list ran short and our zip padded its tail: "
+              f"{pct(out.unquoted_by_misaligned_list, n)} (this run predates "
+              f"#69: misaligned sections **not measured**, and a list too long "
+              f"or missing a middle entry was read by index, not caught)")
+        else:
+            w(f"- the `quotes` list did not line up with `predicates`, so none "
+              f"of its quotes were attached: "
+              f"{pct(out.unquoted_by_misaligned_list, n)} "
+              f"({out.misaligned_sections} misaligned section(s))")
         # The two reasons partition the empty quotes, so they must sum to the
         # verdict table's `empty` row. Checked on the page rather than left for
         # a reader to notice, because a breakdown that silently disagrees with
         # the total it breaks down is worse than no breakdown.
-        split = out.quoteless_candidates + out.unquoted_by_short_list
+        split = out.quoteless_candidates + out.unquoted_by_misaligned_list
         if split != empty_seen:
             w("")
             w(f"> **These do not add up.** {out.quoteless_candidates} + "
-              f"{out.unquoted_by_short_list} = {split}, but the verdict table "
+              f"{out.unquoted_by_misaligned_list} = {split}, but the verdict table "
               f"counts {empty_seen} empty quotes out of {n}. One of the two "
               "is wrong and the split cannot be read until that is resolved.")
     w("")
     w("The second is ours, not the model's. It is reported apart from the first "
-      "because a padded index and a declined citation both arrive as `\"\"`, and "
-      "a rate that mixes them describes our plumbing while reading as a fact "
+      "because an unattached list and a declined citation both arrive as `\"\"`, "
+      "and a rate that mixes them describes our plumbing while reading as a fact "
       "about the extractor.")
     w("")
-    w("Neither figure detects an omitted **middle** element, which shifts every "
-      "quote after it onto the wrong predicate while leaving the list lengths "
-      "equal. A shifted quote still passes the verbatim check, because it is a "
-      "real span attached to the wrong claim.")
+    w("A `quotes` list of the wrong length is not read by index at all: an "
+      "omitted **middle** entry would shift every quote after it onto the wrong "
+      "predicate, where it still passes the verbatim check (#69). What neither "
+      "figure detects is a list of the right length in the wrong order.")
     w("")
 
     w("## Quote length distribution\n")
