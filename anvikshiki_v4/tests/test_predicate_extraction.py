@@ -283,8 +283,8 @@ class TestExtractionSchemaModels:
 
     def test_extraction_config_defaults(self):
         cfg = ExtractionConfig()
-        assert cfg.ensemble_n == 3
-        assert cfg.similarity_threshold == 0.85
+        assert cfg.max_new_vyaptis_per_chapter == 15
+        assert cfg.model_tier == "large"
 
     def test_predicate_node_tree(self):
         parent = PredicateNode(

@@ -677,7 +677,11 @@ class StageAExtractor(dspy.Module):
 
 
 class StageBDecomposer(dspy.Module):
-    """Stage B: Decompose existing predicates into hierarchical sub-predicates."""
+    """Stage B: Decompose existing predicates into sub-predicates, one level.
+
+    One model call per seed rule; children are never decomposed again, so
+    every node is depth 0 (a parent) or 1 (a child).
+    """
 
     def __init__(self, knowledge_store: KnowledgeStore, config: ExtractionConfig):
         super().__init__()
@@ -899,7 +903,12 @@ class StageCCanonicalizer(dspy.Module):
     def _cluster_by_tokens(
         predicates: dict[str, str],
     ) -> list[list[str]]:
-        """Cluster predicates sharing >50% tokens (cheap heuristic)."""
+        """Cluster predicates sharing >50% tokens (cheap heuristic).
+
+        The 0.5 is fixed, and it only decides whether the synonym resolver is
+        called at all: the resolver is shown every candidate, not just the
+        clusters. There are no embeddings and no cosine threshold here.
+        """
         names = list(predicates.keys())
         token_sets = {n: set(n.split("_")) for n in names}
         visited: set[str] = set()
