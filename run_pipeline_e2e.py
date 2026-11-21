@@ -135,8 +135,6 @@ def main():
     from anvikshiki_v4.extraction_schema import ExtractionConfig
 
     config = ExtractionConfig(
-        ensemble_n=1,                    # reduced for speed with local LLM
-        decomposition_max_depth=1,
         max_new_vyaptis_per_chapter=8,   # cap for demo
     )
 

@@ -543,19 +543,20 @@ class ReviewItem(BaseModel):
 class ExtractionConfig(BaseModel):
     """Configuration for the extraction pipeline.
 
-    An unknown setting is refused, so a dropped one (`min_confidence`, #63)
-    fails at the call site instead of being accepted and doing nothing.
+    An unknown setting is refused, so a dropped one fails at the call site
+    instead of being accepted and doing nothing. Dropped so far:
+
+      * `min_confidence` (#63) gated on a constant.
+      * `ensemble_n`, `decomposition_max_depth`, `similarity_threshold` (#304)
+        were read by nothing. Each stage makes one call per section or rule,
+        with no voting; Stage B decomposes exactly one level; Stage C groups
+        names sharing over half their words, a fixed 0.5 with no embeddings.
+
+    Every setting left here has a reader, and a test holds that.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    ensemble_n: int = Field(default=3, description="Ensemble size for extraction")
-    decomposition_max_depth: int = Field(
-        default=2, description="Max depth for hierarchical decomposition"
-    )
-    similarity_threshold: float = Field(
-        default=0.85, description="Cosine threshold for deduplication"
-    )
     max_new_vyaptis_per_chapter: int = Field(
         default=15, description="Cap on new vyaptis per chapter"
     )

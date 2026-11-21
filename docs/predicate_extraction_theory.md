@@ -240,7 +240,7 @@ The claim type taxonomy {causal, conditional, metric, definitional, scope, negat
 **Correctness condition.** Each decomposition $t \in \mathcal{T}$ must:
 - Have a parent predicate that exists in $P_0$ (anchoring to the seed)
 - Specify a relation type: COMPOSES (parent = AND of children), ALTERNATIVE (parent = OR of children), SUBSUMES (parent generalizes child)
-- Preserve the depth bound: no decomposition deeper than `config.decomposition_max_depth`
+- Preserve the depth bound: one level only. Stage B makes one call per seed rule and never decomposes a child, so every node is depth 0 (parent) or 1 (child). This was once a setting, `decomposition_max_depth`, which nothing read (#304)
 
 **Theoretical basis.** This is the *concept hierarchy* layer of ontology learning. In Formal Concept Analysis (Ganter & Wille 1999), concepts form a lattice under the subconcept relation. Our decomposition is a restricted form: we only decompose existing predicates (from $V_0$) into sub-predicates, using the guide text as the formal context.
 

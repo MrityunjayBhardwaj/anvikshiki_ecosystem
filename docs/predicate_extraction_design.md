@@ -155,10 +155,10 @@ class ValidationResult(BaseModel):
 ### Pipeline Config
 ```python
 class ExtractionConfig(BaseModel):
-    ensemble_n: int = 3
-    decomposition_max_depth: int = 2
-    similarity_threshold: float = 0.85
-    # min_confidence was here; removed in #63, it gated on a constant
+    # min_confidence was here; removed in #63, it gated on a constant.
+    # ensemble_n, decomposition_max_depth and similarity_threshold were here;
+    # removed in #304, nothing read them (one call per section, one level of
+    # decomposition, a fixed 0.5 word-overlap grouping in Stage C).
     max_new_vyaptis_per_chapter: int = 15
     model_tier: str = "large"  # "large" for API, "small" for 3-7B local
 ```
