@@ -474,7 +474,9 @@ class StageAExtractor(dspy.Module):
         truncated_sections = 0
         truncations: list[str] = []
         quoteless_candidates = 0
-        unquoted_by_short_list = 0
+        unquoted_by_misaligned_list = 0
+        misaligned_sections = 0
+        misalignments: list[str] = []
         unverified_quote_candidates = 0
         quote_failures: list[str] = []
         # True only while every response so far could be checked. One
@@ -533,6 +535,33 @@ class StageAExtractor(dspy.Module):
                 zero_sections += 1
                 continue
 
+            # Correspondence rests on index alone, so a list of another length
+            # cannot be read by index: one entry short could be the last or
+            # any middle one, and a missing middle shifts everything after it
+            # onto the wrong predicate. Attach nothing from such a list (#69).
+            n = len(predicates)
+            lists = {
+                "descriptions": descriptions,
+                "quotes": quotes,
+                "claim_types": claim_types,
+                "related_vyaptis": related,
+            }
+            off = {k: len(v) for k, v in lists.items() if len(v) != n}
+            if off:
+                misaligned_sections += 1
+                misalignments.append(
+                    f"section {i}: {n} predicate(s), but "
+                    + ", ".join(f"{k} {m}" for k, m in off.items())
+                    + " — nothing from those lists was attached"
+                )
+            if "descriptions" in off:
+                descriptions = []
+            if "claim_types" in off:
+                claim_types = []
+            if "related_vyaptis" in off:
+                related = []
+            quotes_aligned = "quotes" not in off
+
             for j, pred_name in enumerate(predicates):
                 norm = _normalize_predicate_name(pred_name)
                 if not norm:
@@ -542,11 +571,11 @@ class StageAExtractor(dspy.Module):
                 ct_str = claim_types[j] if j < len(claim_types) else "causal"
                 rel = related[j] if j < len(related) else "none"
                 # Kept apart from the quote itself. Both produce "" here, but
-                # one is the model answering "no quote" and the other is our
-                # index running off the end of a short list — and only the
-                # first is a fact about the model. Folding them together makes
+                # one is the model answering "no quote" and the other is a
+                # quotes list that did not line up, so none of it was attached
+                # — and only the first is a fact about the model. Folding them together makes
                 # the quoteless rate unreadable, which is what it was before.
-                quote_was_offered = j < len(quotes)
+                quote_was_offered = quotes_aligned
                 quote = quotes[j] if quote_was_offered else ""
 
                 try:
@@ -565,11 +594,11 @@ class StageAExtractor(dspy.Module):
                     if quote_was_offered:
                         quoteless_candidates += 1
                     else:
-                        unquoted_by_short_list += 1
+                        unquoted_by_misaligned_list += 1
                         quote_failures.append(
-                            f"section {i}: {norm}: short quotes list "
+                            f"section {i}: {norm}: quotes list misaligned "
                             f"({len(quotes)} quote(s) for {len(predicates)} "
-                            f"predicate(s)) — no quote was offered for this one"
+                            f"predicate(s)) — no quote attached"
                         )
                     found: bool | None = None
                 elif verdict:
@@ -620,7 +649,9 @@ class StageAExtractor(dspy.Module):
             # stays distinguishable from one that checked and found nothing.
             quotes_checked=True,
             quoteless_candidates=quoteless_candidates,
-            unquoted_by_short_list=unquoted_by_short_list,
+            unquoted_by_misaligned_list=unquoted_by_misaligned_list,
+            misaligned_sections=misaligned_sections,
+            misalignments=misalignments,
             unverified_quote_candidates=unverified_quote_candidates,
             quote_failures=quote_failures,
         )
