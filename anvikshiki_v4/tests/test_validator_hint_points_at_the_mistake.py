@@ -129,3 +129,30 @@ def test_the_old_alphabetical_list_is_gone(business):
     """The first name alphabetically shares nothing with this mistake."""
     first = sorted(business.extra_vocabulary)[0]
     assert first not in _hint(business, "unit_economics_positive")
+
+
+def test_on_a_negation_only_base_every_offer_is_accepted():
+    """The hint offers positive forms when the written name was positive, so
+    against a base holding only `not_value_creation` it offers
+    `value_creation`. Before #58 the validator rejected that name, and the
+    repair loop was told to use the name it had just been told was invalid.
+    No shipped base concludes a negation it never names, so this is a
+    fixture."""
+    from anvikshiki_v4.datalog_engine import DatalogEngine, EpistemicValue, Rule
+
+    engine = DatalogEngine(boolean_mode=True)
+    engine.add_rule(Rule(
+        vyapti_id="V11", name="V11", head="not_value_creation",
+        body_positive=["organizational_growth"], body_negative=[],
+        confidence=EpistemicValue.ESTABLISHED,
+    ))
+    known = {"not_value_creation", "organizational_growth"}
+    offered = []
+    for probe in ("value_creation_signal", "not_value_creation_signal",
+                  "organizational_growth_rate", "not_growth_organizational"):
+        for suggestion in nearest_known(probe, known):
+            offered.append(suggestion)
+            assert engine.validate_predicates([f"{suggestion}(acme)"]) == [], (
+                probe, suggestion)
+    assert "value_creation" in offered, offered
+    assert len(offered) >= 4, offered

@@ -10,10 +10,12 @@ those.
 
 Two things are asserted here that are easy to mistake for each other:
 
-1. *The affirmative fallback is policy, not leniency.* A query asserting
+1. *The fallback to the contrary is policy, not leniency.* A query asserting
    `not_X` against a vocabulary that knows `X` is about a concept the knowledge
-   base holds. This is the same call coverage routing makes, deliberately, and
-   the two modules are asserted to agree.
+   base holds. So is `X` against a vocabulary that holds only `not_X` (#58): the
+   fact rebuts the rule concluding `not_X`, which is work the engine does. This
+   is the same call coverage routing makes, deliberately, and the two modules
+   are asserted to agree on both kinds of base.
 
 2. *Order and double-negation elimination are the fix.* As-written first, so a
    literal negated predicate is found; `not_not_X → X` before either lookup, so
@@ -90,9 +92,9 @@ def test_the_error_never_names_a_predicate_absent_from_its_own_input(
 
     # And when a predicate really is unknown, the message names what was asked
     # about rather than a string derived from it.
-    unknown = one_sided.validate_predicates(["value_creation(acme)"])
+    unknown = one_sided.validate_predicates(["not_shareholder_delight(acme)"])
     assert len(unknown) == 1
-    assert "'value_creation'" in unknown[0]
+    assert "'not_shareholder_delight'" in unknown[0]
 
 
 def test_the_message_never_rejects_a_name_it_lists_as_valid(two_sided):
@@ -124,20 +126,25 @@ def test_the_message_never_rejects_a_name_it_lists_as_valid(two_sided):
 
 # ── Double negation ──────────────────────────────────────────
 
-def test_a_doubly_negated_name_is_rejected_when_its_meaning_is_absent(
-    one_sided,
-):
-    """The second defect, found by running the validator rather than reading it.
+def test_a_doubly_negated_name_is_judged_by_its_meaning(one_sided):
+    """`not_not_value_creation` means `value_creation`, and is judged as that.
 
-    `not_not_value_creation` means `value_creation`, which this base does not
-    name — so it must be rejected. Before, a single strip left
-    `not_value_creation`, which *is* in the vocabulary, so the validator
-    accepted a predicate on the strength of finding its opposite. Layer 5 of
-    the grounding defense waved it straight through.
+    Against this base `value_creation` is accepted, because the base concludes
+    its contrary (#58). The double negation has to be collapsed first for that
+    to hold: looked up as written, neither `not_not_value_creation` nor its
+    contrary is in the vocabulary, and a name the base can reason about would
+    be rejected.
+
+    History: before #58 this test asserted a rejection. A single strip then
+    left `not_value_creation` and accepted the name on the strength of finding
+    its opposite, while the policy said the meaning was absent. Under a
+    two-way fallback the opposite is a legitimate reason to accept, so that
+    defect dissolved into the policy rather than being worked around.
     """
-    errors = one_sided.validate_predicates(["not_not_value_creation(acme)"])
+    assert one_sided.validate_predicates(["not_not_value_creation(acme)"]) == []
+    errors = one_sided.validate_predicates(["not_not_shareholder_delight(acme)"])
     assert len(errors) == 1
-    assert "'value_creation'" in errors[0]
+    assert "'shareholder_delight'" in errors[0]
 
 
 def test_a_doubly_negated_name_is_accepted_when_its_meaning_is_present(
@@ -164,30 +171,39 @@ def test_the_message_names_the_literal_too_when_normalisation_moved_it(
     doubly-negated name.
     """
     error = one_sided.validate_predicates(
-        ["not_not_value_creation(acme)"]
+        ["not_not_shareholder_delight(acme)"]
     )[0]
-    assert "'value_creation'" in error
-    assert "not_not_value_creation" in error
+    assert "'shareholder_delight'" in error
+    assert "not_not_shareholder_delight" in error
 
 
-def test_negation_depth_alternates(two_sided):
-    """Odd depths are the negation, even depths the affirmative.
+def test_negation_depth_never_changes_the_verdict(two_sided):
+    """A concept is known in both polarities or in neither (#58).
 
-    Both are in this vocabulary, so every depth is accepted — the assertion
-    that bites is on the one-sided base, where they alternate accept/reject.
+    So depth decides nothing: on a base holding either form every depth is
+    accepted, and on a base holding neither every depth is rejected. Before
+    #58 the one-sided base alternated accept/reject by depth — the one-way
+    fallback, visible as a pattern.
     """
-    for depth in range(5):
-        name = "not_" * depth + "value_creation"
-        assert two_sided.validate_predicates([f"{name}(acme)"]) == [], name
-
     one_sided = _engine(("not_value_creation", ["organizational_growth"], []))
-    verdicts = {
-        depth: not one_sided.validate_predicates(
-            ["not_" * depth + "value_creation(acme)"]
-        )
-        for depth in range(5)
-    }
-    assert verdicts == {0: False, 1: True, 2: False, 3: True, 4: False}
+    affirmative_only = _engine(("value_creation", ["positive_unit_economics"], []))
+    for engine in (two_sided, one_sided, affirmative_only):
+        for depth in range(5):
+            name = "not_" * depth + "value_creation"
+            assert engine.validate_predicates([f"{name}(acme)"]) == [], name
+    for depth in range(5):
+        name = "not_" * depth + "shareholder_delight"
+        assert len(one_sided.validate_predicates([f"{name}(acme)"])) == 1, name
+
+
+def test_the_affirmative_of_a_concluded_negation_is_accepted(one_sided):
+    """The filed case (#58): a base that only concludes `not_value_creation`.
+
+    Before: `value_creation(acme)` was rejected, and the hint built for the
+    rejection offered `value_creation` back as the nearest valid name, so the
+    repair loop spent its rounds on an instruction that contradicted itself.
+    """
+    assert one_sided.validate_predicates(["value_creation(acme)"]) == []
 
 
 # ── The fallback is policy, and is bounded ───────────────────
@@ -267,34 +283,41 @@ def test_the_validator_and_coverage_routing_agree_on_the_same_vocabulary():
             antecedents=antecedents, consequent=consequent,
         )
 
-    specs = [
-        ("V01", ["positive_unit_economics"], "value_creation"),
-        ("V11", ["organizational_growth"], "not_value_creation"),
-    ]
-    ks = KnowledgeStore(
-        domain_type=DomainType.CRAFT,
-        vyaptis={s[0]: vyapti(*s) for s in specs},
-    )
-    analyzer = SemanticCoverageAnalyzer(ks)
-    engine = _engine(*[(c, a, []) for _vid, a, c in specs])
+    v01 = ("V01", ["positive_unit_economics"], "value_creation")
+    v11 = ("V11", ["organizational_growth"], "not_value_creation")
+    # Both forms, the negation only (#58), the affirmative only. A base naming
+    # both forms cannot see a one-way fallback, which is how #58 hid here.
+    bases = {"two_sided": [v01, v11], "negation_only": [v11],
+             "affirmative_only": [v01]}
 
     names = ["value_creation", "not_value_creation", "positive_unit_economics",
              "not_positive_unit_economics", "not_not_value_creation",
              "not_not_not_value_creation", "unrelated_entirely"]
-    disagreements = []
-    for name in names:
-        validator_ok = not engine.validate_predicates([f"{name}(acme)"])
-        # Coverage's token layer is fuzzy by design, so compare against its
-        # two exact-vocabulary layers rather than against overlap.
-        routed = analyzer.analyze([name])
-        coverage_ok = routed.match_details.get(name, "").endswith(
-            ("exact", "synonym")
+    disagreements, compared, accepted = [], 0, 0
+    for label, specs in bases.items():
+        ks = KnowledgeStore(
+            domain_type=DomainType.CRAFT,
+            vyaptis={s[0]: vyapti(*s) for s in specs},
         )
-        if validator_ok != coverage_ok:
-            disagreements.append((name, validator_ok, coverage_ok))
+        analyzer = SemanticCoverageAnalyzer(ks)
+        engine = _engine(*[(c, a, []) for _vid, a, c in specs])
+        for name in names:
+            validator_ok = not engine.validate_predicates([f"{name}(acme)"])
+            # Coverage's token layer is fuzzy by design, so compare against its
+            # two exact-vocabulary layers rather than against overlap.
+            routed = analyzer.analyze([name])
+            coverage_ok = routed.match_details.get(name, "").endswith(
+                ("exact", "synonym")
+            )
+            compared += 1
+            accepted += validator_ok
+            if validator_ok != coverage_ok:
+                disagreements.append((label, name, validator_ok, coverage_ok))
 
     assert not disagreements, disagreements
-    assert len(names) == 7  # the loop really ran
+    assert compared == 3 * len(names)  # the loop really ran
+    # Both verdicts occur, so agreement is not two modules saying yes to all.
+    assert 0 < accepted < compared, accepted
 
 
 def test_no_module_outside_predicate_contrariness_strips_not_itself():
