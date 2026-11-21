@@ -8,7 +8,9 @@ was fixed:
    module asks whether the knowledge base has reasoning machinery for a
    concept, and `not_X` against a rule about `X` is what raises a rebutting
    attack — the engine's most informative behaviour. Declining would refuse
-   the queries it handles best. Decided, not inherited from a comment.
+   the queries it handles best. Decided, not inherited from a comment. The
+   reverse holds too (#58): `X` against a base that concludes only `not_X` is
+   covered, exact matches only.
 
 2. *Was reporting it as `"exact"` wrong?* Yes, regardless of (1). The strings
    differ, and they differ on the token that reverses the meaning, so the
@@ -390,3 +392,55 @@ def test_the_real_knowledge_base_exercises_this():
             if pred in list(v.antecedents) + [v.consequent]
         ]
         assert result.relevant_vyaptis == sorted(owners), pred
+
+
+# ── The other direction (#58) ────────────────────────────────
+
+@pytest.fixture
+def negation_only():
+    """A base that concludes `not_value_creation` and never names its
+    affirmative — V11 of the shipped base, without the rule beside it that
+    hid the one-way fallback there."""
+    ks = KnowledgeStore(
+        domain_type=DomainType.CRAFT,
+        vyaptis={"V11": _vyapti(
+            "V11", ["organizational_growth"], "not_value_creation")},
+    )
+    return SemanticCoverageAnalyzer(ks)
+
+
+def test_the_affirmative_of_a_concluded_negation_is_covered(negation_only):
+    """The filed case. Before: DECLINE, no match, no rules.
+
+    Covered because the base reasons about value creation: a fact
+    `value_creation(acme)` rebuts V11's conclusion. Labelled `negated_exact`
+    because the strings differ on the token that reverses the meaning, and
+    routed to V11 because that is the rule the query argues with.
+    """
+    result = negation_only.analyze(["value_creation"])
+    assert result.decision == "FULL"
+    assert result.match_details == {"value_creation": "negated_exact"}
+    assert result.relevant_vyaptis == ["V11"]
+    assert result.inert_predicates == []
+
+
+def test_the_affirmative_direction_is_exact_only(negation_only):
+    """No fuzzy matching against negated names on an affirmative query.
+
+    Scored against `not_value_capture`, this query shares `not` and `value`
+    with `not_value_creation` — 0.5 Jaccard, above the 0.4 floor — so a
+    two-way fallback at the token layer would admit it on the strength of the
+    prefix it never wrote. Scored as written it shares one word in four.
+    """
+    assert negation_only._find_closest_predicate("not_value_capture")[1] >= 0.4
+    result = negation_only.analyze(["value_capture"])
+    assert result.decision == "DECLINE"
+    assert result.matched_predicates == []
+
+
+def test_a_held_affirmative_still_beats_the_contrary(two_sided):
+    """As-written first: on a base naming both forms the new direction never
+    fires, and `value_creation` routes to its own rule, not to V11's."""
+    result = two_sided.analyze(["value_creation"])
+    assert result.match_details == {"value_creation": "exact"}
+    assert result.relevant_vyaptis == ["V01"]

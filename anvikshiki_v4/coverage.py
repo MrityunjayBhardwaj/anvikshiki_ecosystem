@@ -12,7 +12,10 @@ Zero LLM calls — fully deterministic.
 ── Policy on negation, decided rather than inherited ─────────
 
 A query asserting `not_X` against a knowledge base that knows `X` **counts as
-covered**, and its match is labelled `negated_*` rather than `exact`.
+covered**, and its match is labelled `negated_*` rather than `exact`. So does
+the reverse, `X` against a base that knows only `not_X` (#58) — the argument
+below holds in both directions, and a policy applied one way was a policy
+inherited from the direction the code was written in.
 
 *Why it matters as a policy.* This module asks whether the knowledge base has
 reasoning machinery for a concept, not whether the query makes the same claim.
@@ -276,8 +279,13 @@ class SemanticCoverageAnalyzer:
     def _match(self, pred: str) -> tuple[str, str, str] | None:
         """Find the KB predicate this query matches: (layer, kb_name, query).
 
-        Two forms are tried for every layer: the predicate **as written**, then
-        its affirmative form. The order matters twice over.
+        Two forms are tried: the predicate **as written**, then its contrary —
+        `not_X` falls back to `X`, and `X` to `not_X` (#58). A base that only
+        concludes `not_value_creation` has reasoning machinery about value
+        creation, and a fact `value_creation(acme)` rebuts that conclusion, so
+        declining the query would refuse a case the engine handles. The
+        affirmative-to-negated direction is exact-only; see the comment in the
+        loop. The order matters twice over.
 
         *As-written first*, because the vocabulary can hold a negated predicate
         literally — `not_value_creation` is V11's consequent in the knowledge
@@ -296,14 +304,19 @@ class SemanticCoverageAnalyzer:
         rule concluding the negation of what it asked about.
         """
         normalized = normalize_negation(predicate_name(pred))
-        unnegated = affirmative(normalized)
-        # Deduplicated: for an affirmative query the two forms are the same,
-        # and looking twice would be wasted work rather than wrong.
-        forms = [normalized] if unnegated == normalized else [
-            normalized, unnegated
-        ]
+        contrary = get_contrary(normalized)
+        negated = contrary == affirmative(normalized)
 
         for layer in ("exact", "synonym", "token"):
+            # The contrary is tried at every layer for a negated query, and
+            # at the exact layer only for an affirmative one. Fuzzy matching
+            # on `not_X` would count `not` itself as a shared word, so every
+            # negated name in the vocabulary would gain a token on any query —
+            # a widening nobody chose. An exact `not_X` is the deliberate
+            # inversion the policy is about; a near one is a collision.
+            forms = [normalized]
+            if negated or layer == "exact":
+                forms.append(contrary)
             for form in forms:
                 kb_name = self._lookup(layer, form)
                 if kb_name:
