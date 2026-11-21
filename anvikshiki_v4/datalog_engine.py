@@ -21,6 +21,7 @@ from typing import Callable, Iterable, Optional
 from .predicate_contrariness import (
     NEGATION_PREFIX,
     affirmative,
+    get_contrary,
     normalize_negation,
     polarity_opposed,
 )
@@ -137,7 +138,8 @@ def nearest_known(written: str, known: Iterable[str], k: int = HINT_SIZE) -> lis
     grounder also receives is the authority, this is a pointer into it.
 
     Polarity follows what was written: a rejected `not_X` is offered `not_Y`,
-    which the validator accepts whenever `Y` is known.
+    and a rejected `X` is offered `Y`. The validator accepts either form
+    whenever the other is known (#58), so every offer is one it accepts.
     """
     target = _words(written)
     if not target:
@@ -370,16 +372,20 @@ class DatalogEngine:
         shipped base was rejected here while being listed as permitted there.
 
         A predicate is looked up **as written** first, and only then by its
-        affirmative form. `known_preds` is built from rule heads as well as
+        contrary. `known_preds` is built from rule heads as well as
         bodies, so a negated name can legitimately be in it —
         `not_value_creation` is V11's consequent in the knowledge base shipped
         here. Stripping before the lookup rejected exactly those predicates and
         named a string the caller never wrote, listing the one they did write as
         valid on the same line.
 
-        The affirmative fallback stays, and is not a leniency: a query asserting
-        `not_X` against a vocabulary that knows `X` is *about* a concept the
-        knowledge base holds, which is the same call coverage routing makes.
+        The fallback to the contrary stays, and is not a leniency: a query
+        asserting `not_X` against a vocabulary that knows `X` is *about* a
+        concept the knowledge base holds, which is the same call coverage
+        routing makes. It runs both ways (#58): `X` against a vocabulary that
+        holds only `not_X` is accepted too, because the fact rebuts the rule
+        concluding `not_X` — rejecting it sent the repair loop after a
+        predicate that does work, with a hint offering the rejected name back.
         What changed is the order, and that double negation is eliminated before
         either lookup — a single strip on `not_not_X` lands on `not_X`, so this
         validator used to accept a doubly-negated name because the *opposite*
@@ -407,9 +413,7 @@ class DatalogEngine:
 
             literal = pred_str.split("(")[0].strip()
             written = normalize_negation(literal)
-            forms = [written]
-            if affirmative(written) != written:
-                forms.append(affirmative(written))
+            forms = [written, get_contrary(written)]
 
             if not any(form in known_preds for form in forms):
                 # Double negation is the one case where the name looked up is
