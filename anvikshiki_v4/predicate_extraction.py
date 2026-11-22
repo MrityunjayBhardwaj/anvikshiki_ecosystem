@@ -68,7 +68,18 @@ MAX_PREDICATE_LEN = 60
 
 
 def _enforce_snake_case(name: str) -> str:
-    """Convert any string to valid snake_case predicate name."""
+    """Convert any string to a snake_case predicate name, or "" if nothing
+    usable is left.
+
+    It used to answer "unknown_predicate" for a name with no usable
+    characters ('', '!!!', 'ä'). That placeholder is valid snake case, so
+    every caller's `if not name` check passed it: Stage A kept it as a
+    candidate (every junk name from every section merged into one predicate
+    that looked corroborated), Stage B hung children off an
+    `unknown_predicate` parent instead of taking its fallback, and KB
+    augmentation built rules with it as a condition (#302). "" is the answer
+    each of those callers already knows how to refuse.
+    """
     # CamelCase → snake_case
     s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
     s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s)
@@ -76,7 +87,7 @@ def _enforce_snake_case(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", s.lower())
     # Strip leading/trailing underscores, collapse doubles
     s = re.sub(r"_+", "_", s).strip("_")
-    return s[:MAX_PREDICATE_LEN] if s else "unknown_predicate"
+    return s[:MAX_PREDICATE_LEN]
 
 
 def _normalize_predicate_name(name: str) -> str:
@@ -379,7 +390,7 @@ def _extraction_reward(args: dict, pred: dspy.Prediction) -> float:
 
     # 2. All names are valid snake_case
     if predicates and all(
-        _enforce_snake_case(p) == p for p in predicates
+        p and _enforce_snake_case(p) == p for p in predicates
     ):
         score += 0.2
 
@@ -477,6 +488,7 @@ class StageAExtractor(dspy.Module):
         unquoted_by_misaligned_list = 0
         misaligned_sections = 0
         misalignments: list[str] = []
+        unusable_names: list[str] = []
         unverified_quote_candidates = 0
         quote_failures: list[str] = []
         # True only while every response so far could be checked. One
@@ -565,6 +577,7 @@ class StageAExtractor(dspy.Module):
             for j, pred_name in enumerate(predicates):
                 norm = _normalize_predicate_name(pred_name)
                 if not norm:
+                    unusable_names.append(f"section {i}: {pred_name!r}")
                     continue
 
                 desc = descriptions[j] if j < len(descriptions) else ""
@@ -652,6 +665,8 @@ class StageAExtractor(dspy.Module):
             unquoted_by_misaligned_list=unquoted_by_misaligned_list,
             misaligned_sections=misaligned_sections,
             misalignments=misalignments,
+            unusable_name_count=len(unusable_names),
+            unusable_names=unusable_names,
             unverified_quote_candidates=unverified_quote_candidates,
             quote_failures=quote_failures,
         )

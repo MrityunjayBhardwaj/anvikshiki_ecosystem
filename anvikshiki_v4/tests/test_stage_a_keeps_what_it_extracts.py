@@ -8,8 +8,7 @@ provenance records in saved traces all carry 0.5.
 
 The field, the gate and the setting are gone. What survives is tested here:
 Stage A keeps what the model returned, and drops only a name that fails the
-snake-case check. (A name with no usable characters is not dropped: it becomes
-`unknown_predicate`, which is #302.)
+snake-case check, or that has no usable characters at all (#302).
 """
 
 import ast

@@ -289,6 +289,19 @@ def report(out: StageAOutput, rows: list[dict], sections: list[str],
       "figure detects is a list of the right length in the wrong order.")
     w("")
 
+    # Not candidates, so not part of `n`: a name that cannot be made into a
+    # predicate is dropped before it becomes one (#302). Printed even at 0 so
+    # silence cannot read as "never checked".
+    if out.unusable_name_count is None:
+        w("Names dropped as unusable: **not measured** (this run predates "
+          "#302, when most of them were kept as `unknown_predicate`).\n")
+    else:
+        w(f"Names dropped as unusable (not counted in the {n} candidates): "
+          f"{out.unusable_name_count}"
+          + (f" — {', '.join(out.unusable_names[:5])}"
+             + (" …" if out.unusable_name_count > 5 else "")
+             if out.unusable_names else "") + "\n")
+
     w("## Quote length distribution\n")
     lengths = sorted(r["length"] for r in rows if r["length"] > 0)
     if not lengths:
