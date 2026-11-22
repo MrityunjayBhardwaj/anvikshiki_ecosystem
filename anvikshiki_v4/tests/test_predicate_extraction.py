@@ -194,7 +194,8 @@ class TestSnakeCaseEnforcement:
         assert SNAKE_CASE_RE.match(result)
 
     def test_empty_string(self):
-        assert _enforce_snake_case("") == "unknown_predicate"
+        # Was "unknown_predicate", which every caller then kept (#302).
+        assert _enforce_snake_case("") == ""
 
     def test_truncation(self):
         long_name = "a" * 100

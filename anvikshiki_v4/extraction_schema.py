@@ -305,6 +305,23 @@ class StageAOutput(BaseModel):
             "shape is visible rather than padded into a clean-looking one."
         ),
     )
+    unusable_name_count: int | None = Field(
+        default=None,
+        description=(
+            "Names the model returned that could not be made into a "
+            "predicate (empty, only punctuation, non-Latin, starting with a "
+            "digit) and were dropped. Before #302 most of these were kept "
+            "under the shared name `unknown_predicate`, so a model emitting "
+            "junk looked like one predicate the guide supported many times; "
+            "now they are dropped and counted here instead of silently.\n\n"
+            "None on a record written before this was counted: a default of "
+            "0 would claim a clean measurement nobody made."
+        ),
+    )
+    unusable_names: list[str] = Field(
+        default_factory=list,
+        description="Each dropped name with its section, for the run report.",
+    )
     unverified_quote_candidates: int = Field(
         default=0,
         description=(

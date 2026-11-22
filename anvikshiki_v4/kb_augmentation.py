@@ -333,10 +333,19 @@ class AugmentationPipeline(dspy.Module):
 
                 # Parse antecedents (comma-separated string)
                 ant_str = antecedents_raw[i] if i < len(antecedents_raw) else ""
-                antecedents = [
-                    _enforce_snake_case(a.strip())
-                    for a in ant_str.split(",") if a.strip()
+                raw_antecedents = [
+                    a.strip() for a in ant_str.split(",") if a.strip()
                 ]
+                antecedents = [_enforce_snake_case(a) for a in raw_antecedents]
+                if not all(antecedents):
+                    # Dropping just the unusable condition would leave a
+                    # rule that fires on less than the model stated (#302).
+                    bad = [a for a, n in zip(raw_antecedents, antecedents)
+                           if not n]
+                    warnings.append(
+                        f"Skipped '{name}': unusable antecedent(s) {bad}"
+                    )
+                    continue
                 if not antecedents:
                     warnings.append(f"Skipped '{name}': no antecedents")
                     continue
