@@ -157,6 +157,13 @@
     --coverage-partial: var(--hypothesis);
     --coverage-decline: oklch(0.65 0.15 270);
     --coverage-ood:     var(--label-out);
+
+    /* Provenance chain graph */
+    --prov-source:      oklch(0.75 0.15 80);   /* gold/amber — references */
+    --prov-vyapti:      oklch(0.68 0.15 250);  /* blue — rules */
+    --prov-premise:     oklch(0.72 0.12 180);  /* teal — base facts */
+    --prov-derived:     oklch(0.70 0.14 290);  /* purple — derived conclusions */
+    --prov-derivation:  oklch(0.68 0.12 145);  /* green — support edges */
   }
 
   .dark {
@@ -165,5 +172,11 @@
     --contested:    oklch(0.76 0.20 35);
     --label-in:     oklch(0.78 0.19 145);
     --label-out:    oklch(0.70 0.24 25);
+
+    --prov-source:      oklch(0.82 0.17 80);
+    --prov-vyapti:      oklch(0.75 0.17 250);
+    --prov-premise:     oklch(0.78 0.14 180);
+    --prov-derived:     oklch(0.76 0.16 290);
+    --prov-derivation:  oklch(0.74 0.14 145);
   }
 }

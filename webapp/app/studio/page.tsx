@@ -3,24 +3,27 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Moon, Sun, Home, GitBranch } from "lucide-react";
+import { Moon, Sun, Home, GitBranch, Network, Share2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useKBStore } from "@/store/kbStore";
+import { useQueryStore } from "@/store/queryStore";
 
 import { QueryInput } from "@/components/query/QueryInput";
 import { ResponseCard } from "@/components/query/ResponseCard";
 import { ProvenanceTable } from "@/components/query/ProvenanceTable";
 import { CoverageIndicator } from "@/components/query/CoverageIndicator";
 import { ArgumentationGraph } from "@/components/graph/ArgumentationGraph";
+import { ProvenanceChainGraph } from "@/components/graph/ProvenanceChainGraph";
 import { PipelineTrace } from "@/components/trace/PipelineTrace";
 
 export default function StudioPage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const { kb } = useKBStore();
+  const { graphView, setGraphView } = useQueryStore();
 
   // Redirect to home if no KB loaded
   useEffect(() => {
@@ -51,22 +54,58 @@ export default function StudioPage() {
             {kb.kb_name}
           </Badge>
           <span className="text-xs text-muted-foreground font-mono">
-            {kb.vyapti_count} vyāptis · {kb.argument_count} args
+            {kb.vyapti_count} vyāptis · {kb.hetvabhasa_count} fallacies
           </span>
         </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="w-7 h-7"
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-        >
-          {resolvedTheme === "dark" ? (
-            <Sun className="w-3.5 h-3.5" />
-          ) : (
-            <Moon className="w-3.5 h-3.5" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Graph view toggle */}
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <button
+              onClick={() => setGraphView("argumentation")}
+              className={`
+                flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all
+                ${
+                  graphView === "argumentation"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-accent"
+                }
+              `}
+              title="ASPIC+ argumentation graph"
+            >
+              <Network className="w-3 h-3" />
+              ASPIC+
+            </button>
+            <button
+              onClick={() => setGraphView("provenance")}
+              className={`
+                flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all
+                ${
+                  graphView === "provenance"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-accent"
+                }
+              `}
+              title="Provenance chain graph — trace claims back to sources"
+            >
+              <Share2 className="w-3 h-3" />
+              Provenance
+            </button>
+          </div>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="w-7 h-7"
+            onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          >
+            {resolvedTheme === "dark" ? (
+              <Sun className="w-3.5 h-3.5" />
+            ) : (
+              <Moon className="w-3.5 h-3.5" />
+            )}
+          </Button>
+        </div>
       </header>
 
       {/* Three-column body */}
@@ -83,9 +122,13 @@ export default function StudioPage() {
           </div>
         </aside>
 
-        {/* Center — Argumentation graph */}
+        {/* Center — Graph (switches between views) */}
         <main className="flex-1 overflow-hidden">
-          <ArgumentationGraph />
+          {graphView === "provenance" ? (
+            <ProvenanceChainGraph />
+          ) : (
+            <ArgumentationGraph />
+          )}
         </main>
 
         {/* Right — Provenance + details */}

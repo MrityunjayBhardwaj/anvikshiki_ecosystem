@@ -136,6 +136,17 @@ export const ContestationSchema = z.object({
   suggested_evidence: z.array(z.string()),
 });
 
+// The engine's yes / no / unknown on what the question asks. null when the
+// question names no target, and absent from older backends.
+export const VerdictSchema = z.object({
+  asks: z.string(),
+  answer: z.enum(["yes", "no", "unknown"]),
+  by: z.string().nullable(),
+  status: EpistemicStatus.nullable(),
+  given: z.array(z.array(z.string())),
+  reason: z.string(),
+});
+
 // ── Engine result (full) ───────────────────────────────────────────────────
 
 export const EngineResultSchema = z.object({
@@ -152,6 +163,10 @@ export const EngineResultSchema = z.object({
   arguments: z.record(z.string(), ArgumentNodeSchema),
   attacks: z.array(AttackEdgeSchema),
   labels: z.record(z.string(), Label),
+  verdict: VerdictSchema.nullable().optional(),
+  // Passed through as sent; nothing renders them yet.
+  derivation: z.record(z.string(), z.unknown()).nullable().optional(),
+  advisories: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
 });
 
 // ── Inferred types ─────────────────────────────────────────────────────────
@@ -162,6 +177,7 @@ export type AttackEdge = z.infer<typeof AttackEdgeSchema>;
 export type ProvenanceTag = z.infer<typeof ProvenanceTagSchema>;
 export type CoverageResult = z.infer<typeof CoverageResultSchema>;
 export type Violation = z.infer<typeof ViolationSchema>;
+export type Verdict = z.infer<typeof VerdictSchema>;
 
 // ── SSE stage events ───────────────────────────────────────────────────────
 
@@ -183,7 +199,9 @@ export type TraceStage = {
 export interface KBInfo {
   kb_name: string;
   vyapti_count: number;
-  argument_count: number;
+  // Declared fallacies. A freshly loaded base has no arguments: those are
+  // built per query.
+  hetvabhasa_count: number;
   loaded: boolean;
 }
 

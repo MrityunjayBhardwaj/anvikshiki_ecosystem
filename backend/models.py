@@ -132,7 +132,7 @@ class EngineResult(BaseModel):
 class KBInfo(BaseModel):
     kb_name: str
     vyapti_count: int
-    argument_count: int
+    hetvabhasa_count: int  # declared fallacies; a loaded base has no arguments yet
     loaded: bool
 
 

@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryStore } from "@/store/queryStore";
+import type { Verdict } from "@/lib/types";
+
+function verdictTitle(v: Verdict): string {
+  if (v.answer === "yes") return `Verdict on ${v.asks}: it is accepted`;
+  if (v.answer === "no") return `Verdict on ${v.asks}: ${v.by} is accepted against it`;
+  return `Verdict on ${v.asks}: unknown (${v.reason})`;
+}
 
 export function ResponseCard() {
   const { result, running, error } = useQueryStore();
@@ -52,12 +59,22 @@ export function ResponseCard() {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-1">
           <div className="flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
             <CardTitle className="text-sm">Response</CardTitle>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1">
+            {result.verdict && (
+              <Badge
+                variant="outline"
+                className="text-[10px] font-mono"
+                title={verdictTitle(result.verdict)}
+              >
+                {result.verdict.answer}
+                {result.verdict.status ? ` · ${result.verdict.status}` : ""}
+              </Badge>
+            )}
             <Badge variant="secondary" className="text-[10px] font-mono">
               {confidence}% conf
             </Badge>

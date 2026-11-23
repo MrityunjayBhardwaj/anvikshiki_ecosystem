@@ -34,7 +34,7 @@ export function KBLoader() {
       const info = await loadKB(kbPath);
       setKB(info);
       toast.success(`Loaded: ${info.kb_name}`, {
-        description: `${info.vyapti_count} vyāptis · ${info.argument_count} arguments`,
+        description: `${info.vyapti_count} vyāptis · ${info.hetvabhasa_count} fallacies`,
       });
       router.push("/studio");
     } catch (err: unknown) {

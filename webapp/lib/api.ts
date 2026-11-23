@@ -48,6 +48,8 @@ export async function runQuery(query: string, mode = "full"): Promise<EngineResu
 }
 
 // ── SSE streaming query ────────────────────────────────────────────────────
+// Uses fetch + ReadableStream instead of EventSource so Next.js rewrites
+// don't buffer the response.
 
 export function streamQuery(
   query: string,
@@ -56,45 +58,70 @@ export function streamQuery(
   onComplete: (result: EngineResult) => void,
   onError: (message: string) => void,
 ): () => void {
-  const params = new URLSearchParams({ query, mode });
-  const url = `${BASE}/api/query/stream?${params}`;
-  const es = new EventSource(url);
+  const ctrl = new AbortController();
 
-  const stages = ["stage:grounding", "stage:coverage", "stage:compilation", "stage:extension", "stage:synthesis"];
-
-  for (const stage of stages) {
-    es.addEventListener(stage, (e: MessageEvent) => {
-      try {
-        onEvent({ type: stage as StageEvent["type"], data: JSON.parse(e.data) });
-      } catch {}
-    });
-  }
-
-  es.addEventListener("complete", (e: MessageEvent) => {
+  (async () => {
     try {
-      const raw = JSON.parse(e.data);
-      const result = EngineResultSchema.parse(raw);
-      onComplete(result);
+      const res = await fetch(
+        `${BASE}/api/query/stream?${new URLSearchParams({ query, mode })}`,
+        { signal: ctrl.signal },
+      );
+
+      if (!res.ok || !res.body) {
+        onError(`HTTP ${res.status}: ${res.statusText}`);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let eventName = "";
+      let dataLine = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          // Reaching here means neither "complete" nor "error" arrived: both
+          // return early. Without this the UI would wait forever.
+          onError("The stream closed before the engine sent a result");
+          return;
+        }
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventName = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataLine = line.slice(6).trim();
+          } else if (line === "" && eventName) {
+            try {
+              const parsed = JSON.parse(dataLine);
+              if (eventName === "complete") {
+                onComplete(EngineResultSchema.parse(parsed));
+                reader.cancel();
+                return;
+              } else if (eventName === "error") {
+                onError(parsed.message ?? "Unknown error");
+                reader.cancel();
+                return;
+              } else if (eventName.startsWith("stage:")) {
+                onEvent({ type: eventName as StageEvent["type"], data: parsed });
+              }
+            } catch { /* ignore parse errors */ }
+            eventName = "";
+            dataLine = "";
+          }
+        }
+      }
     } catch (err) {
-      onError(String(err));
+      if ((err as Error).name !== "AbortError") {
+        onError(String(err));
+      }
     }
-    es.close();
-  });
+  })();
 
-  es.addEventListener("error", (e: MessageEvent) => {
-    try {
-      const { message } = JSON.parse(e.data);
-      onError(message);
-    } catch {
-      onError("Stream error");
-    }
-    es.close();
-  });
-
-  es.onerror = () => {
-    onError("EventSource connection failed");
-    es.close();
-  };
-
-  return () => es.close();
+  return () => ctrl.abort();
 }

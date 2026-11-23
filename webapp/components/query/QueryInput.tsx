@@ -70,6 +70,9 @@ export function QueryInput() {
     }
 
     function onError(message: string) {
+      // The stage that was running is where it stopped; leaving it
+      // "running" told the trace a different story from the error card.
+      trace.markError(stageOrder[Math.min(stageIdx, stageOrder.length - 1)], message);
       setError(message);
       setRunning(false);
       toast.error("Query failed", { description: message });
@@ -81,6 +84,8 @@ export function QueryInput() {
 
   function handleStop() {
     abortRef.current?.();
+    const running = trace.stages.find((st) => st.status === "running");
+    if (running) trace.markError(running.id, "Stopped");
     setRunning(false);
     toast.info("Query stopped");
   }
