@@ -29,6 +29,7 @@ from .predicate_contrariness import (
 from .uncertainty import compute_uncertainty_v4
 from .contestation import ContestationManager
 from .coverage import CoverageResult, SemanticCoverageAnalyzer
+from .grounding import GroundingMode
 from .kb_augmentation import AugmentationPipeline, AugmentationResult
 from .t3a_retriever import T3aRetriever
 from .engine_params import SynthesisParams, DEFAULT_PARAMS
@@ -714,9 +715,14 @@ class AnvikshikiEngineV4(dspy.Module):
         self,
         query: str,
         interpreted_intent: str = "",
+        mode: Optional[GroundingMode] = None,
     ) -> dspy.Prediction:
         """
         Coverage-based routing entry point.
+
+        `mode` picks how many grounding rollouts this query gets (minimal,
+        partial or full). None keeps the mode the grounding pipeline was
+        built with, and calls it exactly as before.
 
         Flow:
           1. Ground query → predicates
@@ -728,7 +734,8 @@ class AnvikshikiEngineV4(dspy.Module):
           4. T3a retrieval runs in parallel with T2 inference
         """
         # STEP 1: Ground query
-        grounding = self.grounding(query)
+        grounding = (self.grounding(query) if mode is None
+                     else self.grounding(query, mode=mode))
         if grounding.clarification_needed:
             return dspy.Prediction(
                 verdict=None,

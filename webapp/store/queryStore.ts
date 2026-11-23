@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { EngineResult, HistoryEntry } from "@/lib/types";
 
+export type GraphView = "argumentation" | "provenance";
+
 interface QueryState {
   query: string;
   mode: "minimal" | "partial" | "full";
@@ -8,6 +10,7 @@ interface QueryState {
   result: EngineResult | null;
   error: string | null;
   selectedNodeId: string | null;
+  graphView: GraphView;
   history: HistoryEntry[];
 
   setQuery: (q: string) => void;
@@ -16,6 +19,7 @@ interface QueryState {
   setResult: (r: EngineResult | null) => void;
   setError: (e: string | null) => void;
   setSelectedNode: (id: string | null) => void;
+  setGraphView: (v: GraphView) => void;
   addHistory: (entry: HistoryEntry) => void;
   replayHistory: (entry: HistoryEntry) => void;
   reset: () => void;
@@ -28,6 +32,7 @@ export const useQueryStore = create<QueryState>((set) => ({
   result: null,
   error: null,
   selectedNodeId: null,
+  graphView: "provenance",
   history: [],
 
   setQuery: (query) => set({ query }),
@@ -36,6 +41,7 @@ export const useQueryStore = create<QueryState>((set) => ({
   setResult: (result) => set({ result, error: null }),
   setError: (error) => set({ error, running: false }),
   setSelectedNode: (selectedNodeId) => set({ selectedNodeId }),
+  setGraphView: (graphView) => set({ graphView, selectedNodeId: null }),
   addHistory: (entry) =>
     set((s) => ({ history: [entry, ...s.history].slice(0, 50) })),
   replayHistory: (entry) =>
